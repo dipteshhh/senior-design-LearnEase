@@ -1,3 +1,5 @@
+"use client";
+import { useState } from "react";
 import InputTabs from "@/components/InputTabs";
 export default function Workspace() {
   return (
