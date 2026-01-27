@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LearnEase – Senior Design Project
 
-## Getting Started
+LearnEase is a web-based learning support system designed to reduce cognitive load by presenting educational content in multiple accessible formats. The system supports learners who benefit from simplified explanations and multimodal content delivery, including (but not limited to) students with ADHD or learning difficulties.
 
-First, run the development server:
+Users are not required to disclose any personal, medical, or diagnostic information.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Problem Statement
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Many students rely on AI tools that directly complete assignments rather than support understanding. This reduces learning and retention. LearnEase addresses this issue by transforming learning materials into structured, accessible formats without generating direct answers to assignments or homework.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## MVP Scope (Demo-Ready)
 
-To learn more about Next.js, take a look at the following resources:
+### Inputs
+- Paste text
+- Drag-and-drop PDF upload
+- Drag-and-drop Word document (.docx) upload
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Processing Flow
+- Text extraction from input
+- Preview and manual editing
+- AI-powered transformation into learning-friendly formats
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Outputs
+- Short & Simple explanation
+- Step-by-step breakdown
+- Bullet-point summary
+- Audio narration (Speechify-style controls)
 
-## Deploy on Vercel
+### Guardrails
+- Assignment prompts trigger **Hint Mode**
+- The system refuses to generate final answers or completed homework
+- Focus is on explanation, structure, and comprehension
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Out of Scope (Current Phase)
+
+- User accounts or login
+- Database-backed storage
+- Mobile application
+
+---
+
+## Technology Stack (Planned)
+
+- Next.js (TypeScript)
+- Tailwind CSS
+- OpenAI API (NLP / text transformation)
+- Browser Text-to-Speech API
+- Local browser storage (no database)
+
+---
+
+## Team
+
+EECS 4020 Senior Design Project II – University of Toledo, College of Engineering
+1. Sid Mahesh
+2. Nishant Lamichhane
+3. Habeeb Sowemimo
+4. Darshan Pandey
+5. Diptesh Shahi Thakuri
