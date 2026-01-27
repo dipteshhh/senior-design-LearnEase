@@ -19,6 +19,7 @@ Installation Steps
 Clone the project from GitHub and navigate into the directory:
 git clone https://github.com/dipteshhh/senior-design-LearnEase.git
 cd senior-design-LearnEase
+Navigate to the frontend folder using 'cd frontend'
 
 2. Install Dependencies
 Install the required packages defined in package.json:
