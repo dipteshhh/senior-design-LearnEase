@@ -1,4 +1,5 @@
 "use client";
+import OutputTabs from "@/components/OutputTabs";
 import { useState } from "react";
 import InputTabs from "@/components/InputTabs";
 export default function Workspace() {
@@ -14,7 +15,7 @@ export default function Workspace() {
 
         <div className="bg-white p-4 rounded shadow">
           <h3 className="font-medium mb-2">Output</h3>
-          <p className="text-gray-500">Transformed content will appear here.</p>
+           <OutputTabs />
         </div>
       </div>
     </div>
