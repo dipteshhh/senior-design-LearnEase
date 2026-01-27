@@ -18,6 +18,8 @@ Many students rely on AI tools that directly complete assignments rather than su
 - Paste text
 - Drag-and-drop PDF upload
 - Drag-and-drop Word document (.docx) upload
+- Drag-and-drop image upload (.png, .jpg, .jpeg)
+- Drag-and-drop PowerPoint presentation (.ppt, .pptx) upload (This is a stretch goal)
 
 ### Processing Flow
 - Text extraction from input
