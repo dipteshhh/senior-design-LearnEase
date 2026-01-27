@@ -1,0 +1,22 @@
+export default function Workspace() {
+  return (
+    <div className="min-h-screen p-8 bg-gray-100">
+      <h2 className="text-2xl font-semibold mb-6">Learning Workspace</h2>
+
+      <div className="grid grid-cols-2 gap-6">
+        <div className="bg-white p-4 rounded shadow">
+          <h3 className="font-medium mb-2">Input</h3>
+          <textarea
+            className="w-full h-64 border rounded p-2"
+            placeholder="Paste text or upload a document..."
+          />
+        </div>
+
+        <div className="bg-white p-4 rounded shadow">
+          <h3 className="font-medium mb-2">Output</h3>
+          <p className="text-gray-500">Transformed content will appear here.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
