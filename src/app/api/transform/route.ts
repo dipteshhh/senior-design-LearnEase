@@ -1,67 +1,99 @@
 import { NextResponse } from "next/server";
+import OpenAI from "openai";
 
-type TransformMode = "simple" | "steps" | "bullets";
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
+// Simple “assignment-ish” detection (keep improving later)
 function looksLikeAssignment(text: string) {
   const t = text.toLowerCase();
-  const keywords = [
+  const triggers = [
     "solve",
     "calculate",
+    "show your work",
+    "find the value",
     "prove",
     "derive",
-    "find the answer",
-    "write an essay",
-    "complete the homework",
-    "answer the following",
-    "show your work",
-    "due",
-    "submit",
+    "write a program",
+    "write code",
+    "implement",
+    "answer",
+    "homework",
+    "assignment",
+    "quiz",
+    "exam",
+    "worksheet",
   ];
-  return keywords.some((k) => t.includes(k));
+  return triggers.some((k) => t.includes(k));
+}
+
+type Mode = "simple" | "steps" | "bullets";
+
+function modeInstruction(mode: Mode, hintMode: boolean) {
+  const baseRules = `
+You are LearnEase, a learning support assistant.
+Goal: help understanding by rewriting/structuring the user's provided content.
+Do NOT provide final answers to homework-style questions. Do NOT solve equations. Do NOT output completed solutions.
+If the user input appears to be an assignment prompt, switch to "Hint Mode":
+- Explain the concept
+- Provide a general method/template
+- Give a small illustrative example that is NOT the same as the user’s problem
+- Encourage the user to attempt it themselves
+Keep it concise and student-friendly.
+`;
+
+  const format =
+    mode === "simple"
+      ? "Output a short, simple explanation in 4–7 sentences."
+      : mode === "steps"
+      ? "Output a step-by-step breakdown as numbered steps (5–10 steps). No final answer."
+      : "Output a bullet-point summary (6–10 bullets). No final answer.";
+
+  const hintLine = hintMode
+    ? "\nIMPORTANT: Hint Mode is ON. You must not produce a final answer.\n"
+    : "\nHint Mode is OFF. Still do not produce completed homework answers.\n";
+
+  return `${baseRules}\n${hintLine}\n${format}`;
 }
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const inputText = String(body?.inputText ?? "").trim();
-    const mode = String(body?.mode ?? "simple") as TransformMode;
+    const { inputText, mode } = (await req.json()) as {
+      inputText?: string;
+      mode?: Mode;
+    };
 
-    if (!inputText) {
+    if (!inputText || !mode) {
       return NextResponse.json(
-        { error: "inputText is required" },
+        { error: "Missing inputText or mode" },
         { status: 400 }
       );
     }
 
     const hintMode = looksLikeAssignment(inputText);
 
-    // Placeholder backend output (NO AI yet)
-    let outputText = "";
+    // Choose a model. You can change later in one place.
+    // Docs show Responses API usage via client.responses.create(). :contentReference[oaicite:2]{index=2}
+    const model = "gpt-4o-mini";
 
-    if (mode === "simple") {
-      outputText = hintMode
-        ? "Hint Mode: This appears to be an assignment. Here is a conceptual explanation to help you learn."
-        : "This is a simple explanation placeholder.";
-    }
-
-    if (mode === "steps") {
-      outputText =
-        "Step-by-step placeholder:\n1) Identify the concept\n2) Break it down\n3) Explain each part";
-    }
-
-    if (mode === "bullets") {
-      outputText =
-        "• Key idea\n• Supporting detail\n• Important takeaway";
-    }
+    const response = await client.responses.create({
+      model,
+      instructions: modeInstruction(mode, hintMode),
+      input: inputText,
+      max_output_tokens: 350,
+      temperature: 0.3,
+    });
 
     return NextResponse.json({
       hintMode,
       mode,
-      outputText,
+      outputText: response.output_text ?? "",
     });
-  } catch (error) {
+  } catch (err: any) {
+    console.error(err);
     return NextResponse.json(
-      { error: "Server error" },
+      { error: err?.message ?? "Server error" },
       { status: 500 }
     );
   }
