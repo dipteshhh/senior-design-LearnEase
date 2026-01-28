@@ -2,15 +2,37 @@
 
 import { useState } from "react";
 
-const tabs = ["Simple", "Steps", "Bullets"];
+type Props = {
+  simpleText: string;
+  stepsText: string;
+  bulletsText: string;
+  isLoading: boolean;
+  hintMode: boolean;
+};
 
-export default function OutputTabs() {
-  const [activeTab, setActiveTab] = useState("Simple");
+const tabs = ["Simple", "Steps", "Bullets"] as const;
+type Tab = (typeof tabs)[number];
+
+export default function OutputTabs({
+  simpleText,
+  stepsText,
+  bulletsText,
+  isLoading,
+  hintMode,
+}: Props) {
+  const [activeTab, setActiveTab] = useState<Tab>("Simple");
+
+  const content =
+    activeTab === "Simple"
+      ? simpleText
+      : activeTab === "Steps"
+      ? stepsText
+      : bulletsText;
 
   return (
     <div>
       {/* Tabs */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4">
         {tabs.map((tab) => (
           <button
             key={tab}
@@ -24,24 +46,22 @@ export default function OutputTabs() {
             {tab}
           </button>
         ))}
+
+        {hintMode && (
+          <span className="ml-auto text-xs px-2 py-1 rounded bg-yellow-100 border border-yellow-300 text-yellow-800">
+            Hint Mode Active
+          </span>
+        )}
       </div>
 
-      {/* Tab Content */}
-      {activeTab === "Simple" && (
-        <p className="text-gray-700">
-          A simplified explanation will appear here.
-        </p>
-      )}
-
-      {activeTab === "Steps" && (
-        <p className="text-gray-700">
-          Step-by-step breakdown will appear here.
-        </p>
-      )}
-
-      {activeTab === "Bullets" && (
-        <p className="text-gray-700">
-          Bullet-point summary will appear here.
+      {/* Content */}
+      {isLoading ? (
+        <p className="text-gray-500">Generating…</p>
+      ) : content ? (
+        <pre className="whitespace-pre-wrap text-gray-800 text-sm">{content}</pre>
+      ) : (
+        <p className="text-gray-500">
+          Output will appear here after you click Transform.
         </p>
       )}
     </div>
