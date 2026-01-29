@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function Home() {
   const [textInput, setTextInput] = useState('');
@@ -119,7 +120,6 @@ export default function Home() {
               Upload Documents
             </h2>
             
-            {/* Drag and Drop Zone */}
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -173,6 +173,18 @@ export default function Home() {
               onChange={handleFileSelect}
               className="hidden"
             />
+          </div>
+
+          {/* Quick link to workspace */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 text-center">
+            <p className="text-gray-600 dark:text-gray-300 mb-4">
+              Already have text ready? Go straight to the learning workspace.
+            </p>
+            <Link href="/workspace">
+              <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                Open Workspace
+              </button>
+            </Link>
           </div>
 
           {/* Features Preview */}

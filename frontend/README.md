@@ -1,67 +1,31 @@
-# LearnEase – Senior Design Project
+# LearnEase Frontend
 
-LearnEase is a web-based learning support system designed to reduce cognitive load by presenting educational content in multiple accessible formats. The system supports learners who benefit from simplified explanations and multimodal content delivery, including (but not limited to) students with ADHD or learning difficulties.
+Next.js app for the LearnEase learning support system. Talks to the **backend** for text transformation (see `../backend`).
 
-Users are not required to disclose any personal, medical, or diagnostic information.
+## Run locally
 
----
+1. Start the backend first (see root README or `../backend/README.md`).
+2. In this folder:
 
-## Problem Statement
+```bash
+npm install
+npm run dev
+```
 
-Many students rely on AI tools that directly complete assignments rather than support understanding. This reduces learning and retention. LearnEase addresses this issue by transforming learning materials into structured, accessible formats without generating direct answers to assignments or homework.
+Open [http://localhost:3000](http://localhost:3000).
 
----
+## Scripts
 
-## MVP Scope (Demo-Ready)
+- `npm run dev` – development server
+- `npm run build` – production build
+- `npm run start` – run production build
+- `npm run lint` – run ESLint
 
-### Inputs
-- Paste text
-- Drag-and-drop PDF upload
-- Drag-and-drop Word document (.docx) upload
-- Drag-and-drop image upload (.png, .jpg, .jpeg) (To be Decided)
-- Drag-and-drop PowerPoint presentation (.ppt, .pptx) upload (This is a stretch goal)
+## Environment
 
-### Processing Flow
-- Text extraction from input
-- Preview and manual editing
-- AI-powered transformation into learning-friendly formats
+Create a `.env.local` with:
 
-### Outputs
-- Short & Simple explanation
-- Step-by-step breakdown
-- Bullet-point summary
-- Audio narration (Speechify-style controls)
-
-### Guardrails
-- Assignment prompts trigger **Hint Mode**
-- The system refuses to generate final answers or completed homework
-- Focus is on explanation, structure, and comprehension
-
----
-
-## Out of Scope (Current Phase)
-
-- User accounts or login
-- Database-backed storage
-- Mobile application
-
----
-
-## Technology Stack (Planned)
-
-- Next.js (TypeScript)
-- Tailwind CSS
-- OpenAI API (NLP / text transformation)
-- Browser Text-to-Speech API
-- Local browser storage (no database)
-
----
-
-## Team
-
-EECS 4020 Senior Design Project II – University of Toledo, College of Engineering
-1. Sid Mahesh
-2. Nishant Lamichhane
-3. Habeeb Sowemimo
-4. Darshan Pandey
-5. Diptesh Shahi Thakuri
+```
+# Backend API base URL (required for Transform/workspace)
+NEXT_PUBLIC_API_URL=http://localhost:3001
+```
