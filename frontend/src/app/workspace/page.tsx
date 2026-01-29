@@ -51,7 +51,6 @@ export default function Workspace() {
       alert("Please paste text first.");
       return;
     }
-    // Generate all 3 formats (sequential, simple & safe)
     await runTransform("simple");
     await runTransform("steps");
     await runTransform("bullets");
@@ -64,7 +63,6 @@ export default function Workspace() {
       <GuardrailsNotice />
 
       <div className="grid grid-cols-2 gap-6">
-        {/* Input */}
         <div className="bg-white p-4 rounded shadow">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Input</h3>
@@ -85,7 +83,6 @@ export default function Workspace() {
           <InputTabs inputText={inputText} setInputText={setInputText} />
         </div>
 
-        {/* Output */}
         <div className="bg-white p-4 rounded shadow">
           <h3 className="font-medium mb-2">Output</h3>
           <OutputTabs

@@ -55,6 +55,20 @@ Many students rely on AI tools that directly complete assignments rather than su
 
 ---
 
+## Getting Started
+
+The app lives in the `frontend/` folder. From the project root:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+---
+
 ## Team
 
 EECS 4020 Senior Design Project II – University of Toledo, College of Engineering

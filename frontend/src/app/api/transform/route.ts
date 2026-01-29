@@ -5,7 +5,7 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Simple “assignment-ish” detection (keep improving later)
+// Simple "assignment-ish" detection (keep improving later)
 function looksLikeAssignment(text: string) {
   const t = text.toLowerCase();
   const triggers = [
@@ -38,7 +38,7 @@ Do NOT provide final answers to homework-style questions. Do NOT solve equations
 If the user input appears to be an assignment prompt, switch to "Hint Mode":
 - Explain the concept
 - Provide a general method/template
-- Give a small illustrative example that is NOT the same as the user’s problem
+- Give a small illustrative example that is NOT the same as the user's problem
 - Encourage the user to attempt it themselves
 Keep it concise and student-friendly.
 `;
@@ -73,8 +73,6 @@ export async function POST(req: Request) {
 
     const hintMode = looksLikeAssignment(inputText);
 
-    // Choose a model. You can change later in one place.
-    // Docs show Responses API usage via client.responses.create(). :contentReference[oaicite:2]{index=2}
     const model = "gpt-4o-mini";
 
     const response = await client.responses.create({

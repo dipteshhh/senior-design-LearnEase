@@ -14,7 +14,6 @@ export default function InputTabs({ inputText, setInputText }: Props) {
 
   return (
     <div>
-      {/* Tabs */}
       <div className="flex gap-2 mb-4">
         {tabs.map((tab) => (
           <button
@@ -31,7 +30,6 @@ export default function InputTabs({ inputText, setInputText }: Props) {
         ))}
       </div>
 
-      {/* Paste Text */}
       {activeTab === "Paste Text" && (
         <textarea
           className="w-full h-64 border rounded p-2"
@@ -41,7 +39,6 @@ export default function InputTabs({ inputText, setInputText }: Props) {
         />
       )}
 
-      {/* Upload PDF */}
       {activeTab === "Upload PDF" && (
         <div className="flex flex-col gap-2">
           <label className="text-sm text-gray-600">Upload a PDF document</label>
@@ -50,7 +47,6 @@ export default function InputTabs({ inputText, setInputText }: Props) {
         </div>
       )}
 
-      {/* Upload DOCX */}
       {activeTab === "Upload DOCX" && (
         <div className="flex flex-col gap-2">
           <label className="text-sm text-gray-600">

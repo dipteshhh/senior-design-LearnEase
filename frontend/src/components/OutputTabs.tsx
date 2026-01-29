@@ -31,7 +31,6 @@ export default function OutputTabs({
 
   return (
     <div>
-      {/* Tabs */}
       <div className="flex items-center gap-2 mb-4">
         {tabs.map((tab) => (
           <button
@@ -54,7 +53,6 @@ export default function OutputTabs({
         )}
       </div>
 
-      {/* Content */}
       {isLoading ? (
         <p className="text-gray-500">Generating…</p>
       ) : content ? (
