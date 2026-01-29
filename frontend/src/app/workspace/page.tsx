@@ -20,7 +20,8 @@ export default function Workspace() {
   async function runTransform(mode: Mode) {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/transform", {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
+      const res = await fetch(`${apiBase}/api/transform`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inputText, mode }),

@@ -1,12 +1,11 @@
-import { NextResponse } from "next/server";
+import { Request, Response } from "express";
 import OpenAI from "openai";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Simple "assignment-ish" detection (keep improving later)
-function looksLikeAssignment(text: string) {
+function looksLikeAssignment(text: string): boolean {
   const t = text.toLowerCase();
   const triggers = [
     "solve",
@@ -28,9 +27,9 @@ function looksLikeAssignment(text: string) {
   return triggers.some((k) => t.includes(k));
 }
 
-type Mode = "simple" | "steps" | "bullets";
+export type Mode = "simple" | "steps" | "bullets";
 
-function modeInstruction(mode: Mode, hintMode: boolean) {
+function modeInstruction(mode: Mode, hintMode: boolean): string {
   const baseRules = `
 You are LearnEase, a learning support assistant.
 Goal: help understanding by rewriting/structuring the user's provided content.
@@ -47,8 +46,8 @@ Keep it concise and student-friendly.
     mode === "simple"
       ? "Output a short, simple explanation in 4–7 sentences."
       : mode === "steps"
-      ? "Output a step-by-step breakdown as numbered steps (5–10 steps). No final answer."
-      : "Output a bullet-point summary (6–10 bullets). No final answer.";
+        ? "Output a step-by-step breakdown as numbered steps (5–10 steps). No final answer."
+        : "Output a bullet-point summary (6–10 bullets). No final answer.";
 
   const hintLine = hintMode
     ? "\nIMPORTANT: Hint Mode is ON. You must not produce a final answer.\n"
@@ -57,22 +56,19 @@ Keep it concise and student-friendly.
   return `${baseRules}\n${hintLine}\n${format}`;
 }
 
-export async function POST(req: Request) {
+export async function transformHandler(req: Request, res: Response): Promise<void> {
   try {
-    const { inputText, mode } = (await req.json()) as {
+    const { inputText, mode } = req.body as {
       inputText?: string;
       mode?: Mode;
     };
 
     if (!inputText || !mode) {
-      return NextResponse.json(
-        { error: "Missing inputText or mode" },
-        { status: 400 }
-      );
+      res.status(400).json({ error: "Missing inputText or mode" });
+      return;
     }
 
     const hintMode = looksLikeAssignment(inputText);
-
     const model = "gpt-4o-mini";
 
     const response = await client.responses.create({
@@ -83,16 +79,16 @@ export async function POST(req: Request) {
       temperature: 0.3,
     });
 
-    return NextResponse.json({
+    const outputText = (response as { output_text?: string }).output_text ?? "";
+
+    res.json({
       hintMode,
       mode,
-      outputText: response.output_text ?? "",
+      outputText,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(err);
-    return NextResponse.json(
-      { error: err?.message ?? "Server error" },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : "Server error";
+    res.status(500).json({ error: message });
   }
 }

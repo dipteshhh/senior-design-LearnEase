@@ -1,8 +1,11 @@
 # LearnEase Frontend
 
-Next.js app for the LearnEase learning support system.
+Next.js app for the LearnEase learning support system. Talks to the **backend** for text transformation (see `../backend`).
 
 ## Run locally
+
+1. Start the backend first (see root README or `../backend/README.md`).
+2. In this folder:
 
 ```bash
 npm install
@@ -23,5 +26,6 @@ Open [http://localhost:3000](http://localhost:3000).
 Create a `.env.local` with:
 
 ```
-OPENAI_API_KEY=your_key_here
+# Backend API base URL (required for Transform/workspace)
+NEXT_PUBLIC_API_URL=http://localhost:3001
 ```

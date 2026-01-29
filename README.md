@@ -57,11 +57,26 @@ Many students rely on AI tools that directly complete assignments rather than su
 
 ## Getting Started
 
-The app lives in the `frontend/` folder. From the project root:
+You need both the **backend** (API + OpenAI) and the **frontend** (Next.js) running.
+
+**1. Backend** (from project root):
+
+```bash
+cd backend
+npm install
+cp .env.example .env
+# Edit .env and set OPENAI_API_KEY
+npm run dev
+```
+
+Runs at [http://localhost:3001](http://localhost:3001).
+
+**2. Frontend** (new terminal, from project root):
 
 ```bash
 cd frontend
 npm install
+echo "NEXT_PUBLIC_API_URL=http://localhost:3001" > .env.local
 npm run dev
 ```
 
