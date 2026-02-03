@@ -78,10 +78,4 @@ EECS 4020 Senior Design Project II – University of Toledo, College of Engineer
 3. Habeeb Sowemimo
 4. Darshan Pandey
 5. Diptesh Shahi Thakuri
-<<<<<<< HEAD
-
-
-Testing branch protection
-=======
 6. Prabin Sapkota
->>>>>>> 2dfd0f3 (new member added in README.md)
