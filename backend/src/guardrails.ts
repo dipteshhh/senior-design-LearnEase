@@ -12,17 +12,17 @@ export function detectHintMode(text: string): boolean {
     
     // Programming
     "write a program", "write code", "implement", "debug", 
-    "algorithm", "function", "class", "method", "api", 
-    "stack trace", "compiler", "script", "code snippet",
+    "algorithm", "stack trace", "compiler", "script", "code snippet",
+    "implement in python", "implement in java", "write pseudocode", "show steps",
     
     // Writing/Essays
     "write an essay", "write a summary", "thesis statement", 
     "write a paragraph", "conclusion", "outline", "draft",
     
     // General Coursework
-    "assignment", "homework", "quiz", "exam", "test", 
+    "assignment", "homework", "quiz", "exam", 
     "worksheet", "lab report", "midterm", "final", 
-    "problem set", "question", "answer"
+    "problem set", "exam question", "homework question"
   ];
 
   return triggers.some((k) => t.includes(k));
