@@ -1,4 +1,4 @@
-# LearnEase (Working Name): Accessibility-First Document Understanding Web App
+# LearnEase: Accessibility-First Document Understanding Web App
 
 ## 1) The problem we are solving
 
