@@ -1,17 +1,7 @@
 import Link from "next/link";
+import { getRecentDocuments, type RecentDoc } from "@/lib/mock/store";
 
-type DocStatus = "READY" | "PROCESSING" | "FAILED";
-
-type RecentDoc = {
-  id: string;
-  title: string;
-  pages?: number;
-  createdAtLabel: string; // e.g., "2 hours ago"
-  status: DocStatus;
-  progress?: number; // 0-100 for processing
-};
-
-function StatusBadge({ status }: { status: DocStatus }) {
+function StatusBadge({ status }: { status: RecentDoc["status"] }) {
   if (status === "READY") {
     return (
       <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
@@ -62,9 +52,12 @@ function DocumentCard({ doc }: { doc: RecentDoc }) {
   const isProcessing = doc.status === "PROCESSING";
   const showProgress = isProcessing && typeof doc.progress === "number";
 
+  const href =
+    doc.status === "READY" ? `/documents/${doc.id}` : "/dashboard";
+
   return (
     <Link
-      href={doc.status === "READY" ? `/study/${doc.id}` : "/dashboard"}
+      href={href}
       className="group block rounded-2xl border bg-white p-5 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-black/20"
       aria-label={`Open ${doc.title}`}
     >
@@ -96,9 +89,7 @@ function DocumentCard({ doc }: { doc: RecentDoc }) {
               aria-hidden="true"
             />
           </div>
-          <p className="mt-2 text-xs text-gray-500">
-            {doc.progress}% complete
-          </p>
+          <p className="mt-2 text-xs text-gray-500">{doc.progress}% complete</p>
         </div>
       )}
 
@@ -115,42 +106,10 @@ function DocumentCard({ doc }: { doc: RecentDoc }) {
 }
 
 export default function DashboardPage() {
-  // TODO: Replace this with real backend data later
-  const recentDocs: RecentDoc[] = [
-    {
-      id: "advanced-algorithms",
-      title: "Advanced Algorithms Assignment.pdf",
-      pages: 12,
-      createdAtLabel: "2 hours ago",
-      status: "READY",
-    },
-    {
-      id: "ml-lecture-5",
-      title: "Machine Learning Lecture 5.pptx",
-      pages: 45,
-      createdAtLabel: "Yesterday",
-      status: "READY",
-    },
-    {
-      id: "research-methods",
-      title: "Research Methods Project Guidelines.pdf",
-      pages: 8,
-      createdAtLabel: "5 minutes ago",
-      status: "PROCESSING",
-      progress: 40,
-    },
-    {
-      id: "db-final",
-      title: "Database Systems Final Project.pdf",
-      pages: 18,
-      createdAtLabel: "3 days ago",
-      status: "READY",
-    },
-  ];
+  const recentDocs = getRecentDocuments();
 
   const readyCount = recentDocs.filter((d) => d.status === "READY").length;
-  const processingCount = recentDocs.filter((d) => d.status === "PROCESSING")
-    .length;
+  const processingCount = recentDocs.filter((d) => d.status === "PROCESSING").length;
 
   return (
     <div className="p-8">
@@ -160,11 +119,11 @@ export default function DashboardPage() {
           Welcome back
         </h1>
         <p className="mt-2 text-sm text-gray-500">
-          {readyCount} guides ready to study, {processingCount} processing
+          {readyCount} ready, {processingCount} processing
         </p>
       </div>
 
-      {/* Hero card */}
+      {/* Hero */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-950 to-gray-800 p-8 text-white shadow-sm">
         <div className="flex items-start justify-between gap-10">
           <div className="max-w-xl">
@@ -173,7 +132,7 @@ export default function DashboardPage() {
             </h2>
             <p className="mt-3 text-sm text-white/80">
               Upload a PDF or PowerPoint and we&apos;ll create a structured study
-              guide with key actions, checklists, and optional quizzes.
+              guide with summary, key takeaways, checklist, and optional quizzes.
             </p>
 
             <div className="mt-6">
@@ -189,7 +148,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Right icon tile */}
           <div className="hidden sm:flex">
             <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/10">
               <svg
@@ -213,20 +171,15 @@ export default function DashboardPage() {
       {/* Recent uploads */}
       <div className="mt-10">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-gray-900">
-            Recent uploads
-          </h3>
+          <h3 className="text-base font-semibold text-gray-900">Recent uploads</h3>
           <p className="text-sm text-gray-500">{recentDocs.length} documents</p>
         </div>
 
         {recentDocs.length === 0 ? (
           <div className="rounded-2xl border bg-white p-10 text-center shadow-sm">
-            <p className="text-sm font-medium text-gray-900">
-              No documents yet
-            </p>
+            <p className="text-sm font-medium text-gray-900">No documents yet</p>
             <p className="mt-2 text-sm text-gray-500">
-              Upload your first assignment to generate a clean, structured study
-              guide.
+              Upload your first assignment to generate a clean, structured study guide.
             </p>
             <div className="mt-6">
               <Link
@@ -238,10 +191,16 @@ export default function DashboardPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {recentDocs.map((doc) => (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            {recentDocs.slice(0, 3).map((doc) => (
               <DocumentCard key={doc.id} doc={doc} />
             ))}
+
+            {recentDocs[3] && (
+              <div className="md:col-span-2">
+                <DocumentCard doc={recentDocs[3]} />
+              </div>
+            )}
           </div>
         )}
       </div>
