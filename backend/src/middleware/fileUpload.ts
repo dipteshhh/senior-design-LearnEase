@@ -47,7 +47,23 @@ export function handleMulterError(
     return;
   }
   if (err) {
-    res.status(400).json({ error: err.message });
+    if (err.message.includes("Invalid file type")) {
+      res.status(415).json({
+        error: {
+          code: "UNSUPPORTED_MEDIA_TYPE",
+          message: err.message,
+          details: {},
+        },
+      });
+      return;
+    }
+    res.status(400).json({
+      error: {
+        code: "BAD_REQUEST",
+        message: err.message,
+        details: {},
+      },
+    });
     return;
   }
   next();
