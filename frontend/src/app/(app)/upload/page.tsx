@@ -85,8 +85,9 @@ export default function UploadPage() {
   async function onCreateSession() {
     // For now: simulate creating a doc and navigating to it.
     // Later: replace with real API call.
-    const fakeId = crypto.randomUUID();
-    router.push(`/documents/${fakeId}`);
+  const fakeId = crypto.randomUUID();
+router.push(`/documents/${fakeId}/processing`);
+
   }
 
   const canContinue = Boolean(file && selectedMode);

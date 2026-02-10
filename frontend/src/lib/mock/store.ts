@@ -1,4 +1,4 @@
-// frontend/src/lib/mock/store.ts
+// src/lib/mock/store.ts
 
 export type DocStatus = "READY" | "PROCESSING" | "FAILED";
 
@@ -29,7 +29,7 @@ const MOCK_DOCS: DocDetail[] = [
     id: "advanced-algorithms",
     title: "Advanced Algorithms Assignment.pdf",
     pages: 12,
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     status: "READY",
     studyGuide: {
       summary:
@@ -52,7 +52,7 @@ const MOCK_DOCS: DocDetail[] = [
     id: "ml-lecture-5",
     title: "Machine Learning Lecture 5.pptx",
     pages: 45,
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // yesterday
+    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     status: "READY",
     studyGuide: {
       summary:
@@ -74,7 +74,7 @@ const MOCK_DOCS: DocDetail[] = [
     id: "research-methods",
     title: "Research Methods Project Guidelines.pdf",
     pages: 8,
-    createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 minutes ago
+    createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
     status: "PROCESSING",
     studyGuide: {
       summary:
@@ -87,7 +87,7 @@ const MOCK_DOCS: DocDetail[] = [
     id: "db-final",
     title: "Database Systems Final Project.pdf",
     pages: 18,
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     status: "READY",
     studyGuide: {
       summary:
@@ -159,14 +159,12 @@ export function getQuizByDocumentId(id: string) {
           prompt: "This is a placeholder quiz question.",
           choices: ["Choice A", "Choice B", "Choice C", "Choice D"],
           answerIndex: 0,
-          explanation:
-            "Mock explanation. Replace with backend-generated quiz later.",
+          explanation: "Mock explanation. Replace with backend-generated quiz later.",
         },
       ],
     };
   }
 
-  // Otherwise create a simple mock from study guide key takeaways
   const takeaways = doc.studyGuide?.keyTakeaways ?? [];
   const questions =
     takeaways.length > 0

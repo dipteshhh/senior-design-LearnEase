@@ -1,8 +1,8 @@
-
 import Link from "next/link";
-import { getRecentDocuments, type RecentDoc } from "@/lib/mock/store";
+import type { DocumentListItem } from "@/lib/contracts";
+import { listDocuments } from "@/lib/data/documents";
 
-function StatusBadge({ status }: { status: RecentDoc["status"] }) {
+function StatusBadge({ status }: { status: DocumentListItem["status"] }) {
   if (status === "READY") {
     return (
       <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
@@ -29,6 +29,7 @@ function StatusBadge({ status }: { status: RecentDoc["status"] }) {
   );
 }
 
+
 function FileIcon() {
   return (
     <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100">
@@ -49,7 +50,8 @@ function FileIcon() {
   );
 }
 
-function DocumentCard({ doc }: { doc: RecentDoc }) {
+function DocumentCard({ doc }: { doc: DocumentListItem }) {
+
   const isProcessing = doc.status === "PROCESSING";
   const showProgress = isProcessing && typeof doc.progress === "number";
 
@@ -106,18 +108,14 @@ function DocumentCard({ doc }: { doc: RecentDoc }) {
   );
 }
 
-export default function DashboardPage({
+export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: { q?: string };
+  searchParams?: Promise<{ q?: string }>;
 }) {
-  const recentDocs = getRecentDocuments();
-
-  const q = (searchParams?.q ?? "").toLowerCase().trim();
-
-  const docs = q
-    ? recentDocs.filter((d) => d.title.toLowerCase().includes(q))
-    : recentDocs;
+  const sp = (await searchParams) ?? {};
+  const q = sp.q ?? "";
+  const docs = await listDocuments(q);
 
   const readyCount = docs.filter((d) => d.status === "READY").length;
   const processingCount = docs.filter((d) => d.status === "PROCESSING").length;
