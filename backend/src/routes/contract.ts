@@ -2,13 +2,14 @@ import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { sendApiError } from "../lib/apiError.js";
 import type { DocumentType, Quiz } from "../schemas/analyze.js";
+import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { detectDocumentType } from "../services/documentDetector.js";
 import { analyzeDocument } from "../services/contentAnalyzer.js";
 import { extractTextFromBuffer } from "../services/textExtractor.js";
 import {
-  deleteAllDocuments,
+  deleteDocumentsByUser,
   getDocument,
-  listDocuments,
+  listDocumentsByUser,
   saveDocument,
   updateDocument,
 } from "../store/memoryStore.js";
@@ -28,8 +29,27 @@ function readDocumentId(req: Request): string | null {
   return typeof id === "string" && id.trim().length > 0 ? id : null;
 }
 
+function getUserId(req: Request): string {
+  return (req as AuthenticatedRequest).auth.userId;
+}
+
+function ensureOwnership(req: Request, res: Response, documentId: string) {
+  const userId = getUserId(req);
+  const doc = getDocument(documentId);
+  if (!doc) {
+    sendApiError(res, 404, "NOT_FOUND", "Document not found.");
+    return null;
+  }
+  if (doc.userId !== userId) {
+    sendApiError(res, 403, "FORBIDDEN", "You do not own this document.");
+    return null;
+  }
+  return doc;
+}
+
 export async function uploadDocumentHandler(req: Request, res: Response): Promise<void> {
   try {
+    const userId = getUserId(req);
     const file = req.file;
     if (!file) {
       sendApiError(res, 400, "MISSING_FILE", "Missing file upload.");
@@ -46,6 +66,7 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
     const documentId = randomUUID();
     saveDocument({
       id: documentId,
+      userId,
       filename: file.originalname,
       documentType: detected.documentType,
       status: "uploaded",
@@ -70,7 +91,8 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
 }
 
 export async function listDocumentsHandler(_req: Request, res: Response): Promise<void> {
-  const items = listDocuments().map((doc) => ({
+  const userId = getUserId(_req);
+  const items = listDocumentsByUser(userId).map((doc) => ({
     id: doc.id,
     filename: doc.filename,
     document_type: doc.documentType,
@@ -88,11 +110,8 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
     return;
   }
 
-  const doc = getDocument(documentId);
-  if (!doc) {
-    sendApiError(res, 404, "NOT_FOUND", "Document not found.");
-    return;
-  }
+  const doc = ensureOwnership(req, res, documentId);
+  if (!doc) return;
   if (doc.documentType === "UNSUPPORTED") {
     sendApiError(res, 422, "DOCUMENT_UNSUPPORTED", "Unsupported document type.");
     return;
@@ -143,11 +162,8 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
     return;
   }
 
-  const doc = getDocument(documentId);
-  if (!doc) {
-    sendApiError(res, 404, "NOT_FOUND", "Document not found.");
-    return;
-  }
+  const doc = ensureOwnership(req, res, documentId);
+  if (!doc) return;
   if (doc.documentType === "UNSUPPORTED") {
     sendApiError(res, 422, "DOCUMENT_UNSUPPORTED", "Unsupported document type.");
     return;
@@ -188,7 +204,8 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
 }
 
 export async function getStudyGuideHandler(req: Request, res: Response): Promise<void> {
-  const doc = getDocument(req.params.documentId);
+  const doc = ensureOwnership(req, res, req.params.documentId);
+  if (!doc) return;
   if (!doc || !doc.studyGuide || doc.status !== "ready") {
     sendApiError(
       res,
@@ -208,11 +225,8 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
     return;
   }
 
-  const doc = getDocument(documentId);
-  if (!doc) {
-    sendApiError(res, 404, "NOT_FOUND", "Document not found.");
-    return;
-  }
+  const doc = ensureOwnership(req, res, documentId);
+  if (!doc) return;
   if (doc.documentType !== "LECTURE") {
     sendApiError(res, 422, "DOCUMENT_NOT_LECTURE", "Quiz generation is lecture-only.");
     return;
@@ -266,11 +280,8 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
     return;
   }
 
-  const doc = getDocument(documentId);
-  if (!doc) {
-    sendApiError(res, 404, "NOT_FOUND", "Document not found.");
-    return;
-  }
+  const doc = ensureOwnership(req, res, documentId);
+  if (!doc) return;
   if (doc.documentType !== "LECTURE") {
     sendApiError(res, 422, "DOCUMENT_NOT_LECTURE", "Quiz generation is lecture-only.");
     return;
@@ -314,7 +325,8 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
 }
 
 export async function getQuizHandler(req: Request, res: Response): Promise<void> {
-  const doc = getDocument(req.params.documentId);
+  const doc = ensureOwnership(req, res, req.params.documentId);
+  if (!doc) return;
   if (!doc || !doc.quiz || doc.status !== "ready") {
     sendApiError(
       res,
@@ -328,6 +340,9 @@ export async function getQuizHandler(req: Request, res: Response): Promise<void>
 }
 
 export async function updateChecklistHandler(req: Request, res: Response): Promise<void> {
+  const doc = ensureOwnership(req, res, req.params.documentId);
+  if (!doc) return;
+
   const body = req.body as ChecklistBody | undefined;
   const hasItemId = typeof body?.item_id === "string" && body.item_id.trim().length > 0;
   const hasCompleted = typeof body?.completed === "boolean";
@@ -341,6 +356,7 @@ export async function updateChecklistHandler(req: Request, res: Response): Promi
 }
 
 export async function deleteUserDataHandler(_req: Request, res: Response): Promise<void> {
-  deleteAllDocuments();
+  const userId = getUserId(_req);
+  deleteDocumentsByUser(userId);
   res.status(200).json({ success: true });
 }

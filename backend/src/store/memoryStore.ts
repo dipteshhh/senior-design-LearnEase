@@ -4,6 +4,7 @@ export type DocumentStatus = "uploaded" | "processing" | "ready" | "failed";
 
 export interface DocumentRecord {
   id: string;
+  userId: string;
   filename: string;
   documentType: DocumentType;
   status: DocumentStatus;
@@ -32,6 +33,10 @@ export function listDocuments(): DocumentRecord[] {
   );
 }
 
+export function listDocumentsByUser(userId: string): DocumentRecord[] {
+  return listDocuments().filter((doc) => doc.userId === userId);
+}
+
 export function updateDocument(
   id: string,
   mutator: (current: DocumentRecord) => DocumentRecord
@@ -47,3 +52,10 @@ export function deleteAllDocuments(): void {
   documents.clear();
 }
 
+export function deleteDocumentsByUser(userId: string): void {
+  for (const [id, doc] of documents.entries()) {
+    if (doc.userId === userId) {
+      documents.delete(id);
+    }
+  }
+}

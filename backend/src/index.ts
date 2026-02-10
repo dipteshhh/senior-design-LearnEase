@@ -13,7 +13,7 @@ import {
   updateChecklistHandler,
   uploadDocumentHandler,
 } from "./routes/contract.js";
-import { upload, handleMulterError, apiLimiter } from "./middleware/index.js";
+import { upload, handleMulterError, apiLimiter, requireAuth } from "./middleware/index.js";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -21,6 +21,7 @@ const PORT = process.env.PORT ?? 3001;
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "10mb" }));
 app.use(apiLimiter);
+app.use(requireAuth);
 
 app.post("/api/upload", upload.single("file"), handleMulterError, uploadDocumentHandler);
 app.get("/api/documents", listDocumentsHandler);
