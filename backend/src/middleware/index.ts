@@ -1,4 +1,4 @@
-export { apiLimiter, analyzeLimiter } from "./rateLimiter.js";
+export { apiLimiter } from "./rateLimiter.js";
 export { validateBody, validateTextLength } from "./validateRequest.js";
 export { upload, handleMulterError } from "./fileUpload.js";
 export { requireAuth } from "./auth.js";

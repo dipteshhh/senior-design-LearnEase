@@ -4,6 +4,12 @@ import { sendApiError } from "../lib/apiError.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { detectDocumentType } from "../services/documentDetector.js";
 import { analyzeDocument } from "../services/contentAnalyzer.js";
+import {
+  FLOW_PROCESSING_CODE,
+  isFlowFailed,
+  isFlowProcessing,
+  makeFlowFailureCode,
+} from "../services/generationState.js";
 import { generateQuiz } from "../services/quizGenerator.js";
 import { extractTextFromBuffer } from "../services/textExtractor.js";
 import {
@@ -27,13 +33,6 @@ interface ChecklistBody {
   item_id?: string;
   completed?: boolean;
 }
-
-type GenerationFlow = "STUDY_GUIDE" | "QUIZ";
-
-const FLOW_PROCESSING_CODE: Record<GenerationFlow, string> = {
-  STUDY_GUIDE: "STUDY_GUIDE_PROCESSING",
-  QUIZ: "QUIZ_PROCESSING",
-};
 
 function readDocumentId(req: Request): string | null {
   const body = req.body as CreateBody | undefined;
@@ -83,26 +82,6 @@ function toFailureCode(error: unknown): { code: string; message: string; details
     code: "GENERATION_FAILED",
     message: "Generation failed",
   };
-}
-
-function isFlowProcessing(
-  status: string,
-  errorCode: string | null,
-  flow: GenerationFlow
-): boolean {
-  if (status !== "processing") return false;
-  if (!errorCode) return true;
-  return errorCode === FLOW_PROCESSING_CODE[flow];
-}
-
-function isFlowFailed(
-  status: string,
-  errorCode: string | null,
-  flow: GenerationFlow
-): boolean {
-  if (status !== "failed") return false;
-  if (!errorCode) return false;
-  return errorCode.startsWith(`${flow}:`);
 }
 
 export async function uploadDocumentHandler(req: Request, res: Response): Promise<void> {
@@ -218,7 +197,7 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: `STUDY_GUIDE:${failure.code}`,
+        errorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
         errorMessage: failure.message,
       }));
     }
@@ -275,7 +254,7 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: `STUDY_GUIDE:${failure.code}`,
+        errorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
         errorMessage: failure.message,
       }));
     }
@@ -355,7 +334,7 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: `QUIZ:${failure.code}`,
+        errorCode: makeFlowFailureCode("QUIZ", failure.code),
         errorMessage: failure.message,
       }));
     }
@@ -417,7 +396,7 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: `QUIZ:${failure.code}`,
+        errorCode: makeFlowFailureCode("QUIZ", failure.code),
         errorMessage: failure.message,
       }));
     }
