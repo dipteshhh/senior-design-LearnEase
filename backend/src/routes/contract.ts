@@ -1,15 +1,14 @@
 import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { sendApiError } from "../lib/apiError.js";
-import type { DocumentType, Quiz } from "../schemas/analyze.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { detectDocumentType } from "../services/documentDetector.js";
 import { analyzeDocument } from "../services/contentAnalyzer.js";
+import { generateQuiz } from "../services/quizGenerator.js";
 import { extractTextFromBuffer } from "../services/textExtractor.js";
 import {
   ContractValidationError,
   normalizeDocumentText,
-  validateQuizAgainstDocument,
 } from "../services/outputValidator.js";
 import {
   deleteDocumentsByUser,
@@ -153,7 +152,7 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
     sendApiError(res, 422, "DOCUMENT_UNSUPPORTED", "Unsupported document type.");
     return;
   }
-  if (doc.status === "ready" && doc.studyGuide) {
+  if (doc.studyGuide) {
     res.status(200).json({ status: "ready", cached: true });
     return;
   }
@@ -251,7 +250,7 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
 export async function getStudyGuideHandler(req: Request, res: Response): Promise<void> {
   const doc = ensureOwnership(req, res, req.params.documentId);
   if (!doc) return;
-  if (!doc || !doc.studyGuide || doc.status !== "ready") {
+  if (!doc.studyGuide) {
     sendApiError(
       res,
       404,
@@ -276,6 +275,10 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
     sendApiError(res, 422, "DOCUMENT_NOT_LECTURE", "Quiz generation is lecture-only.");
     return;
   }
+  if (doc.quiz) {
+    res.status(200).json({ status: "ready", cached: true });
+    return;
+  }
   if (doc.status === "processing") {
     sendApiError(res, 409, "ALREADY_PROCESSING", "Quiz is already processing.");
     return;
@@ -284,28 +287,19 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
     sendApiError(res, 409, "ILLEGAL_RETRY_STATE", "Use retry endpoint for failed documents.");
     return;
   }
-  if (doc.quiz) {
-    res.status(200).json({ status: "ready", cached: true });
-    return;
-  }
-
   updateDocument(documentId, (current) => ({ ...current, status: "processing" }));
 
   void (async () => {
     try {
-      const generatedQuiz: Quiz = {
-        document_id: documentId,
-        questions: [],
-      };
-      validateQuizAgainstDocument(
-        generatedQuiz,
+      const generatedQuiz = await generateQuiz(
+        documentId,
+        doc.extractedText,
+        doc.documentType,
         {
-          text: doc.extractedText,
           fileType: doc.fileType,
           pageCount: doc.pageCount,
           paragraphCount: doc.paragraphCount,
-        },
-        doc.documentType
+        }
       );
       updateDocument(documentId, (current) => ({
         ...current,
@@ -354,19 +348,15 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
 
   void (async () => {
     try {
-      const generatedQuiz: Quiz = {
-        document_id: documentId,
-        questions: [],
-      };
-      validateQuizAgainstDocument(
-        generatedQuiz,
+      const generatedQuiz = await generateQuiz(
+        documentId,
+        doc.extractedText,
+        doc.documentType,
         {
-          text: doc.extractedText,
           fileType: doc.fileType,
           pageCount: doc.pageCount,
           paragraphCount: doc.paragraphCount,
-        },
-        doc.documentType
+        }
       );
       updateDocument(documentId, (current) => ({
         ...current,
@@ -392,7 +382,7 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
 export async function getQuizHandler(req: Request, res: Response): Promise<void> {
   const doc = ensureOwnership(req, res, req.params.documentId);
   if (!doc) return;
-  if (!doc || !doc.quiz || doc.status !== "ready") {
+  if (!doc.quiz) {
     sendApiError(
       res,
       404,

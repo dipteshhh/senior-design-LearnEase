@@ -1,19 +1,27 @@
 # LearnEase Backend
 
-Express API for the LearnEase learning support system. Handles text transformation (simple, steps, bullets) and guardrails (Hint Mode) via OpenAI.
+Express API server for LearnEase document upload, extraction, classification, Study Guide generation, and quiz generation.
+
+Contract source of truth:
+- `../docs/API.md`
+- `../docs/API_ERRORS.md`
+- `../docs/SCHEMAS.md`
+- `../docs/VALIDATION.md`
+- `../docs/AI_contract.md`
+- `../docs/DB_SCHEMA.md`
 
 ## Setup
 
 ```bash
 npm install
 cp .env.example .env
-# Edit .env and set OPENAI_API_KEY
+# Edit .env and set required secrets/keys
 ```
 
 ## Run
 
 ```bash
-# Development (with auto-reload)
+# Development
 npm run dev
 
 # Production
@@ -21,34 +29,28 @@ npm run build
 npm start
 ```
 
-Server runs at **http://localhost:3001** by default.
+Default local URL: `http://localhost:3001`
 
-## API
+## Implemented Routes
 
-### POST /api/transform
+- `POST /api/upload`
+- `GET /api/documents`
+- `POST /api/study-guide/create`
+- `POST /api/study-guide/retry`
+- `GET /api/study-guide/:documentId`
+- `POST /api/quiz/create`
+- `POST /api/quiz/retry`
+- `GET /api/quiz/:documentId`
+- `PATCH /api/checklist/:documentId`
+- `DELETE /api/user/data`
 
-Request body:
+## Environment Variables
 
-```json
-{
-  "inputText": "Your learning material or question...",
-  "mode": "simple" | "steps" | "bullets"
-}
-```
-
-Response:
-
-```json
-{
-  "hintMode": false,
-  "mode": "simple",
-  "outputText": "Transformed explanation..."
-}
-```
-
-## Environment
-
-| Variable         | Description                    |
-|-----------------|--------------------------------|
-| `PORT`          | Server port (default: 3001)   |
-| `OPENAI_API_KEY`| OpenAI API key (required)      |
+- `PORT` (default `3001`)
+- `OPENAI_API_KEY` (required)
+- `DATABASE_PATH` (default `data/learnease.sqlite`)
+- `ARTIFACTS_DIR` (default `data/artifacts`)
+- `RETENTION_DAYS` (default `30`)
+- `FILE_ENCRYPTION_KEY` (required for artifact encryption)
+- `SESSION_SECRET` (required for signed session cookie auth)
+- `ALLOW_LEGACY_AUTH_COOKIES` (`false` by default)

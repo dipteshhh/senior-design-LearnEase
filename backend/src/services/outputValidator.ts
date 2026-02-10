@@ -5,7 +5,8 @@ export type ValidationErrorCode =
   | "SCHEMA_VALIDATION_FAILED"
   | "QUOTE_NOT_FOUND"
   | "CITATION_EXCERPT_NOT_FOUND"
-  | "CITATION_OUT_OF_RANGE";
+  | "CITATION_OUT_OF_RANGE"
+  | "DOCUMENT_NOT_LECTURE";
 
 export class ContractValidationError extends Error {
   readonly code: ValidationErrorCode;
