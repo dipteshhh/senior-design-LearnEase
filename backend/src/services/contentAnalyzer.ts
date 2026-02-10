@@ -71,8 +71,7 @@ export async function analyzeDocument(
   const documentType = providedDocumentType ?? detection.documentType;
   const guidanceMode = shouldEnableGuidanceMode(
     documentType,
-    detection.isAssignment,
-    detection.confidence
+    detection.isAssignment
   );
   const restrictions = getRestrictions(documentType, guidanceMode);
 

@@ -40,12 +40,10 @@ export function getPolicy(documentType: DocumentType): DocumentPolicy {
 
 export function shouldEnableGuidanceMode(
   documentType: DocumentType,
-  isAssignment: boolean,
-  confidence: number
+  isAssignment: boolean
 ): boolean {
   if (isAssignment) return true;
   if (documentType === "UNSUPPORTED") return true;
-  if (confidence < 0.3) return true;
   return policies[documentType].guidanceMode;
 }
 
