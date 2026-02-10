@@ -28,6 +28,13 @@ interface ChecklistBody {
   completed?: boolean;
 }
 
+type GenerationFlow = "STUDY_GUIDE" | "QUIZ";
+
+const FLOW_PROCESSING_CODE: Record<GenerationFlow, string> = {
+  STUDY_GUIDE: "STUDY_GUIDE_PROCESSING",
+  QUIZ: "QUIZ_PROCESSING",
+};
+
 function readDocumentId(req: Request): string | null {
   const body = req.body as CreateBody | undefined;
   const id = body?.document_id;
@@ -76,6 +83,26 @@ function toFailureCode(error: unknown): { code: string; message: string; details
     code: "GENERATION_FAILED",
     message: "Generation failed",
   };
+}
+
+function isFlowProcessing(
+  status: string,
+  errorCode: string | null,
+  flow: GenerationFlow
+): boolean {
+  if (status !== "processing") return false;
+  if (!errorCode) return true;
+  return errorCode === FLOW_PROCESSING_CODE[flow];
+}
+
+function isFlowFailed(
+  status: string,
+  errorCode: string | null,
+  flow: GenerationFlow
+): boolean {
+  if (status !== "failed") return false;
+  if (!errorCode) return false;
+  return errorCode.startsWith(`${flow}:`);
 }
 
 export async function uploadDocumentHandler(req: Request, res: Response): Promise<void> {
@@ -156,16 +183,21 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
     res.status(200).json({ status: "ready", cached: true });
     return;
   }
-  if (doc.status === "processing") {
+  if (isFlowProcessing(doc.status, doc.errorCode, "STUDY_GUIDE")) {
     sendApiError(res, 409, "ALREADY_PROCESSING", "Study guide is already processing.");
     return;
   }
-  if (doc.status === "failed") {
+  if (isFlowFailed(doc.status, doc.errorCode, "STUDY_GUIDE")) {
     sendApiError(res, 409, "ILLEGAL_RETRY_STATE", "Use retry endpoint for failed documents.");
     return;
   }
 
-  updateDocument(documentId, (current) => ({ ...current, status: "processing" }));
+  updateDocument(documentId, (current) => ({
+    ...current,
+    status: "processing",
+    errorCode: FLOW_PROCESSING_CODE.STUDY_GUIDE,
+    errorMessage: null,
+  }));
 
   void (async () => {
     try {
@@ -186,7 +218,7 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: failure.code,
+        errorCode: `STUDY_GUIDE:${failure.code}`,
         errorMessage: failure.message,
       }));
     }
@@ -208,16 +240,21 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
     sendApiError(res, 422, "DOCUMENT_UNSUPPORTED", "Unsupported document type.");
     return;
   }
-  if (doc.status === "processing") {
+  if (isFlowProcessing(doc.status, doc.errorCode, "STUDY_GUIDE")) {
     sendApiError(res, 409, "ALREADY_PROCESSING", "Study guide is already processing.");
     return;
   }
-  if (doc.status !== "failed") {
+  if (!isFlowFailed(doc.status, doc.errorCode, "STUDY_GUIDE")) {
     sendApiError(res, 409, "ILLEGAL_RETRY_STATE", "Retry is only allowed from failed state.");
     return;
   }
 
-  updateDocument(documentId, (current) => ({ ...current, status: "processing" }));
+  updateDocument(documentId, (current) => ({
+    ...current,
+    status: "processing",
+    errorCode: FLOW_PROCESSING_CODE.STUDY_GUIDE,
+    errorMessage: null,
+  }));
 
   void (async () => {
     try {
@@ -238,7 +275,7 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: failure.code,
+        errorCode: `STUDY_GUIDE:${failure.code}`,
         errorMessage: failure.message,
       }));
     }
@@ -279,15 +316,20 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
     res.status(200).json({ status: "ready", cached: true });
     return;
   }
-  if (doc.status === "processing") {
+  if (isFlowProcessing(doc.status, doc.errorCode, "QUIZ")) {
     sendApiError(res, 409, "ALREADY_PROCESSING", "Quiz is already processing.");
     return;
   }
-  if (doc.status === "failed") {
+  if (isFlowFailed(doc.status, doc.errorCode, "QUIZ")) {
     sendApiError(res, 409, "ILLEGAL_RETRY_STATE", "Use retry endpoint for failed documents.");
     return;
   }
-  updateDocument(documentId, (current) => ({ ...current, status: "processing" }));
+  updateDocument(documentId, (current) => ({
+    ...current,
+    status: "processing",
+    errorCode: FLOW_PROCESSING_CODE.QUIZ,
+    errorMessage: null,
+  }));
 
   void (async () => {
     try {
@@ -313,7 +355,7 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: failure.code,
+        errorCode: `QUIZ:${failure.code}`,
         errorMessage: failure.message,
       }));
     }
@@ -335,16 +377,21 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
     sendApiError(res, 422, "DOCUMENT_NOT_LECTURE", "Quiz generation is lecture-only.");
     return;
   }
-  if (doc.status === "processing") {
+  if (isFlowProcessing(doc.status, doc.errorCode, "QUIZ")) {
     sendApiError(res, 409, "ALREADY_PROCESSING", "Quiz is already processing.");
     return;
   }
-  if (doc.status !== "failed") {
+  if (!isFlowFailed(doc.status, doc.errorCode, "QUIZ")) {
     sendApiError(res, 409, "ILLEGAL_RETRY_STATE", "Retry is only allowed from failed state.");
     return;
   }
 
-  updateDocument(documentId, (current) => ({ ...current, status: "processing" }));
+  updateDocument(documentId, (current) => ({
+    ...current,
+    status: "processing",
+    errorCode: FLOW_PROCESSING_CODE.QUIZ,
+    errorMessage: null,
+  }));
 
   void (async () => {
     try {
@@ -370,7 +417,7 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: failure.code,
+        errorCode: `QUIZ:${failure.code}`,
         errorMessage: failure.message,
       }));
     }

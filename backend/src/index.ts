@@ -20,6 +20,9 @@ import { purgeExpiredDocuments } from "./store/memoryStore.js";
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 const RETENTION_DAYS = Number(process.env.RETENTION_DAYS ?? "30");
+const CORS_ORIGINS = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
+  : null;
 
 initializeDatabase();
 purgeExpiredDocuments(RETENTION_DAYS);
@@ -28,7 +31,12 @@ setInterval(
   24 * 60 * 60 * 1000
 ).unref();
 
-app.use(cors({ origin: true }));
+app.use(
+  cors({
+    origin: CORS_ORIGINS && CORS_ORIGINS.length > 0 ? CORS_ORIGINS : true,
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: "10mb" }));
 app.use(apiLimiter);
 app.use(requireAuth);
