@@ -114,3 +114,105 @@ test("validateStudyGuideAgainstDocument rejects citation range violations", () =
   );
 });
 
+test("validateStudyGuideAgainstDocument rejects missing citation excerpt", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        citations: [{ source_type: "pdf", page: 1, excerpt: "This excerpt is missing." }],
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text: "Review the weekly schedule before class.",
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "CITATION_EXCERPT_NOT_FOUND");
+      return true;
+    }
+  );
+});
+
+test("validateStudyGuideAgainstDocument enforces DOCX paragraph range", () => {
+  const docxGuide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        citations: [
+          {
+            source_type: "docx",
+            anchor_type: "paragraph",
+            paragraph: 5,
+            excerpt: "Review the weekly schedule before class.",
+          },
+        ],
+      },
+    ],
+    sections: [
+      {
+        id: "s1",
+        title: "Overview",
+        content: "Lecture intro.",
+        citations: [
+          {
+            source_type: "docx",
+            anchor_type: "paragraph",
+            paragraph: 5,
+            excerpt: "Review the weekly schedule before class.",
+          },
+        ],
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(docxGuide, {
+        text: "Review the weekly schedule before class.",
+        fileType: "DOCX",
+        pageCount: 0,
+        paragraphCount: 2,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "CITATION_OUT_OF_RANGE");
+      return true;
+    }
+  );
+});
+
+test("validateStudyGuideAgainstDocument rejects source_type mismatch", () => {
+  const mismatch: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        citations: [{ source_type: "pdf", page: 1, excerpt: "Review the weekly schedule before class." }],
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(mismatch, {
+        text: "Review the weekly schedule before class.",
+        fileType: "DOCX",
+        pageCount: 0,
+        paragraphCount: 1,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "CITATION_OUT_OF_RANGE");
+      return true;
+    }
+  );
+});

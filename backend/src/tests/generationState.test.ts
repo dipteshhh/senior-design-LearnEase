@@ -16,6 +16,7 @@ test("isFlowProcessing only matches the active flow marker", () => {
   assert.equal(isFlowProcessing("processing", "STUDY_GUIDE_PROCESSING", "STUDY_GUIDE"), true);
   assert.equal(isFlowProcessing("processing", "QUIZ_PROCESSING", "STUDY_GUIDE"), false);
   assert.equal(isFlowProcessing("processing", "QUIZ_PROCESSING", "QUIZ"), true);
+  assert.equal(isFlowProcessing("processing", null, "STUDY_GUIDE"), true);
   assert.equal(isFlowProcessing("ready", "QUIZ_PROCESSING", "QUIZ"), false);
 });
 
@@ -29,4 +30,3 @@ test("isFlowFailed is flow-scoped and prevents cross-flow blocking", () => {
   assert.equal(isFlowFailed("failed", guideFailure, "QUIZ"), false);
   assert.equal(isFlowFailed("ready", guideFailure, "STUDY_GUIDE"), false);
 });
-
