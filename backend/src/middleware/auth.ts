@@ -25,13 +25,11 @@ function parseCookies(header: string | undefined): Record<string, string> {
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const cookies = parseCookies(req.headers.cookie);
-  const headerUserId = req.header("x-user-id");
-  const headerEmail = req.header("x-user-email");
 
-  const userId = headerUserId ?? cookies.learnease_user_id;
-  const email = headerEmail ?? cookies.learnease_user_email;
+  const userId = cookies.learnease_user_id;
+  const email = cookies.learnease_user_email;
 
-  if (!userId || userId.trim().length === 0) {
+  if (!userId || userId.trim().length === 0 || !email || email.trim().length === 0) {
     sendApiError(
       res,
       401,
@@ -41,7 +39,9 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return;
   }
 
-  (req as AuthenticatedRequest).auth = { userId, email };
+  (req as AuthenticatedRequest).auth = {
+    userId: userId.trim(),
+    email: email.trim(),
+  };
   next();
 }
-

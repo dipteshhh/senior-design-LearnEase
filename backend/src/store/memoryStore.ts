@@ -3,6 +3,11 @@ import path from "path";
 import { createHash, randomUUID } from "crypto";
 import type { DocumentType, Quiz, StudyGuide } from "../schemas/analyze.js";
 import { getDb } from "../db/sqlite.js";
+import {
+  readEncryptedText,
+  writeEncryptedBuffer,
+  writeEncryptedText,
+} from "../lib/encryption.js";
 
 export type DocumentStatus = "uploaded" | "processing" | "ready" | "failed";
 export type FileType = "PDF" | "DOCX";
@@ -95,14 +100,14 @@ function writeOriginalArtifact(doc: DocumentRecord): string | null {
   const ext = doc.fileType === "PDF" ? "pdf" : "docx";
   const artifactDir = ensureDocumentArtifactDir(doc.id);
   const artifactPath = path.resolve(artifactDir, `original.${ext}`);
-  fs.writeFileSync(artifactPath, doc.originalFileBuffer);
+  writeEncryptedBuffer(artifactPath, doc.originalFileBuffer);
   return artifactPath;
 }
 
 function writeExtractedTextArtifact(doc: DocumentRecord): string {
   const artifactDir = ensureDocumentArtifactDir(doc.id);
   const artifactPath = path.resolve(artifactDir, "extracted.txt");
-  fs.writeFileSync(artifactPath, doc.extractedText, "utf8");
+  writeEncryptedText(artifactPath, doc.extractedText);
   return artifactPath;
 }
 
@@ -357,7 +362,7 @@ function hydrateDocument(row: DocumentRow): DocumentRecord {
   let extractedText = "";
   if (row.extracted_text_path) {
     try {
-      extractedText = fs.readFileSync(row.extracted_text_path, "utf8");
+      extractedText = readEncryptedText(row.extracted_text_path);
     } catch {
       extractedText = "";
     }
