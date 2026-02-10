@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-export const DocumentType = z.enum(["assignment", "lecture", "notes", "unknown"]);
+// Contract enum from docs/*.md
+export const DocumentType = z.enum([
+  "HOMEWORK",
+  "LECTURE",
+  "SYLLABUS",
+  "UNSUPPORTED",
+]);
 export type DocumentType = z.infer<typeof DocumentType>;
 
 export const Priority = z.enum(["high", "medium", "low"]);

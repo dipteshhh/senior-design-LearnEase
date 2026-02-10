@@ -7,7 +7,7 @@ export interface DocumentPolicy {
 }
 
 const policies: Record<DocumentType, DocumentPolicy> = {
-  assignment: {
+  HOMEWORK: {
     allowedOutputs: ["overview", "tasks", "checklist", "requirements", "hints"],
     guidanceMode: true,
     restrictions: [
@@ -17,17 +17,17 @@ const policies: Record<DocumentType, DocumentPolicy> = {
       "No essay content generation",
     ],
   },
-  lecture: {
+  LECTURE: {
     allowedOutputs: ["overview", "tasks", "checklist", "requirements"],
     guidanceMode: false,
     restrictions: [],
   },
-  notes: {
+  SYLLABUS: {
     allowedOutputs: ["overview", "tasks", "checklist", "requirements"],
     guidanceMode: false,
     restrictions: [],
   },
-  unknown: {
+  UNSUPPORTED: {
     allowedOutputs: ["overview", "hints"],
     guidanceMode: true,
     restrictions: ["Guidance only until document type confirmed"],
@@ -44,7 +44,7 @@ export function shouldEnableGuidanceMode(
   confidence: number
 ): boolean {
   if (isAssignment) return true;
-  if (documentType === "unknown") return true;
+  if (documentType === "UNSUPPORTED") return true;
   if (confidence < 0.3) return true;
   return policies[documentType].guidanceMode;
 }
@@ -55,7 +55,7 @@ export function getRestrictions(
 ): string[] {
   const baseRestrictions = policies[documentType].restrictions;
   
-  if (guidanceMode && documentType !== "assignment") {
+  if (guidanceMode && documentType !== "HOMEWORK") {
     return [
       ...baseRestrictions,
       "Operating in guidance mode - providing learning support only",

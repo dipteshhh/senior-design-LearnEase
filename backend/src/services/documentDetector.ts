@@ -6,7 +6,7 @@ interface DetectionResult {
   isAssignment: boolean;
 }
 
-const ASSIGNMENT_TRIGGERS = [
+const HOMEWORK_TRIGGERS = [
   "solve",
   "calculate",
   "show your work",
@@ -55,16 +55,12 @@ const LECTURE_TRIGGERS = [
   "review",
 ];
 
-const NOTES_TRIGGERS = [
-  "notes",
-  "my notes",
-  "class notes",
-  "study notes",
-  "remember",
-  "important points",
-  "key takeaways",
-  "to study",
-  "review for",
+const SYLLABUS_TRIGGERS = [
+  "syllabus",
+  "course policies",
+  "grading",
+  "office hours",
+  "learning outcomes",
 ];
 
 function countTriggers(text: string, triggers: string[]): number {
@@ -73,36 +69,36 @@ function countTriggers(text: string, triggers: string[]): number {
 }
 
 export function detectDocumentType(text: string): DetectionResult {
-  const assignmentScore = countTriggers(text, ASSIGNMENT_TRIGGERS);
+  const homeworkScore = countTriggers(text, HOMEWORK_TRIGGERS);
   const lectureScore = countTriggers(text, LECTURE_TRIGGERS);
-  const notesScore = countTriggers(text, NOTES_TRIGGERS);
+  const syllabusScore = countTriggers(text, SYLLABUS_TRIGGERS);
 
-  const maxScore = Math.max(assignmentScore, lectureScore, notesScore);
-  const totalTriggers = assignmentScore + lectureScore + notesScore;
+  const maxScore = Math.max(homeworkScore, lectureScore, syllabusScore);
+  const totalTriggers = homeworkScore + lectureScore + syllabusScore;
 
-  let documentType: DocumentType = "unknown";
+  let documentType: DocumentType = "UNSUPPORTED";
   let confidence = 0;
 
   if (totalTriggers === 0) {
     return {
-      documentType: "unknown",
+      documentType: "UNSUPPORTED",
       confidence: 0,
       isAssignment: false,
     };
   }
 
-  if (assignmentScore === maxScore && assignmentScore > 0) {
-    documentType = "assignment";
-    confidence = assignmentScore / ASSIGNMENT_TRIGGERS.length;
+  if (homeworkScore === maxScore && homeworkScore > 0) {
+    documentType = "HOMEWORK";
+    confidence = homeworkScore / HOMEWORK_TRIGGERS.length;
   } else if (lectureScore === maxScore && lectureScore > 0) {
-    documentType = "lecture";
+    documentType = "LECTURE";
     confidence = lectureScore / LECTURE_TRIGGERS.length;
-  } else if (notesScore === maxScore && notesScore > 0) {
-    documentType = "notes";
-    confidence = notesScore / NOTES_TRIGGERS.length;
+  } else if (syllabusScore === maxScore && syllabusScore > 0) {
+    documentType = "SYLLABUS";
+    confidence = syllabusScore / SYLLABUS_TRIGGERS.length;
   }
 
-  const isAssignment = documentType === "assignment" || assignmentScore >= 2;
+  const isAssignment = documentType === "HOMEWORK" || homeworkScore >= 2;
 
   return {
     documentType,
