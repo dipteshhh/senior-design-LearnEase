@@ -1,11 +1,13 @@
 # LearnEase Frontend
 
-Next.js app for the LearnEase learning support system. This frontend can run **by itself** for UI development, and it can also talk to the **backend** for document processing / AI transformations (see `../backend`).
+This folder contains the **Next.js frontend** for the LearnEase senior design project.
+
+LearnEase is an accessibility-first document understanding web app. Students upload assignments, lecture slides, or notes, and LearnEase produces structured outputs (summary, key actions, checklist, sections, and quiz) designed to reduce cognitive load.
+
+---
 
 ## Run locally
 
-### Frontend only (UI development)
-1. In this folder:
-   ```bash
-   npm install
-   npm run dev
+1) Install dependencies:
+```bash
+npm install
