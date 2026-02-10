@@ -1,3 +1,4 @@
+
 import Link from "next/link";
 import { getRecentDocuments, type RecentDoc } from "@/lib/mock/store";
 
@@ -105,11 +106,21 @@ function DocumentCard({ doc }: { doc: RecentDoc }) {
   );
 }
 
-export default function DashboardPage() {
+export default function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: { q?: string };
+}) {
   const recentDocs = getRecentDocuments();
 
-  const readyCount = recentDocs.filter((d) => d.status === "READY").length;
-  const processingCount = recentDocs.filter((d) => d.status === "PROCESSING").length;
+  const q = (searchParams?.q ?? "").toLowerCase().trim();
+
+  const docs = q
+    ? recentDocs.filter((d) => d.title.toLowerCase().includes(q))
+    : recentDocs;
+
+  const readyCount = docs.filter((d) => d.status === "READY").length;
+  const processingCount = docs.filter((d) => d.status === "PROCESSING").length;
 
   return (
     <div className="p-8">
@@ -120,6 +131,11 @@ export default function DashboardPage() {
         </h1>
         <p className="mt-2 text-sm text-gray-500">
           {readyCount} ready, {processingCount} processing
+          {q ? (
+            <span className="ml-2 text-gray-400">
+              • filtered by “{searchParams?.q}”
+            </span>
+          ) : null}
         </p>
       </div>
 
@@ -172,33 +188,47 @@ export default function DashboardPage() {
       <div className="mt-10">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold text-gray-900">Recent uploads</h3>
-          <p className="text-sm text-gray-500">{recentDocs.length} documents</p>
+          <p className="text-sm text-gray-500">{docs.length} documents</p>
         </div>
 
-        {recentDocs.length === 0 ? (
+        {docs.length === 0 ? (
           <div className="rounded-2xl border bg-white p-10 text-center shadow-sm">
-            <p className="text-sm font-medium text-gray-900">No documents yet</p>
-            <p className="mt-2 text-sm text-gray-500">
-              Upload your first assignment to generate a clean, structured study guide.
+            <p className="text-sm font-medium text-gray-900">
+              {q ? "No matching documents" : "No documents yet"}
             </p>
-            <div className="mt-6">
+            <p className="mt-2 text-sm text-gray-500">
+              {q
+                ? "Try a different search term."
+                : "Upload your first assignment to generate a clean, structured study guide."}
+            </p>
+
+            <div className="mt-6 flex items-center justify-center gap-3">
               <Link
                 href="/upload"
                 className="inline-flex items-center justify-center rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-black/30"
               >
                 Upload Document
               </Link>
+
+              {q ? (
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-900 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/20"
+                >
+                  Clear search
+                </Link>
+              ) : null}
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            {recentDocs.slice(0, 3).map((doc) => (
+            {docs.slice(0, 3).map((doc) => (
               <DocumentCard key={doc.id} doc={doc} />
             ))}
 
-            {recentDocs[3] && (
+            {docs[3] && (
               <div className="md:col-span-2">
-                <DocumentCard doc={recentDocs[3]} />
+                <DocumentCard doc={docs[3]} />
               </div>
             )}
           </div>

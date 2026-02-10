@@ -1,21 +1,20 @@
 import "./globals.css";
-import AppShell from "@/components/shell/AppShell";
+import type { ReactNode } from "react";
 
 export const metadata = {
   title: "LearnEase",
-  description: "Accessibility-first document understanding",
+  description: "Study smarter, not harder",
 };
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-
-      <body>
-        <AppShell>{children}</AppShell>
+    <html lang="en">
+      <body className="bg-white text-gray-900">
+        {children}
       </body>
     </html>
   );
