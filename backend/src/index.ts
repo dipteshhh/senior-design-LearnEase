@@ -14,9 +14,19 @@ import {
   uploadDocumentHandler,
 } from "./routes/contract.js";
 import { upload, handleMulterError, apiLimiter, requireAuth } from "./middleware/index.js";
+import { initializeDatabase } from "./db/sqlite.js";
+import { purgeExpiredDocuments } from "./store/memoryStore.js";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
+const RETENTION_DAYS = Number(process.env.RETENTION_DAYS ?? "30");
+
+initializeDatabase();
+purgeExpiredDocuments(RETENTION_DAYS);
+setInterval(
+  () => purgeExpiredDocuments(RETENTION_DAYS),
+  24 * 60 * 60 * 1000
+).unref();
 
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "10mb" }));

@@ -8,8 +8,10 @@ const pdfParse = require("pdf-parse");
 export interface ExtractionResult {
   text: string;
   wordCount: number;
-  fileType: "pdf" | "docx";
+  fileType: "PDF" | "DOCX";
   filename: string;
+  pageCount: number | null;
+  paragraphCount: number | null;
 }
 
 export async function extractTextFromBuffer(
@@ -18,19 +20,26 @@ export async function extractTextFromBuffer(
   filename: string
 ): Promise<ExtractionResult> {
   let text = "";
-  let fileType: "pdf" | "docx";
+  let fileType: "PDF" | "DOCX";
+  let pageCount: number | null = null;
+  let paragraphCount: number | null = null;
 
   if (mimetype === "application/pdf") {
-    fileType = "pdf";
+    fileType = "PDF";
     const data = await pdfParse(buffer);
     text = data.text;
+    pageCount = typeof data.numpages === "number" ? data.numpages : null;
   } else if (
     mimetype ===
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ) {
-    fileType = "docx";
+    fileType = "DOCX";
     const result = await mammoth.extractRawText({ buffer });
     text = result.value;
+    paragraphCount = result.value
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0).length;
   } else {
     throw new Error("Unsupported file type");
   }
@@ -48,5 +57,7 @@ export async function extractTextFromBuffer(
     wordCount,
     fileType,
     filename,
+    pageCount,
+    paragraphCount,
   };
 }

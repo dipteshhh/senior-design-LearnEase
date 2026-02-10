@@ -11,6 +11,7 @@ import {
   getDocument,
   listDocumentsByUser,
   saveDocument,
+  updateChecklistItem,
   updateDocument,
 } from "../store/memoryStore.js";
 
@@ -31,6 +32,10 @@ function readDocumentId(req: Request): string | null {
 
 function getUserId(req: Request): string {
   return (req as AuthenticatedRequest).auth.userId;
+}
+
+function getUserEmail(req: Request): string | undefined {
+  return (req as AuthenticatedRequest).auth.email;
 }
 
 function ensureOwnership(req: Request, res: Response, documentId: string) {
@@ -67,12 +72,16 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
     saveDocument({
       id: documentId,
       userId,
+      userEmail: getUserEmail(req),
       filename: file.originalname,
+      fileType: extracted.fileType,
       documentType: detected.documentType,
       status: "uploaded",
       uploadedAt: new Date().toISOString(),
-      pageCount: 0,
+      pageCount: extracted.pageCount ?? 0,
+      paragraphCount: extracted.paragraphCount,
       extractedText: extracted.text,
+      originalFileBuffer: file.buffer,
       studyGuide: null,
       quiz: null,
       errorCode: null,
@@ -349,6 +358,16 @@ export async function updateChecklistHandler(req: Request, res: Response): Promi
 
   if (!hasItemId || !hasCompleted) {
     sendApiError(res, 400, "MISSING_FIELDS", "item_id and completed are required.");
+    return;
+  }
+
+  const updated = updateChecklistItem(
+    req.params.documentId,
+    body.item_id!.trim(),
+    body.completed!
+  );
+  if (!updated) {
+    sendApiError(res, 404, "NOT_FOUND", "Checklist item not found.");
     return;
   }
 

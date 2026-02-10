@@ -1,5 +1,6 @@
 import multer from "multer";
 import { Request, Response, NextFunction } from "express";
+import { sendApiError } from "../lib/apiError.js";
 
 const ALLOWED_MIME_TYPES = [
   "application/pdf",
@@ -38,32 +39,18 @@ export function handleMulterError(
 ): void {
   if (err instanceof multer.MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
-      res.status(400).json({
-        error: "File too large. Maximum size is 10MB.",
-      });
+      sendApiError(res, 400, "FILE_TOO_LARGE", "File too large. Maximum size is 10MB.");
       return;
     }
-    res.status(400).json({ error: err.message });
+    sendApiError(res, 400, "UPLOAD_FAILED", err.message);
     return;
   }
   if (err) {
     if (err.message.includes("Invalid file type")) {
-      res.status(415).json({
-        error: {
-          code: "UNSUPPORTED_MEDIA_TYPE",
-          message: err.message,
-          details: {},
-        },
-      });
+      sendApiError(res, 415, "UNSUPPORTED_MEDIA_TYPE", err.message);
       return;
     }
-    res.status(400).json({
-      error: {
-        code: "BAD_REQUEST",
-        message: err.message,
-        details: {},
-      },
-    });
+    sendApiError(res, 400, "BAD_REQUEST", err.message);
     return;
   }
   next();
