@@ -6,6 +6,11 @@ import type {
 import { StudyGuide as StudyGuideSchema } from "../schemas/analyze.js";
 import { detectDocumentType } from "./documentDetector.js";
 import { shouldEnableGuidanceMode, getRestrictions } from "./guardrails.js";
+import {
+  ContractValidationError,
+  validateStudyGuideAgainstDocument,
+} from "./outputValidator.js";
+import type { FileType } from "../store/memoryStore.js";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -56,33 +61,25 @@ GUIDANCE MODE IS ACTIVE - This appears to be an assignment.
 - Help the student understand the requirements, not the solutions
 - If there are questions to answer, list them as tasks but do NOT answer them`;
 
-function makeFallbackStudyGuide(documentType: "HOMEWORK" | "LECTURE" | "SYLLABUS"): StudyGuide {
-  return {
-    overview: {
-      title: "Study Guide",
-      document_type: documentType,
-      summary: "Unable to generate a study guide from the provided document.",
-    },
-    key_actions: [],
-    checklist: [],
-    important_details: {
-      dates: [],
-      policies: [],
-      contacts: [],
-      logistics: [],
-    },
-    sections: [],
-  };
+interface AnalysisMetadata {
+  fileType: FileType;
+  pageCount: number;
+  paragraphCount: number | null;
 }
 
 export async function analyzeDocument(
   text: string,
-  providedDocumentType?: DocumentType
+  providedDocumentType: DocumentType | undefined,
+  metadata: AnalysisMetadata
 ): Promise<StudyGuide> {
   const detection = detectDocumentType(text);
   const documentType = providedDocumentType ?? detection.documentType;
   if (documentType === "UNSUPPORTED") {
-    throw new Error("DOCUMENT_UNSUPPORTED");
+    throw new ContractValidationError(
+      "SCHEMA_VALIDATION_FAILED",
+      "Unsupported document type cannot be analyzed.",
+      { document_type: documentType }
+    );
   }
 
   const supportedType = documentType as "HOMEWORK" | "LECTURE" | "SYLLABUS";
@@ -90,7 +87,7 @@ export async function analyzeDocument(
     documentType,
     detection.isAssignment
   );
-  const restrictions = getRestrictions(documentType, guidanceMode);
+  getRestrictions(documentType, guidanceMode);
 
   const prompt = guidanceMode
     ? ANALYSIS_PROMPT + GUIDANCE_MODE_ADDITION
@@ -118,14 +115,29 @@ export async function analyzeDocument(
   let parsed: unknown;
   try {
     parsed = JSON.parse(content) as unknown;
-  } catch {
-    return makeFallbackStudyGuide(supportedType);
+  } catch (error) {
+    throw new ContractValidationError(
+      "SCHEMA_VALIDATION_FAILED",
+      "Model output was not valid JSON.",
+      { reason: error instanceof Error ? error.message : "unknown" }
+    );
   }
 
   const validated = StudyGuideSchema.safeParse(parsed);
   if (!validated.success) {
-    return makeFallbackStudyGuide(supportedType);
+    throw new ContractValidationError(
+      "SCHEMA_VALIDATION_FAILED",
+      "Model output did not match StudyGuide schema.",
+      { issues: validated.error.issues }
+    );
   }
 
-  return validated.data;
+  validateStudyGuideAgainstDocument(validated.data, {
+    text,
+    fileType: metadata.fileType,
+    pageCount: metadata.pageCount,
+    paragraphCount: metadata.paragraphCount,
+  });
+
+  return validated.data satisfies StudyGuide;
 }

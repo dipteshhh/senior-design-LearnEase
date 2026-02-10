@@ -7,6 +7,11 @@ import { detectDocumentType } from "../services/documentDetector.js";
 import { analyzeDocument } from "../services/contentAnalyzer.js";
 import { extractTextFromBuffer } from "../services/textExtractor.js";
 import {
+  ContractValidationError,
+  normalizeDocumentText,
+  validateQuizAgainstDocument,
+} from "../services/outputValidator.js";
+import {
   deleteDocumentsByUser,
   getDocument,
   listDocumentsByUser,
@@ -52,6 +57,28 @@ function ensureOwnership(req: Request, res: Response, documentId: string) {
   return doc;
 }
 
+function toFailureCode(error: unknown): { code: string; message: string; details?: Record<string, unknown> } {
+  if (error instanceof ContractValidationError) {
+    return {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      code: "GENERATION_FAILED",
+      message: error.message,
+    };
+  }
+
+  return {
+    code: "GENERATION_FAILED",
+    message: "Generation failed",
+  };
+}
+
 export async function uploadDocumentHandler(req: Request, res: Response): Promise<void> {
   try {
     const userId = getUserId(req);
@@ -66,7 +93,8 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
       file.mimetype,
       file.originalname
     );
-    const detected = detectDocumentType(extracted.text);
+    const normalizedText = normalizeDocumentText(extracted.text, extracted.fileType);
+    const detected = detectDocumentType(normalizedText);
 
     const documentId = randomUUID();
     saveDocument({
@@ -80,7 +108,7 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
       uploadedAt: new Date().toISOString(),
       pageCount: extracted.pageCount ?? 0,
       paragraphCount: extracted.paragraphCount,
-      extractedText: extracted.text,
+      extractedText: normalizedText,
       originalFileBuffer: file.buffer,
       studyGuide: null,
       quiz: null,
@@ -142,7 +170,11 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
 
   void (async () => {
     try {
-      const generated = await analyzeDocument(doc.extractedText, doc.documentType);
+      const generated = await analyzeDocument(doc.extractedText, doc.documentType, {
+        fileType: doc.fileType,
+        pageCount: doc.pageCount,
+        paragraphCount: doc.paragraphCount,
+      });
       updateDocument(documentId, (current) => ({
         ...current,
         status: "ready",
@@ -151,12 +183,12 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
         errorMessage: null,
       }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Generation failed";
+      const failure = toFailureCode(error);
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: "GENERATION_FAILED",
-        errorMessage: message,
+        errorCode: failure.code,
+        errorMessage: failure.message,
       }));
     }
   })();
@@ -190,7 +222,11 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
 
   void (async () => {
     try {
-      const generated = await analyzeDocument(doc.extractedText, doc.documentType);
+      const generated = await analyzeDocument(doc.extractedText, doc.documentType, {
+        fileType: doc.fileType,
+        pageCount: doc.pageCount,
+        paragraphCount: doc.paragraphCount,
+      });
       updateDocument(documentId, (current) => ({
         ...current,
         status: "ready",
@@ -199,12 +235,12 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
         errorMessage: null,
       }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Generation failed";
+      const failure = toFailureCode(error);
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: "GENERATION_FAILED",
-        errorMessage: message,
+        errorCode: failure.code,
+        errorMessage: failure.message,
       }));
     }
   })();
@@ -261,6 +297,16 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
         document_id: documentId,
         questions: [],
       };
+      validateQuizAgainstDocument(
+        generatedQuiz,
+        {
+          text: doc.extractedText,
+          fileType: doc.fileType,
+          pageCount: doc.pageCount,
+          paragraphCount: doc.paragraphCount,
+        },
+        doc.documentType
+      );
       updateDocument(documentId, (current) => ({
         ...current,
         status: "ready",
@@ -269,12 +315,12 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
         errorMessage: null,
       }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Quiz generation failed";
+      const failure = toFailureCode(error);
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: "GENERATION_FAILED",
-        errorMessage: message,
+        errorCode: failure.code,
+        errorMessage: failure.message,
       }));
     }
   })();
@@ -312,6 +358,16 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
         document_id: documentId,
         questions: [],
       };
+      validateQuizAgainstDocument(
+        generatedQuiz,
+        {
+          text: doc.extractedText,
+          fileType: doc.fileType,
+          pageCount: doc.pageCount,
+          paragraphCount: doc.paragraphCount,
+        },
+        doc.documentType
+      );
       updateDocument(documentId, (current) => ({
         ...current,
         status: "ready",
@@ -320,12 +376,12 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
         errorMessage: null,
       }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Quiz generation failed";
+      const failure = toFailureCode(error);
       updateDocument(documentId, (current) => ({
         ...current,
         status: "failed",
-        errorCode: "GENERATION_FAILED",
-        errorMessage: message,
+        errorCode: failure.code,
+        errorMessage: failure.message,
       }));
     }
   })();
