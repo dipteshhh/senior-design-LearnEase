@@ -54,3 +54,5 @@ Default local URL: `http://localhost:3001`
 - `FILE_ENCRYPTION_KEY` (required for artifact encryption)
 - `SESSION_SECRET` (required for signed session cookie auth)
 - `ALLOW_LEGACY_AUTH_COOKIES` (`false` by default)
+- `CORS_ORIGINS` (comma-separated allowlist; default allows any origin in development)
+- `LOG_LEVEL` (`debug`, `info`, `warn`, or `error`; default `info`)

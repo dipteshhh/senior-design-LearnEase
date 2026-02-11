@@ -103,3 +103,11 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_checklist_document_id ON checklist_items(document_id);
   `);
 }
+
+export function closeDatabase(): void {
+  if (!dbInstance) {
+    return;
+  }
+  dbInstance.close();
+  dbInstance = null;
+}
