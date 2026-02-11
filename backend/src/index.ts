@@ -15,7 +15,13 @@ import {
   uploadDocumentHandler,
 } from "./routes/contract.js";
 import { googleAuthHandler, logoutHandler, meHandler } from "./routes/auth.js";
-import { upload, handleMulterError, apiLimiter, requireAuth } from "./middleware/index.js";
+import {
+  upload,
+  handleMulterError,
+  apiLimiter,
+  requireAuth,
+  requestLogger,
+} from "./middleware/index.js";
 import { closeDatabase, initializeDatabase } from "./db/sqlite.js";
 import { purgeExpiredDocuments } from "./store/memoryStore.js";
 import { logger } from "./lib/logger.js";
@@ -41,6 +47,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: "10mb" }));
+app.use(requestLogger);
 app.use(apiLimiter);
 
 // Public auth routes (no session required)

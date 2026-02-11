@@ -45,13 +45,14 @@ export async function extractTextFromBuffer(
     throw new Error("Unsupported file type");
   }
 
-  const cleanedText = text.replace(/\s+/g, " ").trim();
+  const cleanedText = text.trim();
+  const compactText = cleanedText.replace(/\s+/g, " ").trim();
 
-  if (!cleanedText) {
+  if (!compactText) {
     throw new Error("No text could be extracted from the file");
   }
 
-  const wordCount = cleanedText.split(/\s+/).filter((w) => w.length > 0).length;
+  const wordCount = compactText.split(/\s+/).filter((w) => w.length > 0).length;
 
   return {
     text: cleanedText,

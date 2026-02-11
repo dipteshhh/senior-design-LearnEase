@@ -34,10 +34,48 @@ interface ChecklistBody {
   completed?: boolean;
 }
 
-function readDocumentId(req: Request): string | null {
+const UUID_V4_OR_V1_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string): boolean {
+  return UUID_V4_OR_V1_REGEX.test(value);
+}
+
+function readDocumentId(req: Request, res: Response): string | null {
   const body = req.body as CreateBody | undefined;
   const id = body?.document_id;
-  return typeof id === "string" && id.trim().length > 0 ? id : null;
+  if (typeof id !== "string" || id.trim().length === 0) {
+    sendApiError(res, 400, "MISSING_DOCUMENT_ID", "Missing document_id.");
+    return null;
+  }
+
+  const normalized = id.trim();
+  if (!isUuid(normalized)) {
+    sendApiError(res, 422, "SCHEMA_VALIDATION_FAILED", "document_id must be a UUID.", {
+      field: "document_id",
+    });
+    return null;
+  }
+
+  return normalized;
+}
+
+function readDocumentIdParam(req: Request, res: Response, paramName = "documentId"): string | null {
+  const raw = req.params[paramName];
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    sendApiError(res, 400, "MISSING_DOCUMENT_ID", "Missing document_id.");
+    return null;
+  }
+
+  const normalized = raw.trim();
+  if (!isUuid(normalized)) {
+    sendApiError(res, 422, "SCHEMA_VALIDATION_FAILED", "document_id must be a UUID.", {
+      field: paramName,
+    });
+    return null;
+  }
+
+  return normalized;
 }
 
 function getUserId(req: Request): string {
@@ -146,11 +184,8 @@ export async function listDocumentsHandler(_req: Request, res: Response): Promis
 }
 
 export async function createStudyGuideHandler(req: Request, res: Response): Promise<void> {
-  const documentId = readDocumentId(req);
-  if (!documentId) {
-    sendApiError(res, 400, "MISSING_DOCUMENT_ID", "Missing document_id.");
-    return;
-  }
+  const documentId = readDocumentId(req, res);
+  if (!documentId) return;
 
   const doc = ensureOwnership(req, res, documentId);
   if (!doc) return;
@@ -207,11 +242,8 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
 }
 
 export async function retryStudyGuideHandler(req: Request, res: Response): Promise<void> {
-  const documentId = readDocumentId(req);
-  if (!documentId) {
-    sendApiError(res, 400, "MISSING_DOCUMENT_ID", "Missing document_id.");
-    return;
-  }
+  const documentId = readDocumentId(req, res);
+  if (!documentId) return;
 
   const doc = ensureOwnership(req, res, documentId);
   if (!doc) return;
@@ -264,14 +296,17 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
 }
 
 export async function getStudyGuideHandler(req: Request, res: Response): Promise<void> {
-  const doc = ensureOwnership(req, res, req.params.documentId);
+  const documentId = readDocumentIdParam(req, res);
+  if (!documentId) return;
+
+  const doc = ensureOwnership(req, res, documentId);
   if (!doc) return;
   if (!doc.studyGuide) {
     sendApiError(
       res,
       404,
       "NOT_FOUND",
-      `No study guide exists for document ${req.params.documentId}.`
+      `No study guide exists for document ${documentId}.`
     );
     return;
   }
@@ -279,11 +314,8 @@ export async function getStudyGuideHandler(req: Request, res: Response): Promise
 }
 
 export async function createQuizHandler(req: Request, res: Response): Promise<void> {
-  const documentId = readDocumentId(req);
-  if (!documentId) {
-    sendApiError(res, 400, "MISSING_DOCUMENT_ID", "Missing document_id.");
-    return;
-  }
+  const documentId = readDocumentId(req, res);
+  if (!documentId) return;
 
   const doc = ensureOwnership(req, res, documentId);
   if (!doc) return;
@@ -344,11 +376,8 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
 }
 
 export async function retryQuizHandler(req: Request, res: Response): Promise<void> {
-  const documentId = readDocumentId(req);
-  if (!documentId) {
-    sendApiError(res, 400, "MISSING_DOCUMENT_ID", "Missing document_id.");
-    return;
-  }
+  const documentId = readDocumentId(req, res);
+  if (!documentId) return;
 
   const doc = ensureOwnership(req, res, documentId);
   if (!doc) return;
@@ -406,14 +435,17 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
 }
 
 export async function getQuizHandler(req: Request, res: Response): Promise<void> {
-  const doc = ensureOwnership(req, res, req.params.documentId);
+  const documentId = readDocumentIdParam(req, res);
+  if (!documentId) return;
+
+  const doc = ensureOwnership(req, res, documentId);
   if (!doc) return;
   if (!doc.quiz) {
     sendApiError(
       res,
       404,
       "NOT_FOUND",
-      `No quiz exists for document ${req.params.documentId}.`
+      `No quiz exists for document ${documentId}.`
     );
     return;
   }
@@ -421,7 +453,10 @@ export async function getQuizHandler(req: Request, res: Response): Promise<void>
 }
 
 export async function updateChecklistHandler(req: Request, res: Response): Promise<void> {
-  const doc = ensureOwnership(req, res, req.params.documentId);
+  const documentId = readDocumentIdParam(req, res);
+  if (!documentId) return;
+
+  const doc = ensureOwnership(req, res, documentId);
   if (!doc) return;
   if (doc.documentType === "UNSUPPORTED") {
     sendApiError(res, 422, "DOCUMENT_UNSUPPORTED", "Checklist is not available for unsupported documents.");
@@ -438,7 +473,7 @@ export async function updateChecklistHandler(req: Request, res: Response): Promi
   }
 
   const updated = updateChecklistItem(
-    req.params.documentId,
+    documentId,
     body.item_id!.trim(),
     body.completed!
   );
