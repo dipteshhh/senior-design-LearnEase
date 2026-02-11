@@ -67,6 +67,38 @@ interface AnalysisMetadata {
   paragraphCount: number | null;
 }
 
+function buildCitationRequirements(metadata: AnalysisMetadata): string {
+  if (metadata.fileType === "PDF") {
+    const maxPage = Math.max(1, metadata.pageCount);
+    return `Citation requirements for this document:
+- Document file type is PDF.
+- You MUST use only PDF citations: { "source_type": "pdf", "page": number, "excerpt": string }.
+- "page" MUST be an integer between 1 and ${maxPage}.
+- NEVER use DOCX citation fields (anchor_type, paragraph).`;
+  }
+
+  const maxParagraph = Math.max(1, metadata.paragraphCount ?? 1);
+  return `Citation requirements for this document:
+- Document file type is DOCX.
+- You MUST use only DOCX citations: { "source_type": "docx", "anchor_type": "paragraph", "paragraph": number, "excerpt": string }.
+- "paragraph" MUST be an integer between 1 and ${maxParagraph}.
+- NEVER use PDF citation fields (page).`;
+}
+
+function buildRepairHint(error: unknown): string {
+  if (!(error instanceof ContractValidationError)) {
+    return "";
+  }
+
+  const details = error.details ? JSON.stringify(error.details) : "{}";
+  return `The previous output was rejected.
+Error code: ${error.code}
+Error message: ${error.message}
+Validation details: ${details}
+
+Regenerate the entire JSON and fix these issues exactly.`;
+}
+
 export async function analyzeDocument(
   text: string,
   providedDocumentType: DocumentType | undefined,
@@ -93,51 +125,74 @@ export async function analyzeDocument(
     ? ANALYSIS_PROMPT + GUIDANCE_MODE_ADDITION
     : ANALYSIS_PROMPT;
 
-  const response = await client.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content: prompt,
-      },
-      {
-        role: "user",
-        content: `Document type: ${supportedType}\n\nDocument text:\n${text}`,
-      },
-    ],
-    response_format: { type: "json_object" },
-    max_tokens: 1500,
-    temperature: 0.3,
-  });
+  const citationRequirements = buildCitationRequirements(metadata);
+  let lastError: unknown = null;
+  let repairHint = "";
 
-  const content = response.choices[0]?.message?.content ?? "{}";
-  
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content) as unknown;
-  } catch (error) {
-    throw new ContractValidationError(
-      "SCHEMA_VALIDATION_FAILED",
-      "Model output was not valid JSON.",
-      { reason: error instanceof Error ? error.message : "unknown" }
-    );
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: [prompt, citationRequirements, repairHint].filter(Boolean).join("\n\n"),
+          },
+          {
+            role: "user",
+            content:
+              `Document type: ${supportedType}\n` +
+              `Document file type: ${metadata.fileType}\n\n` +
+              `Document text:\n${text}`,
+          },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 1500,
+        temperature: 0.2,
+      });
+
+      const content = response.choices[0]?.message?.content ?? "{}";
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(content) as unknown;
+      } catch (error) {
+        throw new ContractValidationError(
+          "SCHEMA_VALIDATION_FAILED",
+          "Model output was not valid JSON.",
+          { reason: error instanceof Error ? error.message : "unknown" }
+        );
+      }
+
+      const validated = StudyGuideSchema.safeParse(parsed);
+      if (!validated.success) {
+        throw new ContractValidationError(
+          "SCHEMA_VALIDATION_FAILED",
+          "Model output did not match StudyGuide schema.",
+          { issues: validated.error.issues }
+        );
+      }
+
+      validateStudyGuideAgainstDocument(validated.data, {
+        text,
+        fileType: metadata.fileType,
+        pageCount: metadata.pageCount,
+        paragraphCount: metadata.paragraphCount,
+      });
+
+      return validated.data satisfies StudyGuide;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        repairHint = buildRepairHint(error);
+      }
+    }
   }
 
-  const validated = StudyGuideSchema.safeParse(parsed);
-  if (!validated.success) {
-    throw new ContractValidationError(
-      "SCHEMA_VALIDATION_FAILED",
-      "Model output did not match StudyGuide schema.",
-      { issues: validated.error.issues }
-    );
-  }
-
-  validateStudyGuideAgainstDocument(validated.data, {
-    text,
-    fileType: metadata.fileType,
-    pageCount: metadata.pageCount,
-    paragraphCount: metadata.paragraphCount,
-  });
-
-  return validated.data satisfies StudyGuide;
+  throw lastError instanceof Error
+    ? lastError
+    : new ContractValidationError(
+        "SCHEMA_VALIDATION_FAILED",
+        "Model output failed validation after retries."
+      );
 }
