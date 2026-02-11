@@ -1,9 +1,5 @@
 import mammoth from "mammoth";
-import { createRequire } from "module";
-
-// pdf-parse is a CommonJS module - use createRequire for ESM compatibility
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+import { PDFParse } from "pdf-parse";
 
 export interface ExtractionResult {
   text: string;
@@ -26,9 +22,14 @@ export async function extractTextFromBuffer(
 
   if (mimetype === "application/pdf") {
     fileType = "PDF";
-    const data = await pdfParse(buffer);
-    text = data.text;
-    pageCount = typeof data.numpages === "number" ? data.numpages : null;
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const data = await parser.getText();
+      text = data.text;
+      pageCount = typeof data.total === "number" ? data.total : null;
+    } finally {
+      await parser.destroy();
+    }
   } else if (
     mimetype ===
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
