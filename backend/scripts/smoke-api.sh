@@ -93,6 +93,19 @@ split_response() {
   HTTP_STATUS="${raw##*$'\n'}"
 }
 
+mime_type_for_file() {
+  local file_path="$1"
+  local lower_file_path
+  lower_file_path="$(printf '%s' "$file_path" | tr '[:upper:]' '[:lower:]')"
+  case "$lower_file_path" in
+    *.pdf) echo "application/pdf" ;;
+    *.docx) echo "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
 json_get() {
   local json="$1"
   local expr="$2"
@@ -107,6 +120,13 @@ json_has_study_guide_shape() {
 json_has_quiz_shape() {
   local json="$1"
   printf '%s' "$json" | node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync(0,'utf8'));const ok=d&&typeof d.document_id==='string'&&Array.isArray(d.questions);process.exit(ok?0:1);"
+}
+
+document_status_by_id() {
+  local document_id="$1"
+  local docs_json
+  docs_json="$(curl -sS "$BASE_URL/api/documents" -H "Cookie: $COOKIE_HEADER")"
+  printf '%s' "$docs_json" | node -e "const fs=require('fs');const id=process.argv[1];const items=JSON.parse(fs.readFileSync(0,'utf8'));const found=Array.isArray(items)?items.find((x)=>x && x.id===id):null;process.stdout.write(found && typeof found.status==='string' ? found.status : '');" "$document_id"
 }
 
 declare -a DOC_IDS=()
@@ -128,9 +148,15 @@ for entry in "${CASES[@]}"; do
     exit 1
   fi
 
+  mime_type="$(mime_type_for_file "$file_path")"
+  if [[ -z "$mime_type" ]]; then
+    echo "[FAIL] Unsupported file extension for smoke upload: $file_path (expected .pdf or .docx)"
+    exit 1
+  fi
+
   raw="$(curl -sS -X POST "$BASE_URL/api/upload" \
     -H "Cookie: $COOKIE_HEADER" \
-    -F "file=@$file_path" \
+    -F "file=@$file_path;type=$mime_type" \
     -w $'\n%{http_code}')"
   split_response "$raw"
 
@@ -210,6 +236,12 @@ for i in "${!DOC_IDS[@]}"; do
       break
     fi
 
+    status_now="$(document_status_by_id "$doc_id")"
+    if [[ "$status_now" == "failed" ]]; then
+      echo "[FAIL] study-guide generation failed for $doc_id (document status=failed)"
+      exit 1
+    fi
+
     now_epoch="$(date +%s)"
     elapsed="$((now_epoch - start_epoch))"
     if (( elapsed >= TIMEOUT_SECONDS )); then
@@ -262,6 +294,12 @@ if [[ -n "$lecture_doc_id" ]]; then
       fi
       echo "[PASS] quiz ready with expected top-level shape ($lecture_doc_id)"
       break
+    fi
+
+    status_now="$(document_status_by_id "$lecture_doc_id")"
+    if [[ "$status_now" == "failed" ]]; then
+      echo "[FAIL] quiz generation failed for $lecture_doc_id (document status=failed)"
+      exit 1
     fi
 
     now_epoch="$(date +%s)"
