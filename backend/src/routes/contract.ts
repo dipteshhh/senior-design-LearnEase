@@ -122,6 +122,41 @@ function toFailureCode(error: unknown): { code: string; message: string; details
   };
 }
 
+function normalizePublicErrorCode(status: string, errorCode: string | null): string | null {
+  if (status !== "failed" || !errorCode) {
+    return null;
+  }
+
+  const markerSeparator = errorCode.indexOf(":");
+  if (markerSeparator > 0) {
+    return errorCode.slice(markerSeparator + 1);
+  }
+
+  return errorCode;
+}
+
+function toPublicErrorMessage(errorCode: string | null): string | null {
+  if (!errorCode) return null;
+
+  switch (errorCode) {
+    case "SCHEMA_VALIDATION_FAILED":
+    case "QUOTE_NOT_FOUND":
+    case "CITATION_EXCERPT_NOT_FOUND":
+    case "CITATION_OUT_OF_RANGE":
+      return "Generated output failed validation. Retry generation.";
+    case "DOCUMENT_UNSUPPORTED":
+      return "Document type is not supported for generation.";
+    case "DOCUMENT_NOT_LECTURE":
+      return "Quiz generation is only available for lecture documents.";
+    case "ALREADY_PROCESSING":
+      return "Generation is already in progress.";
+    case "ILLEGAL_RETRY_STATE":
+      return "Retry is only allowed after a failed generation.";
+    default:
+      return "Generation failed. Retry generation.";
+  }
+}
+
 export async function uploadDocumentHandler(req: Request, res: Response): Promise<void> {
   try {
     const userId = getUserId(req);
@@ -173,12 +208,21 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
 export async function listDocumentsHandler(_req: Request, res: Response): Promise<void> {
   const userId = getUserId(_req);
   const items = listDocumentsByUser(userId).map((doc) => ({
+    ...(() => {
+      const publicErrorCode = normalizePublicErrorCode(doc.status, doc.errorCode);
+      return {
+        error_code: publicErrorCode,
+        error_message: toPublicErrorMessage(publicErrorCode),
+      };
+    })(),
     id: doc.id,
     filename: doc.filename,
     document_type: doc.documentType,
     status: doc.status,
     page_count: doc.pageCount,
     uploaded_at: doc.uploadedAt,
+    has_study_guide: doc.studyGuide !== null,
+    has_quiz: doc.quiz !== null,
   }));
   res.status(200).json(items);
 }

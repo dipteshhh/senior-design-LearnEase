@@ -88,6 +88,7 @@ test("requireAuth accepts valid signed session cookie", () => {
   assert.deepEqual(req.auth, {
     userId: "user-123",
     email: "student@example.edu",
+    name: undefined,
   });
   assert.equal(res.statusCode, undefined);
 });

@@ -158,6 +158,7 @@ export function meHandler(req: Request, res: Response): void {
     user: {
       id: auth.userId,
       email: auth.email ?? null,
+      name: auth.name ?? null,
     },
   });
 }

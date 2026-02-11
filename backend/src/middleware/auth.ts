@@ -5,6 +5,7 @@ import { sendApiError } from "../lib/apiError.js";
 interface AuthContext {
   userId: string;
   email?: string;
+  name?: string;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -28,6 +29,7 @@ interface SessionPayload {
   user?: {
     id?: string;
     email?: string;
+    name?: string;
   };
   exp?: number;
 }
@@ -71,7 +73,8 @@ function verifySignedSession(
       }
     }
 
-    return { userId, email };
+    const name = parsed.user?.name?.trim() || undefined;
+    return { userId, email, name };
   } catch {
     return null;
   }

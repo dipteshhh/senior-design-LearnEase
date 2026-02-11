@@ -64,7 +64,8 @@ Response:
 {
   "user": {
     "id": "google_subject_id",
-    "email": "user@example.com"
+    "email": "user@example.com",
+    "name": "Display Name"
   }
 }
 ```
@@ -114,10 +115,18 @@ Response:
     "document_type": "HOMEWORK | LECTURE | SYLLABUS | UNSUPPORTED",
     "status": "uploaded | processing | ready | failed",
     "page_count": 5,
-    "uploaded_at": "timestamp"
+    "uploaded_at": "timestamp",
+    "error_code": "SCHEMA_VALIDATION_FAILED | QUOTE_NOT_FOUND | ... | null",
+    "error_message": "safe user-facing message | null",
+    "has_study_guide": true,
+    "has_quiz": false
   }
 ]
 ```
+
+Notes:
+- `error_code` and `error_message` are populated only when `status = "failed"`.
+- `error_message` is a sanitized user-facing message, not raw provider/internal error text.
 
 Errors:
 - `401` unauthorized

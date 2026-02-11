@@ -73,6 +73,7 @@ The frontend team needs to:
 3. **On sign-in callback**, send the Google `credential` to `POST /api/auth/google`.
 4. **On logout**, call `POST /api/auth/logout`.
 5. **Use `GET /api/auth/me`** to check session validity on page load / app init.
+   Response shape: `{ "user": { "id": string, "email": string, "name": string | null } }`
 6. **Ensure `credentials: "include"`** on all `fetch()` calls to the backend so cookies are sent cross-origin.
 7. **Replace all mock data** in `src/lib/mock/store.ts` and `src/lib/data/documents.ts` with real API calls to the backend.
 8. **Match backend response shapes** — see `docs/SCHEMAS.md` for `StudyGuide` and `Quiz` JSON structures.
