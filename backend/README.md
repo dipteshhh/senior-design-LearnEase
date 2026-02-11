@@ -51,6 +51,7 @@ Default local URL: `http://localhost:3001`
 - `DATABASE_PATH` (default `data/learnease.sqlite`)
 - `ARTIFACTS_DIR` (default `data/artifacts`)
 - `RETENTION_DAYS` (default `30`)
+- `RATE_LIMIT_MAX` (requests per minute per IP; default `10`)
 - `FILE_ENCRYPTION_KEY` (required for artifact encryption)
 - `SESSION_SECRET` (required for signed session cookie auth)
 - `ALLOW_LEGACY_AUTH_COOKIES` (`false` by default)

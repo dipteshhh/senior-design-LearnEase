@@ -423,6 +423,10 @@ export async function getQuizHandler(req: Request, res: Response): Promise<void>
 export async function updateChecklistHandler(req: Request, res: Response): Promise<void> {
   const doc = ensureOwnership(req, res, req.params.documentId);
   if (!doc) return;
+  if (doc.documentType === "UNSUPPORTED") {
+    sendApiError(res, 422, "DOCUMENT_UNSUPPORTED", "Checklist is not available for unsupported documents.");
+    return;
+  }
 
   const body = req.body as ChecklistBody | undefined;
   const hasItemId = typeof body?.item_id === "string" && body.item_id.trim().length > 0;

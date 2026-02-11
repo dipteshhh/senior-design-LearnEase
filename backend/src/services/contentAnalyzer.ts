@@ -119,11 +119,15 @@ export async function analyzeDocument(
     documentType,
     detection.isAssignment
   );
-  getRestrictions(documentType, guidanceMode);
+  const restrictions = getRestrictions(documentType, guidanceMode);
 
-  const prompt = guidanceMode
+  let prompt = guidanceMode
     ? ANALYSIS_PROMPT + GUIDANCE_MODE_ADDITION
     : ANALYSIS_PROMPT;
+
+  if (restrictions.length > 0) {
+    prompt += `\n\nADDITIONAL RESTRICTIONS:\n${restrictions.map((r) => `- ${r}`).join("\n")}`;
+  }
 
   const citationRequirements = buildCitationRequirements(metadata);
   let lastError: unknown = null;
