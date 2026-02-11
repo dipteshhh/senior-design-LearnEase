@@ -14,6 +14,7 @@ import {
   updateChecklistHandler,
   uploadDocumentHandler,
 } from "./routes/contract.js";
+import { googleAuthHandler, logoutHandler, meHandler } from "./routes/auth.js";
 import { upload, handleMulterError, apiLimiter, requireAuth } from "./middleware/index.js";
 import { closeDatabase, initializeDatabase } from "./db/sqlite.js";
 import { purgeExpiredDocuments } from "./store/memoryStore.js";
@@ -41,7 +42,15 @@ app.use(
 );
 app.use(express.json({ limit: "10mb" }));
 app.use(apiLimiter);
+
+// Public auth routes (no session required)
+app.post("/api/auth/google", googleAuthHandler);
+app.post("/api/auth/logout", logoutHandler);
+
+// All routes below require authentication
 app.use(requireAuth);
+
+app.get("/api/auth/me", meHandler);
 
 app.post("/api/upload", upload.single("file"), handleMulterError, uploadDocumentHandler);
 app.get("/api/documents", listDocumentsHandler);

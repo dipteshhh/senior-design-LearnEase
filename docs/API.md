@@ -1,10 +1,76 @@
 # LearnEase — API Contract (Source of Truth)
 
-All routes require authentication (see `docs/AUTH.md`).
+All routes require authentication (see `docs/AUTH.md`) **except** the public auth routes below.
 
 All errors MUST follow `docs/API_ERRORS.md`.
 
 Create and retry endpoints return generation status only. Cached Study Guide/Quiz JSON is fetched from the corresponding `GET` endpoints.
+
+---
+
+## POST /api/auth/google (public — no session required)
+
+Exchange a Google ID token for a signed session cookie.
+
+Frontend should call this after Google Sign-In (One Tap or redirect flow) with the `credential` token Google provides.
+
+Request:
+```json
+{ "credential": "google_id_token_string" }
+```
+
+Response:
+- `200`
+- Sets `learnease_session` HttpOnly cookie automatically
+```json
+{
+  "user": {
+    "id": "google_subject_id",
+    "email": "user@example.com",
+    "name": "Display Name"
+  }
+}
+```
+
+Errors:
+- `400` missing credential
+- `401` invalid or expired Google token
+- `500` `GOOGLE_CLIENT_ID` or `SESSION_SECRET` not configured
+
+---
+
+## POST /api/auth/logout (public — no session required)
+
+Clear the session cookie.
+
+Request: empty body
+
+Response:
+- `200`
+- Clears `learnease_session` cookie
+```json
+{ "success": true }
+```
+
+---
+
+## GET /api/auth/me
+
+Return the current authenticated user's info.
+
+Response:
+- `200`
+```json
+{
+  "user": {
+    "id": "google_subject_id",
+    "email": "user@example.com"
+  }
+}
+```
+
+Errors:
+- `401` unauthorized (no valid session)
 
 ---
 

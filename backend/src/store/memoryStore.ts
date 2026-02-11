@@ -111,20 +111,26 @@ function writeExtractedTextArtifact(doc: DocumentRecord): string {
   return artifactPath;
 }
 
-function upsertUser(userId: string, email?: string): void {
+function upsertUser(userId: string, email?: string, name?: string): void {
   const now = new Date().toISOString();
   db.prepare(
     `
       INSERT INTO users (id, email, name, created_at)
-      VALUES (@id, @email, NULL, @created_at)
+      VALUES (@id, @email, @name, @created_at)
       ON CONFLICT(id) DO UPDATE SET
-        email = COALESCE(excluded.email, users.email)
+        email = COALESCE(excluded.email, users.email),
+        name = COALESCE(excluded.name, users.name)
     `
   ).run({
     id: userId,
     email: email ?? null,
+    name: name ?? null,
     created_at: now,
   });
+}
+
+export function upsertAuthenticatedUser(userId: string, email: string, name?: string): void {
+  upsertUser(userId, email, name);
 }
 
 function upsertArtifact(
@@ -160,11 +166,24 @@ function upsertArtifact(
   });
 }
 
+function toStoredChecklistId(documentId: string, itemId: string): string {
+  return `${documentId}::${itemId}`;
+}
+
+function toLogicalChecklistId(documentId: string, storedId: string): string {
+  const prefix = `${documentId}::`;
+  if (storedId.startsWith(prefix)) {
+    return storedId.slice(prefix.length);
+  }
+  return storedId;
+}
+
 function syncChecklistItems(documentId: string, studyGuide: StudyGuide | null): void {
   if (!studyGuide) return;
 
   const nextChecklist = studyGuide.checklist.map((item) => ({
-    id: item.id,
+    logicalId: item.id,
+    storedId: toStoredChecklistId(documentId, item.id),
     label: item.label,
   }));
 
@@ -179,7 +198,10 @@ function syncChecklistItems(documentId: string, studyGuide: StudyGuide | null): 
     .all(documentId) as Array<{ id: string; completed: number }>;
 
   const completedById = new Map(
-    existingRows.map((row) => [row.id, row.completed === 1])
+    existingRows.map((row) => [
+      toLogicalChecklistId(documentId, row.id),
+      row.completed === 1,
+    ])
   );
 
   const upsertChecklistItem = db.prepare(
@@ -195,10 +217,10 @@ function syncChecklistItems(documentId: string, studyGuide: StudyGuide | null): 
   const now = new Date().toISOString();
   for (const item of nextChecklist) {
     upsertChecklistItem.run({
-      id: item.id,
+      id: item.storedId,
       document_id: documentId,
       label: item.label,
-      completed: completedById.get(item.id) ? 1 : 0,
+      completed: completedById.get(item.logicalId) ? 1 : 0,
       created_at: now,
     });
   }
@@ -208,7 +230,7 @@ function syncChecklistItems(documentId: string, studyGuide: StudyGuide | null): 
     return;
   }
 
-  const keepIds = nextChecklist.map((item) => item.id);
+  const keepIds = nextChecklist.map((item) => item.storedId);
   const placeholders = keepIds.map(() => "?").join(",");
   db.prepare(
     `
@@ -510,15 +532,16 @@ export function updateChecklistItem(
   itemId: string,
   completed: boolean
 ): boolean {
+  const storedId = toStoredChecklistId(documentId, itemId);
   const result = db
     .prepare(
       `
         UPDATE checklist_items
         SET completed = ?
-        WHERE document_id = ? AND id = ?
+        WHERE document_id = ? AND (id = ? OR id = ?)
       `
     )
-    .run(completed ? 1 : 0, documentId, itemId);
+    .run(completed ? 1 : 0, documentId, storedId, itemId);
   return result.changes > 0;
 }
 
