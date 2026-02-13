@@ -52,7 +52,13 @@ function makeDocument(id: string, userId: string, checklistLabel: string): Docum
     paragraphCount: 1,
     extractedText: "Submit by Friday.",
     studyGuide: makeStudyGuide("1", checklistLabel),
+    studyGuideStatus: "ready",
+    studyGuideErrorCode: null,
+    studyGuideErrorMessage: null,
     quiz: null,
+    quizStatus: "idle",
+    quizErrorCode: null,
+    quizErrorMessage: null,
     errorCode: null,
     errorMessage: null,
   };

@@ -27,6 +27,108 @@ function createDatabase(): SqliteDatabase {
   return db;
 }
 
+interface TableInfoRow {
+  name: string;
+}
+
+function hasColumn(db: SqliteDatabase, tableName: string, columnName: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as TableInfoRow[];
+  return rows.some((row) => row.name === columnName);
+}
+
+function ensureDocumentFlowColumns(db: SqliteDatabase): void {
+  const columnDefinitions: Array<{ name: string; sql: string }> = [
+    {
+      name: "study_guide_status",
+      sql: "TEXT NOT NULL DEFAULT 'idle' CHECK (study_guide_status IN ('idle', 'processing', 'ready', 'failed'))",
+    },
+    { name: "study_guide_error_code", sql: "TEXT" },
+    { name: "study_guide_error_message", sql: "TEXT" },
+    {
+      name: "quiz_status",
+      sql: "TEXT NOT NULL DEFAULT 'idle' CHECK (quiz_status IN ('idle', 'processing', 'ready', 'failed'))",
+    },
+    { name: "quiz_error_code", sql: "TEXT" },
+    { name: "quiz_error_message", sql: "TEXT" },
+  ];
+
+  for (const column of columnDefinitions) {
+    if (!hasColumn(db, "documents", column.name)) {
+      db.exec(`ALTER TABLE documents ADD COLUMN ${column.name} ${column.sql};`);
+    }
+  }
+}
+
+function backfillDocumentFlowState(db: SqliteDatabase): void {
+  db.exec(`
+    UPDATE documents
+    SET study_guide_status = CASE
+      WHEN study_guide_status = 'idle'
+        AND EXISTS (SELECT 1 FROM study_guides sg WHERE sg.document_id = documents.id) THEN 'ready'
+      WHEN study_guide_status = 'idle'
+        AND status = 'processing'
+        AND error_code = 'STUDY_GUIDE_PROCESSING' THEN 'processing'
+      WHEN study_guide_status = 'idle'
+        AND status = 'failed'
+        AND error_code LIKE 'STUDY_GUIDE:%' THEN 'failed'
+      ELSE study_guide_status
+    END;
+
+    UPDATE documents
+    SET quiz_status = CASE
+      WHEN quiz_status = 'idle'
+        AND EXISTS (SELECT 1 FROM quizzes q WHERE q.document_id = documents.id) THEN 'ready'
+      WHEN quiz_status = 'idle'
+        AND status = 'processing'
+        AND error_code = 'QUIZ_PROCESSING' THEN 'processing'
+      WHEN quiz_status = 'idle'
+        AND status = 'failed'
+        AND error_code LIKE 'QUIZ:%' THEN 'failed'
+      ELSE quiz_status
+    END;
+
+    UPDATE documents
+    SET study_guide_error_code = COALESCE(
+      study_guide_error_code,
+      CASE
+        WHEN study_guide_status = 'processing' THEN 'STUDY_GUIDE_PROCESSING'
+        WHEN status = 'failed' AND error_code LIKE 'STUDY_GUIDE:%' THEN error_code
+        ELSE NULL
+      END
+    );
+
+    UPDATE documents
+    SET quiz_error_code = COALESCE(
+      quiz_error_code,
+      CASE
+        WHEN quiz_status = 'processing' THEN 'QUIZ_PROCESSING'
+        WHEN status = 'failed' AND error_code LIKE 'QUIZ:%' THEN error_code
+        ELSE NULL
+      END
+    );
+
+    UPDATE documents
+    SET study_guide_error_message = COALESCE(
+      study_guide_error_message,
+      CASE
+        WHEN study_guide_status = 'failed' AND status = 'failed' AND error_code LIKE 'STUDY_GUIDE:%'
+          THEN error_message
+        ELSE NULL
+      END
+    );
+
+    UPDATE documents
+    SET quiz_error_message = COALESCE(
+      quiz_error_message,
+      CASE
+        WHEN quiz_status = 'failed' AND status = 'failed' AND error_code LIKE 'QUIZ:%'
+          THEN error_message
+        ELSE NULL
+      END
+    );
+  `);
+}
+
 export function getDb(): SqliteDatabase {
   if (!dbInstance) {
     dbInstance = createDatabase();
@@ -58,6 +160,12 @@ export function initializeDatabase(): void {
       processed_at TEXT,
       error_code TEXT,
       error_message TEXT,
+      study_guide_status TEXT NOT NULL DEFAULT 'idle' CHECK (study_guide_status IN ('idle', 'processing', 'ready', 'failed')),
+      study_guide_error_code TEXT,
+      study_guide_error_message TEXT,
+      quiz_status TEXT NOT NULL DEFAULT 'idle' CHECK (quiz_status IN ('idle', 'processing', 'ready', 'failed')),
+      quiz_error_code TEXT,
+      quiz_error_message TEXT,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
@@ -102,6 +210,9 @@ export function initializeDatabase(): void {
 
     CREATE INDEX IF NOT EXISTS idx_checklist_document_id ON checklist_items(document_id);
   `);
+
+  ensureDocumentFlowColumns(db);
+  backfillDocumentFlowState(db);
 }
 
 export function closeDatabase(): void {

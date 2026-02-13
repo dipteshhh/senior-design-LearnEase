@@ -46,6 +46,7 @@ function signSession(secret: string, payload: Record<string, unknown>): string {
 test("requireAuth extracts name from signed session when present", () => {
   const secret = "test-secret";
   process.env.SESSION_SECRET = secret;
+  process.env.NODE_ENV = "test";
   process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
 
   const now = Math.floor(Date.now() / 1000);
@@ -72,6 +73,7 @@ test("requireAuth extracts name from signed session when present", () => {
 test("requireAuth returns undefined name when session has no name field", () => {
   const secret = "test-secret";
   process.env.SESSION_SECRET = secret;
+  process.env.NODE_ENV = "test";
   process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
 
   const now = Math.floor(Date.now() / 1000);
@@ -94,6 +96,7 @@ test("requireAuth returns undefined name when session has no name field", () => 
 test("requireAuth rejects expired session cookie", () => {
   const secret = "test-secret";
   process.env.SESSION_SECRET = secret;
+  process.env.NODE_ENV = "test";
   process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
 
   const pastTime = Math.floor(Date.now() / 1000) - 3600;
@@ -116,6 +119,7 @@ test("requireAuth rejects expired session cookie", () => {
 test("requireAuth rejects session with missing userId", () => {
   const secret = "test-secret";
   process.env.SESSION_SECRET = secret;
+  process.env.NODE_ENV = "test";
   process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
 
   const now = Math.floor(Date.now() / 1000);
@@ -138,6 +142,7 @@ test("requireAuth rejects session with missing userId", () => {
 test("requireAuth rejects session with missing email", () => {
   const secret = "test-secret";
   process.env.SESSION_SECRET = secret;
+  process.env.NODE_ENV = "test";
   process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
 
   const now = Math.floor(Date.now() / 1000);
@@ -159,6 +164,7 @@ test("requireAuth rejects session with missing email", () => {
 
 test("requireAuth rejects legacy cookies when ALLOW_LEGACY_AUTH_COOKIES is not true", () => {
   delete process.env.SESSION_SECRET;
+  process.env.NODE_ENV = "test";
   process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
 
   const req = makeReq("learnease_user_id=user-legacy; learnease_user_email=legacy@example.edu");
@@ -173,11 +179,29 @@ test("requireAuth rejects legacy cookies when ALLOW_LEGACY_AUTH_COOKIES is not t
   assert.equal(res.statusCode, 401);
 });
 
-test("requireAuth rejects legacy cookies with empty userId", () => {
+test("requireAuth rejects legacy cookies with empty userId in test mode", () => {
   delete process.env.SESSION_SECRET;
+  process.env.NODE_ENV = "test";
   process.env.ALLOW_LEGACY_AUTH_COOKIES = "true";
 
   const req = makeReq("learnease_user_id=; learnease_user_email=legacy@example.edu");
+  const res = makeRes();
+  let nextCalled = false;
+
+  requireAuth(req as any, res as any, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, false);
+  assert.equal(res.statusCode, 401);
+});
+
+test("requireAuth ignores legacy cookies outside test mode", () => {
+  delete process.env.SESSION_SECRET;
+  process.env.NODE_ENV = "development";
+  process.env.ALLOW_LEGACY_AUTH_COOKIES = "true";
+
+  const req = makeReq("learnease_user_id=user-legacy; learnease_user_email=legacy@example.edu");
   const res = makeRes();
   let nextCalled = false;
 

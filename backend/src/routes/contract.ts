@@ -6,8 +6,6 @@ import { detectDocumentType } from "../services/documentDetector.js";
 import { analyzeDocument } from "../services/contentAnalyzer.js";
 import {
   FLOW_PROCESSING_CODE,
-  isFlowFailed,
-  isFlowProcessing,
   makeFlowFailureCode,
 } from "../services/generationState.js";
 import { generateQuiz } from "../services/quizGenerator.js";
@@ -24,6 +22,10 @@ import {
   updateChecklistItem,
   updateDocument,
 } from "../store/memoryStore.js";
+
+const PDF_SIGNATURE = "%PDF-";
+const ZIP_SIGNATURE_BYTE_0 = 0x50; // P
+const ZIP_SIGNATURE_BYTE_1 = 0x4b; // K
 
 interface CreateBody {
   document_id?: string;
@@ -152,9 +154,53 @@ function toPublicErrorMessage(errorCode: string | null): string | null {
       return "Generation is already in progress.";
     case "ILLEGAL_RETRY_STATE":
       return "Retry is only allowed after a failed generation.";
+    case "GENERATION_INTERRUPTED":
+      return "Generation was interrupted by server restart. Retry generation.";
     default:
       return "Generation failed. Retry generation.";
   }
+}
+
+function isValidPdfSignature(fileBuffer: Buffer): boolean {
+  if (fileBuffer.length < PDF_SIGNATURE.length) {
+    return false;
+  }
+  return fileBuffer.subarray(0, PDF_SIGNATURE.length).toString("ascii") === PDF_SIGNATURE;
+}
+
+function isLikelyDocxSignature(fileBuffer: Buffer): boolean {
+  if (fileBuffer.length < 4) {
+    return false;
+  }
+
+  const hasZipHeader =
+    fileBuffer[0] === ZIP_SIGNATURE_BYTE_0 && fileBuffer[1] === ZIP_SIGNATURE_BYTE_1;
+  if (!hasZipHeader) {
+    return false;
+  }
+
+  const fileContents = fileBuffer.toString("latin1");
+  return (
+    fileContents.includes("[Content_Types].xml") &&
+    fileContents.includes("word/document.xml")
+  );
+}
+
+function validateUploadedFileSignature(
+  fileBuffer: Buffer,
+  mimetype: string
+): string | null {
+  if (mimetype === "application/pdf") {
+    return isValidPdfSignature(fileBuffer) ? null : "Uploaded file is not a valid PDF.";
+  }
+
+  if (
+    mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ) {
+    return isLikelyDocxSignature(fileBuffer) ? null : "Uploaded file is not a valid DOCX.";
+  }
+
+  return "Unsupported file type.";
 }
 
 export async function uploadDocumentHandler(req: Request, res: Response): Promise<void> {
@@ -163,6 +209,12 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
     const file = req.file;
     if (!file) {
       sendApiError(res, 400, "MISSING_FILE", "Missing file upload.");
+      return;
+    }
+
+    const signatureValidationError = validateUploadedFileSignature(file.buffer, file.mimetype);
+    if (signatureValidationError) {
+      sendApiError(res, 415, "UNSUPPORTED_MEDIA_TYPE", signatureValidationError);
       return;
     }
 
@@ -189,7 +241,13 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
       extractedText: normalizedText,
       originalFileBuffer: file.buffer,
       studyGuide: null,
+      studyGuideStatus: "idle",
+      studyGuideErrorCode: null,
+      studyGuideErrorMessage: null,
       quiz: null,
+      quizStatus: "idle",
+      quizErrorCode: null,
+      quizErrorMessage: null,
       errorCode: null,
       errorMessage: null,
     });
@@ -241,20 +299,20 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
     res.status(200).json({ status: "ready", cached: true });
     return;
   }
-  if (isFlowProcessing(doc.status, doc.errorCode, "STUDY_GUIDE")) {
+  if (doc.studyGuideStatus === "processing") {
     sendApiError(res, 409, "ALREADY_PROCESSING", "Study guide is already processing.");
     return;
   }
-  if (isFlowFailed(doc.status, doc.errorCode, "STUDY_GUIDE")) {
+  if (doc.studyGuideStatus === "failed") {
     sendApiError(res, 409, "ILLEGAL_RETRY_STATE", "Use retry endpoint for failed documents.");
     return;
   }
 
   updateDocument(documentId, (current) => ({
     ...current,
-    status: "processing",
-    errorCode: FLOW_PROCESSING_CODE.STUDY_GUIDE,
-    errorMessage: null,
+    studyGuideStatus: "processing",
+    studyGuideErrorCode: FLOW_PROCESSING_CODE.STUDY_GUIDE,
+    studyGuideErrorMessage: null,
   }));
 
   void (async () => {
@@ -266,18 +324,18 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
       });
       updateDocument(documentId, (current) => ({
         ...current,
-        status: "ready",
         studyGuide: generated,
-        errorCode: null,
-        errorMessage: null,
+        studyGuideStatus: "ready",
+        studyGuideErrorCode: null,
+        studyGuideErrorMessage: null,
       }));
     } catch (error) {
       const failure = toFailureCode(error);
       updateDocument(documentId, (current) => ({
         ...current,
-        status: "failed",
-        errorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
-        errorMessage: failure.message,
+        studyGuideStatus: "failed",
+        studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
+        studyGuideErrorMessage: failure.message,
       }));
     }
   })();
@@ -295,20 +353,20 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
     sendApiError(res, 422, "DOCUMENT_UNSUPPORTED", "Unsupported document type.");
     return;
   }
-  if (isFlowProcessing(doc.status, doc.errorCode, "STUDY_GUIDE")) {
+  if (doc.studyGuideStatus === "processing") {
     sendApiError(res, 409, "ALREADY_PROCESSING", "Study guide is already processing.");
     return;
   }
-  if (!isFlowFailed(doc.status, doc.errorCode, "STUDY_GUIDE")) {
+  if (doc.studyGuideStatus !== "failed") {
     sendApiError(res, 409, "ILLEGAL_RETRY_STATE", "Retry is only allowed from failed state.");
     return;
   }
 
   updateDocument(documentId, (current) => ({
     ...current,
-    status: "processing",
-    errorCode: FLOW_PROCESSING_CODE.STUDY_GUIDE,
-    errorMessage: null,
+    studyGuideStatus: "processing",
+    studyGuideErrorCode: FLOW_PROCESSING_CODE.STUDY_GUIDE,
+    studyGuideErrorMessage: null,
   }));
 
   void (async () => {
@@ -320,18 +378,18 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
       });
       updateDocument(documentId, (current) => ({
         ...current,
-        status: "ready",
         studyGuide: generated,
-        errorCode: null,
-        errorMessage: null,
+        studyGuideStatus: "ready",
+        studyGuideErrorCode: null,
+        studyGuideErrorMessage: null,
       }));
     } catch (error) {
       const failure = toFailureCode(error);
       updateDocument(documentId, (current) => ({
         ...current,
-        status: "failed",
-        errorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
-        errorMessage: failure.message,
+        studyGuideStatus: "failed",
+        studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
+        studyGuideErrorMessage: failure.message,
       }));
     }
   })();
@@ -371,19 +429,19 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
     res.status(200).json({ status: "ready", cached: true });
     return;
   }
-  if (isFlowProcessing(doc.status, doc.errorCode, "QUIZ")) {
+  if (doc.quizStatus === "processing") {
     sendApiError(res, 409, "ALREADY_PROCESSING", "Quiz is already processing.");
     return;
   }
-  if (isFlowFailed(doc.status, doc.errorCode, "QUIZ")) {
+  if (doc.quizStatus === "failed") {
     sendApiError(res, 409, "ILLEGAL_RETRY_STATE", "Use retry endpoint for failed documents.");
     return;
   }
   updateDocument(documentId, (current) => ({
     ...current,
-    status: "processing",
-    errorCode: FLOW_PROCESSING_CODE.QUIZ,
-    errorMessage: null,
+    quizStatus: "processing",
+    quizErrorCode: FLOW_PROCESSING_CODE.QUIZ,
+    quizErrorMessage: null,
   }));
 
   void (async () => {
@@ -400,18 +458,18 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
       );
       updateDocument(documentId, (current) => ({
         ...current,
-        status: "ready",
         quiz: generatedQuiz,
-        errorCode: null,
-        errorMessage: null,
+        quizStatus: "ready",
+        quizErrorCode: null,
+        quizErrorMessage: null,
       }));
     } catch (error) {
       const failure = toFailureCode(error);
       updateDocument(documentId, (current) => ({
         ...current,
-        status: "failed",
-        errorCode: makeFlowFailureCode("QUIZ", failure.code),
-        errorMessage: failure.message,
+        quizStatus: "failed",
+        quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
+        quizErrorMessage: failure.message,
       }));
     }
   })();
@@ -429,20 +487,20 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
     sendApiError(res, 422, "DOCUMENT_NOT_LECTURE", "Quiz generation is lecture-only.");
     return;
   }
-  if (isFlowProcessing(doc.status, doc.errorCode, "QUIZ")) {
+  if (doc.quizStatus === "processing") {
     sendApiError(res, 409, "ALREADY_PROCESSING", "Quiz is already processing.");
     return;
   }
-  if (!isFlowFailed(doc.status, doc.errorCode, "QUIZ")) {
+  if (doc.quizStatus !== "failed") {
     sendApiError(res, 409, "ILLEGAL_RETRY_STATE", "Retry is only allowed from failed state.");
     return;
   }
 
   updateDocument(documentId, (current) => ({
     ...current,
-    status: "processing",
-    errorCode: FLOW_PROCESSING_CODE.QUIZ,
-    errorMessage: null,
+    quizStatus: "processing",
+    quizErrorCode: FLOW_PROCESSING_CODE.QUIZ,
+    quizErrorMessage: null,
   }));
 
   void (async () => {
@@ -459,18 +517,18 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
       );
       updateDocument(documentId, (current) => ({
         ...current,
-        status: "ready",
         quiz: generatedQuiz,
-        errorCode: null,
-        errorMessage: null,
+        quizStatus: "ready",
+        quizErrorCode: null,
+        quizErrorMessage: null,
       }));
     } catch (error) {
       const failure = toFailureCode(error);
       updateDocument(documentId, (current) => ({
         ...current,
-        status: "failed",
-        errorCode: makeFlowFailureCode("QUIZ", failure.code),
-        errorMessage: failure.message,
+        quizStatus: "failed",
+        quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
+        quizErrorMessage: failure.message,
       }));
     }
   })();

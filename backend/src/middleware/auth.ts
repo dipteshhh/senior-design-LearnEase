@@ -20,7 +20,11 @@ function parseCookies(header: string | undefined): Record<string, string> {
     if (eqIndex < 0) return [part, ""] as const;
     const key = part.slice(0, eqIndex).trim();
     const value = part.slice(eqIndex + 1).trim();
-    return [key, decodeURIComponent(value)] as const;
+    try {
+      return [key, decodeURIComponent(value)] as const;
+    } catch {
+      return [key, value] as const;
+    }
   });
   return Object.fromEntries(entries);
 }
@@ -94,7 +98,8 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     }
   }
 
-  const allowLegacyCookies = process.env.ALLOW_LEGACY_AUTH_COOKIES === "true";
+  const allowLegacyCookies =
+    process.env.NODE_ENV === "test" && process.env.ALLOW_LEGACY_AUTH_COOKIES === "true";
   if (allowLegacyCookies) {
     const userId = cookies.learnease_user_id;
     const email = cookies.learnease_user_email;

@@ -5,8 +5,9 @@
 # Prerequisites:
 #   1. backend/.env must have:
 #        OPENAI_API_KEY=<real key>
-#        ALLOW_LEGACY_AUTH_COOKIES=true
 #        FILE_ENCRYPTION_KEY=<64-char hex>
+#        SESSION_SECRET=<strong secret> (required for signed-session auth in tests)
+#        GOOGLE_TEST_ID_TOKEN=<optional real Google ID token to exercise /api/auth/google>
 #   2. No other process on PORT (default 3001)
 #
 # Usage:
@@ -15,8 +16,16 @@
 
 set -euo pipefail
 
-BASE="http://localhost:3001"
-COOKIE="learnease_user_id=e2e-test-user; learnease_user_email=e2e@test.edu"
+PORT="${PORT:-3001}"
+BASE="http://localhost:${PORT}"
+PRIMARY_USER_ID="e2e-test-user"
+PRIMARY_USER_EMAIL="e2e@test.edu"
+PRIMARY_USER_NAME="E2E User"
+SECONDARY_USER_ID="other-user"
+SECONDARY_USER_EMAIL="other@test.edu"
+SECONDARY_USER_NAME="Other User"
+COOKIE=""
+OTHER_COOKIE=""
 PASS=0
 FAIL=0
 TOTAL=0
@@ -77,6 +86,34 @@ assert_not_empty() {
   fi
 }
 
+build_auth_cookie() {
+  local user_id="$1"
+  local user_email="$2"
+  local user_name="$3"
+
+  TEST_USER_ID="$user_id" \
+  TEST_USER_EMAIL="$user_email" \
+  TEST_USER_NAME="$user_name" \
+  node -e '
+    const { createHmac } = require("crypto");
+    const secret = process.env.SESSION_SECRET;
+    if (!secret) process.exit(1);
+    const now = Math.floor(Date.now() / 1000);
+    const payloadObj = {
+      user: {
+        id: process.env.TEST_USER_ID,
+        email: process.env.TEST_USER_EMAIL,
+        name: process.env.TEST_USER_NAME || undefined,
+      },
+      iat: now,
+      exp: now + 3600,
+    };
+    const payload = Buffer.from(JSON.stringify(payloadObj), "utf8").toString("base64url");
+    const sig = createHmac("sha256", secret).update(payload).digest("base64url");
+    process.stdout.write(`learnease_session=${payload}.${sig}`);
+  '
+}
+
 http_status() {
   local method="$1" url="$2"
   shift 2
@@ -87,6 +124,38 @@ http_body() {
   local method="$1" url="$2"
   shift 2
   curl -s -X "$method" "$url" -H "Cookie: $COOKIE" "$@"
+}
+
+attempt_google_auth_cookie() {
+  if [[ -z "${GOOGLE_TEST_ID_TOKEN:-}" ]]; then
+    return 1
+  fi
+
+  local headers_file="$TMPDIR_E2E/google-auth-headers.txt"
+  local body_file="$TMPDIR_E2E/google-auth-body.json"
+  local status_code
+
+  status_code=$(curl -sS -D "$headers_file" -o "$body_file" -w "%{http_code}" \
+    -X POST "$BASE/api/auth/google" \
+    -H "Content-Type: application/json" \
+    -d "{\"credential\":\"$GOOGLE_TEST_ID_TOKEN\"}")
+
+  if [[ "$status_code" != "200" ]]; then
+    red "Google auth flow failed in E2E setup (status=$status_code)."
+    cat "$body_file" || true
+    exit 1
+  fi
+
+  local set_cookie
+  set_cookie=$(awk 'BEGIN{IGNORECASE=1} /^set-cookie:[[:space:]]*learnease_session=/{print $0}' "$headers_file" | head -n 1 | sed -E 's/^[^:]+:[[:space:]]*//' | cut -d';' -f1)
+  if [[ -z "$set_cookie" ]]; then
+    red "Google auth flow succeeded but no learnease_session cookie was returned."
+    cat "$headers_file" || true
+    exit 1
+  fi
+
+  COOKIE="$set_cookie"
+  return 0
 }
 
 wait_for_server() {
@@ -101,6 +170,17 @@ wait_for_server() {
   done
 }
 
+ensure_port_free() {
+  if ! command -v lsof >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if lsof -iTCP:"$PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
+    red "Port $PORT is already in use. Stop the existing server before running e2e-test.sh."
+    exit 1
+  fi
+}
+
 # ── Create test DOCX fixtures ────────────────────────────────
 
 TMPDIR_E2E=$(mktemp -d)
@@ -108,6 +188,16 @@ TMPDIR_E2E=$(mktemp -d)
 yellow "Generating test DOCX files..."
 node scripts/generate-test-docx.mjs "$TMPDIR_E2E"
 echo ""
+
+if [[ -z "${SESSION_SECRET:-}" ]]; then
+  red "SESSION_SECRET is required for E2E auth cookie generation."
+  exit 1
+fi
+
+COOKIE="$(build_auth_cookie "$PRIMARY_USER_ID" "$PRIMARY_USER_EMAIL" "$PRIMARY_USER_NAME")"
+OTHER_COOKIE="$(build_auth_cookie "$SECONDARY_USER_ID" "$SECONDARY_USER_EMAIL" "$SECONDARY_USER_NAME")"
+
+yellow "Using signed session-cookie auth for E2E flow."
 
 # ── Start server with high rate limit for testing ────────────
 
@@ -117,10 +207,15 @@ bold "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 yellow "Starting backend server..."
-RATE_LIMIT_MAX=200 npx tsx src/index.ts &
+ensure_port_free
+PORT="$PORT" RATE_LIMIT_MAX=200 ALLOW_LEGACY_AUTH_COOKIES="${ALLOW_LEGACY_AUTH_COOKIES:-false}" npx tsx src/index.ts &
 SERVER_PID=$!
 wait_for_server
 green "Server is up (PID $SERVER_PID)"
+
+if attempt_google_auth_cookie; then
+  green "Google auth flow succeeded for E2E session setup."
+fi
 echo ""
 
 # ══════════════════════════════════════════════════════════════
@@ -129,6 +224,9 @@ echo ""
 bold "1) Auth — reject unauthenticated request"
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/documents")
 assert "GET /api/documents without cookie → 401" "$STATUS" "401"
+
+AUTH_ME_STATUS=$(http_status GET "$BASE/api/auth/me")
+assert "GET /api/auth/me with auth cookie → 200" "$AUTH_ME_STATUS" "200"
 echo ""
 
 # ══════════════════════════════════════════════════════════════
@@ -441,7 +539,6 @@ echo ""
 # TEST 13: Ownership — different user can't access
 # ══════════════════════════════════════════════════════════════
 bold "13) Ownership — different user blocked"
-OTHER_COOKIE="learnease_user_id=other-user; learnease_user_email=other@test.edu"
 OWN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/study-guide/$HW_ID" -H "Cookie: $OTHER_COOKIE")
 assert "Other user GET study guide → 403" "$OWN_STATUS" "403"
 echo ""

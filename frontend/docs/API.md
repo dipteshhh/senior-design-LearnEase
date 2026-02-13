@@ -214,8 +214,11 @@ Update checklist completion state.
 
 Request:
 ```json
-{ "item_id": "uuid", "completed": true }
+{ "item_id": "checklist-item-id", "completed": true }
 ```
+
+Notes:
+- `item_id` must match an existing checklist item `id` returned in the generated Study Guide checklist.
 
 Response:
 - `200`

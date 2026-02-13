@@ -15,7 +15,7 @@ LearnEase backend smoke test
 
 Usage:
   ./scripts/smoke-api.sh \
-    --cookie 'learnease_user_id=dev-user-1; learnease_user_email=dev@example.com' \
+    --cookie 'learnease_session=<signed_session_cookie>' \
     --case '/absolute/path/lecture.pdf|LECTURE' \
     --case '/absolute/path/homework.pdf|HOMEWORK' \
     --case '/absolute/path/syllabus.docx|SYLLABUS'
@@ -30,7 +30,6 @@ Options:
 
 Notes:
   - Backend must already be running.
-  - For local legacy auth testing, set ALLOW_LEGACY_AUTH_COOKIES=true.
 EOF
 }
 

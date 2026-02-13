@@ -35,7 +35,8 @@ Response:
 Errors:
 - `400` missing credential
 - `401` invalid or expired Google token
-- `500` `GOOGLE_CLIENT_ID` or `SESSION_SECRET` not configured
+- `500` auth provider unavailable (`AUTH_PROVIDER_UNAVAILABLE`)
+- `500` auth configuration error (`AUTH_CONFIG_ERROR`)
 
 ---
 
@@ -116,7 +117,7 @@ Response:
     "status": "uploaded | processing | ready | failed",
     "page_count": 5,
     "uploaded_at": "timestamp",
-    "error_code": "SCHEMA_VALIDATION_FAILED | QUOTE_NOT_FOUND | ... | null",
+    "error_code": "SCHEMA_VALIDATION_FAILED | QUOTE_NOT_FOUND | GENERATION_INTERRUPTED | ... | null",
     "error_message": "safe user-facing message | null",
     "has_study_guide": true,
     "has_quiz": false
@@ -289,8 +290,11 @@ Update checklist completion state.
 
 Request:
 ```json
-{ "item_id": "uuid", "completed": true }
+{ "item_id": "checklist-item-id", "completed": true }
 ```
+
+Notes:
+- `item_id` must match an existing checklist item `id` returned in the generated Study Guide checklist.
 
 Response:
 - `200`

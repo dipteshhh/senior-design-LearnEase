@@ -33,7 +33,13 @@ function makeDoc(id: string, userId: string, overrides: Partial<DocumentRecord> 
     paragraphCount: 3,
     extractedText: "Lecture slides for module week chapter learning objectives content.",
     studyGuide: null,
+    studyGuideStatus: "idle",
+    studyGuideErrorCode: null,
+    studyGuideErrorMessage: null,
     quiz: null,
+    quizStatus: "idle",
+    quizErrorCode: null,
+    quizErrorMessage: null,
     errorCode: null,
     errorMessage: null,
     ...overrides,
@@ -79,23 +85,83 @@ test("updateDocument mutates and persists document state", () => {
 
   const updated = store.updateDocument("aaaaaaaa-3333-4aaa-8aaa-aaaaaaaaaaaa", (c) => ({
     ...c,
-    status: "processing",
-    errorCode: "STUDY_GUIDE_PROCESSING",
+    studyGuideStatus: "processing",
+    studyGuideErrorCode: "STUDY_GUIDE_PROCESSING",
+    studyGuideErrorMessage: null,
   }));
 
   assert.ok(updated);
   assert.equal(updated.status, "processing");
   assert.equal(updated.errorCode, "STUDY_GUIDE_PROCESSING");
+  assert.equal(updated.studyGuideStatus, "processing");
+  assert.equal(updated.quizStatus, "idle");
 
   const reloaded = store.getDocument("aaaaaaaa-3333-4aaa-8aaa-aaaaaaaaaaaa");
   assert.ok(reloaded);
   assert.equal(reloaded.status, "processing");
   assert.equal(reloaded.errorCode, "STUDY_GUIDE_PROCESSING");
+  assert.equal(reloaded.studyGuideStatus, "processing");
+  assert.equal(reloaded.quizStatus, "idle");
 });
 
 test("updateDocument returns undefined for non-existent document", () => {
   const result = store.updateDocument("aaaaaaaa-0000-4aaa-8aaa-000000000000", (c) => c);
   assert.equal(result, undefined);
+});
+
+test("study-guide and quiz flow states remain independent", () => {
+  const docId = "aaaaaaaa-7777-4aaa-8aaa-aaaaaaaaaaaa";
+  store.saveDocument(makeDoc(docId, "user-flow"));
+
+  store.updateDocument(docId, (current) => ({
+    ...current,
+    studyGuideStatus: "processing",
+    studyGuideErrorCode: "STUDY_GUIDE_PROCESSING",
+    studyGuideErrorMessage: null,
+  }));
+
+  store.updateDocument(docId, (current) => ({
+    ...current,
+    quizStatus: "processing",
+    quizErrorCode: "QUIZ_PROCESSING",
+    quizErrorMessage: null,
+  }));
+
+  const studyGuide = {
+    overview: { title: "Flow Test", document_type: "LECTURE" as const, summary: "Summary" },
+    key_actions: [],
+    checklist: [],
+    important_details: { dates: [], policies: [], contacts: [], logistics: [] },
+    sections: [],
+  };
+
+  store.updateDocument(docId, (current) => ({
+    ...current,
+    studyGuideStatus: "ready",
+    studyGuideErrorCode: null,
+    studyGuideErrorMessage: null,
+    studyGuide,
+  }));
+
+  const mid = store.getDocument(docId);
+  assert.ok(mid);
+  assert.equal(mid.studyGuideStatus, "ready");
+  assert.equal(mid.quizStatus, "processing");
+  assert.equal(mid.status, "processing");
+
+  store.updateDocument(docId, (current) => ({
+    ...current,
+    quizStatus: "failed",
+    quizErrorCode: "QUIZ:GENERATION_FAILED",
+    quizErrorMessage: "Quiz generation failed.",
+  }));
+
+  const finalDoc = store.getDocument(docId);
+  assert.ok(finalDoc);
+  assert.equal(finalDoc.studyGuideStatus, "ready");
+  assert.equal(finalDoc.quizStatus, "failed");
+  assert.equal(finalDoc.status, "failed");
+  assert.equal(finalDoc.errorCode, "QUIZ:GENERATION_FAILED");
 });
 
 test("deleteDocumentsByUser removes all documents and user record", () => {
@@ -128,6 +194,46 @@ test("purgeExpiredDocuments removes old documents and keeps recent ones", () => 
   const remaining = store.listDocumentsByUser("user-purge");
   assert.equal(remaining.length, 1);
   assert.equal(remaining[0].id, "bbbbbbbb-5555-4bbb-8bbb-bbbbbbbbbbbb");
+});
+
+test("recoverInterruptedProcessingDocuments marks processing rows as failed", () => {
+  store.saveDocument(
+    makeDoc("aaaaaaaa-5777-4aaa-8aaa-aaaaaaaaaaaa", "user-recover", {
+      studyGuideStatus: "processing",
+      studyGuideErrorCode: "STUDY_GUIDE_PROCESSING",
+    })
+  );
+  store.saveDocument(
+    makeDoc("bbbbbbbb-5777-4bbb-8bbb-bbbbbbbbbbbb", "user-recover", {
+      quizStatus: "processing",
+      quizErrorCode: "QUIZ_PROCESSING",
+    })
+  );
+  store.saveDocument(
+    makeDoc("cccccccc-5777-4ccc-8ccc-cccccccccccc", "user-recover", {
+      studyGuideStatus: "ready",
+    })
+  );
+
+  const recovered = store.recoverInterruptedProcessingDocuments();
+  assert.ok(recovered >= 2);
+
+  const studyGuideDoc = store.getDocument("aaaaaaaa-5777-4aaa-8aaa-aaaaaaaaaaaa");
+  const quizDoc = store.getDocument("bbbbbbbb-5777-4bbb-8bbb-bbbbbbbbbbbb");
+  const readyDoc = store.getDocument("cccccccc-5777-4ccc-8ccc-cccccccccccc");
+
+  assert.ok(studyGuideDoc);
+  assert.equal(studyGuideDoc.status, "failed");
+  assert.equal(studyGuideDoc.errorCode, "STUDY_GUIDE:GENERATION_INTERRUPTED");
+  assert.equal(studyGuideDoc.studyGuideStatus, "failed");
+
+  assert.ok(quizDoc);
+  assert.equal(quizDoc.status, "failed");
+  assert.equal(quizDoc.errorCode, "QUIZ:GENERATION_INTERRUPTED");
+  assert.equal(quizDoc.quizStatus, "failed");
+
+  assert.ok(readyDoc);
+  assert.equal(readyDoc.status, "ready");
 });
 
 test("saveDocument with studyGuide syncs checklist items to DB", () => {

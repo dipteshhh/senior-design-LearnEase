@@ -47,7 +47,7 @@ Backend stores:
 
 Requests are authenticated via:
 - `learnease_session` HttpOnly cookie (primary; set by `POST /api/auth/google`)
-- Legacy plain-text cookies (only if `ALLOW_LEGACY_AUTH_COOKIES=true` — dev/testing only)
+- Legacy plain-text cookies are disabled outside `NODE_ENV=test` even if `ALLOW_LEGACY_AUTH_COOKIES=true`
 
 If the request is unauthenticated:
 - return `401` with error payload (see `docs/API_ERRORS.md`)

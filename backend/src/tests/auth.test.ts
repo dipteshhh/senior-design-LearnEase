@@ -45,6 +45,7 @@ function signSession(secret: string, payload: Record<string, unknown>): string {
 
 test("requireAuth returns 401 when session cookie is missing", () => {
   process.env.SESSION_SECRET = "test-secret";
+  process.env.NODE_ENV = "test";
   process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
 
   const req = makeReq(undefined);
@@ -69,6 +70,7 @@ test("requireAuth returns 401 when session cookie is missing", () => {
 test("requireAuth accepts valid signed session cookie", () => {
   const secret = "test-secret";
   process.env.SESSION_SECRET = secret;
+  process.env.NODE_ENV = "test";
   process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
 
   const now = Math.floor(Date.now() / 1000);
@@ -96,6 +98,7 @@ test("requireAuth accepts valid signed session cookie", () => {
 test("requireAuth rejects invalid session signature", () => {
   const secret = "test-secret";
   process.env.SESSION_SECRET = secret;
+  process.env.NODE_ENV = "test";
   process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
 
   const now = Math.floor(Date.now() / 1000);
@@ -116,8 +119,9 @@ test("requireAuth rejects invalid session signature", () => {
   assert.equal(res.statusCode, 401);
 });
 
-test("requireAuth allows legacy cookies only when explicitly enabled", () => {
+test("requireAuth allows legacy cookies only in test mode when explicitly enabled", () => {
   delete process.env.SESSION_SECRET;
+  process.env.NODE_ENV = "test";
   process.env.ALLOW_LEGACY_AUTH_COOKIES = "true";
 
   const req = makeReq("learnease_user_id=user-legacy; learnease_user_email=legacy@example.edu");
@@ -135,3 +139,21 @@ test("requireAuth allows legacy cookies only when explicitly enabled", () => {
   });
 });
 
+test("requireAuth handles malformed cookie encoding without throwing", () => {
+  process.env.SESSION_SECRET = "test-secret";
+  process.env.NODE_ENV = "test";
+  process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
+
+  const req = makeReq("learnease_session=%E0%A4%A");
+  const res = makeRes();
+  let nextCalled = false;
+
+  assert.doesNotThrow(() => {
+    requireAuth(req as any, res as any, () => {
+      nextCalled = true;
+    });
+  });
+
+  assert.equal(nextCalled, false);
+  assert.equal(res.statusCode, 401);
+});

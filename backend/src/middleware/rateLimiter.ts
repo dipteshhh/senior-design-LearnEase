@@ -1,6 +1,22 @@
 import rateLimit from "express-rate-limit";
 
-const maxRequests = Number(process.env.RATE_LIMIT_MAX) || 10;
+const DEFAULT_RATE_LIMIT_MAX = 10;
+
+function readRateLimitMax(): number {
+  const raw = process.env.RATE_LIMIT_MAX?.trim();
+  if (!raw) {
+    return DEFAULT_RATE_LIMIT_MAX;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return DEFAULT_RATE_LIMIT_MAX;
+  }
+
+  return Math.floor(parsed);
+}
+
+const maxRequests = readRateLimitMax();
 
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
