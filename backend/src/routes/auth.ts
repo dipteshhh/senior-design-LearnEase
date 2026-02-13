@@ -26,8 +26,17 @@ interface GoogleTokenInfo {
   sub?: string;
 }
 
+class AuthProviderError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AuthProviderError";
+  }
+}
+
 const SESSION_COOKIE_NAME = "learnease_session";
 const DEFAULT_SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+const DEFAULT_GOOGLE_TOKENINFO_TIMEOUT_MS = 8000;
+const DEFAULT_GOOGLE_TOKENINFO_MAX_RETRIES = 1;
 
 function getGoogleClientId(): string {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
@@ -51,6 +60,96 @@ function getSessionMaxAgeSeconds(): number {
     return DEFAULT_SESSION_MAX_AGE_SECONDS;
   }
   return Math.floor(parsed);
+}
+
+function readEnvInt(
+  name: string,
+  defaultValue: number,
+  minValue: number
+): number {
+  const raw = process.env[name];
+  if (!raw) return defaultValue;
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < minValue) {
+    return defaultValue;
+  }
+
+  return Math.floor(parsed);
+}
+
+function getGoogleTokenInfoTimeoutMs(): number {
+  return readEnvInt(
+    "GOOGLE_TOKENINFO_TIMEOUT_MS",
+    DEFAULT_GOOGLE_TOKENINFO_TIMEOUT_MS,
+    1000
+  );
+}
+
+function getGoogleTokenInfoMaxRetries(): number {
+  return readEnvInt(
+    "GOOGLE_TOKENINFO_MAX_RETRIES",
+    DEFAULT_GOOGLE_TOKENINFO_MAX_RETRIES,
+    0
+  );
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+async function waitForBackoff(attempt: number): Promise<void> {
+  const delayMs = Math.min(1500, 250 * attempt);
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
+
+async function fetchGoogleTokenInfo(credential: string): Promise<GoogleTokenInfo | null> {
+  const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`;
+  const timeoutMs = getGoogleTokenInfoTimeoutMs();
+  const maxRetries = getGoogleTokenInfoMaxRetries();
+
+  let lastProviderError: unknown = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        // Token is invalid or expired; retrying will not change this.
+        if (response.status >= 400 && response.status < 500) {
+          return null;
+        }
+
+        throw new AuthProviderError(`Google tokeninfo returned ${response.status}.`);
+      }
+      return (await response.json()) as GoogleTokenInfo;
+    } catch (error) {
+      const isProviderError =
+        isAbortError(error) ||
+        error instanceof TypeError ||
+        error instanceof AuthProviderError;
+
+      if (!isProviderError) {
+        throw error;
+      }
+
+      lastProviderError = error;
+      if (attempt < maxRetries) {
+        await waitForBackoff(attempt + 1);
+        continue;
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  throw new AuthProviderError(
+    lastProviderError instanceof Error
+      ? lastProviderError.message
+      : "Google token verification is unavailable."
+  );
 }
 
 function createSignedSession(payload: SessionPayload): string {
@@ -84,14 +183,12 @@ export async function googleAuthHandler(req: Request, res: Response): Promise<vo
   }
 
   try {
-    const response = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
-    );
-    if (!response.ok) {
+    const tokenInfo = await fetchGoogleTokenInfo(credential);
+    if (!tokenInfo) {
       sendApiError(res, 401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.");
       return;
     }
-    const tokenInfo = (await response.json()) as GoogleTokenInfo;
+
     if (tokenInfo.aud?.trim() !== clientId) {
       sendApiError(res, 401, "INVALID_GOOGLE_TOKEN", "Google token audience mismatch.");
       return;
@@ -143,6 +240,16 @@ export async function googleAuthHandler(req: Request, res: Response): Promise<vo
       },
     });
   } catch (error) {
+    if (error instanceof AuthProviderError) {
+      sendApiError(
+        res,
+        500,
+        "AUTH_PROVIDER_UNAVAILABLE",
+        "Google token verification is currently unavailable. Please try again."
+      );
+      return;
+    }
+
     sendApiError(
       res,
       401,

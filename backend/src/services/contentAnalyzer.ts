@@ -1,4 +1,10 @@
 import OpenAI from "openai";
+import {
+  APIConnectionError,
+  APIConnectionTimeoutError,
+  APIError,
+  RateLimitError,
+} from "openai/error";
 import type {
   DocumentType,
   StudyGuide,
@@ -12,8 +18,33 @@ import {
 } from "./outputValidator.js";
 import type { FileType } from "../store/memoryStore.js";
 
+const DEFAULT_OPENAI_TIMEOUT_MS = 30000;
+const DEFAULT_OPENAI_MAX_RETRIES = 2;
+
+function readEnvInt(name: string, defaultValue: number, minValue: number): number {
+  const raw = process.env[name];
+  if (!raw) return defaultValue;
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < minValue) {
+    return defaultValue;
+  }
+
+  return Math.floor(parsed);
+}
+
+function getOpenAiTimeoutMs(): number {
+  return readEnvInt("OPENAI_TIMEOUT_MS", DEFAULT_OPENAI_TIMEOUT_MS, 1000);
+}
+
+function getOpenAiMaxRetries(): number {
+  return readEnvInt("OPENAI_MAX_RETRIES", DEFAULT_OPENAI_MAX_RETRIES, 0);
+}
+
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  timeout: getOpenAiTimeoutMs(),
+  maxRetries: getOpenAiMaxRetries(),
 });
 
 const ANALYSIS_PROMPT = `You are LearnEase, an educational assistant that helps students organize and understand their learning materials.
@@ -97,6 +128,44 @@ Error message: ${error.message}
 Validation details: ${details}
 
 Regenerate the entire JSON and fix these issues exactly.`;
+}
+
+function normalizeUpstreamError(error: unknown): unknown {
+  if (error instanceof ContractValidationError) {
+    return error;
+  }
+
+  if (error instanceof APIConnectionTimeoutError) {
+    return new ContractValidationError(
+      "GENERATION_FAILED",
+      "OpenAI request timed out."
+    );
+  }
+
+  if (error instanceof APIConnectionError) {
+    return new ContractValidationError(
+      "GENERATION_FAILED",
+      "OpenAI service is temporarily unavailable."
+    );
+  }
+
+  if (error instanceof RateLimitError) {
+    return new ContractValidationError(
+      "GENERATION_FAILED",
+      "OpenAI rate limit reached. Retry generation."
+    );
+  }
+
+  if (error instanceof APIError) {
+    return new ContractValidationError(
+      "GENERATION_FAILED",
+      error.status && error.status >= 500
+        ? "OpenAI service error. Retry generation."
+        : "OpenAI request failed."
+    );
+  }
+
+  return error;
 }
 
 export async function analyzeDocument(
@@ -186,9 +255,10 @@ export async function analyzeDocument(
 
       return validated.data satisfies StudyGuide;
     } catch (error) {
-      lastError = error;
+      const normalizedError = normalizeUpstreamError(error);
+      lastError = normalizedError;
       if (attempt < 3) {
-        repairHint = buildRepairHint(error);
+        repairHint = buildRepairHint(normalizedError);
       }
     }
   }

@@ -6,7 +6,8 @@ export type ValidationErrorCode =
   | "QUOTE_NOT_FOUND"
   | "CITATION_EXCERPT_NOT_FOUND"
   | "CITATION_OUT_OF_RANGE"
-  | "DOCUMENT_NOT_LECTURE";
+  | "DOCUMENT_NOT_LECTURE"
+  | "GENERATION_FAILED";
 
 export class ContractValidationError extends Error {
   readonly code: ValidationErrorCode;
