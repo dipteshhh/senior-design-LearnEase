@@ -63,7 +63,7 @@ Schema requirements:
 - key_actions: ExtractionItem[]
 - checklist: ExtractionItem[]
 - important_details: { dates: ExtractionItem[], policies: ExtractionItem[], contacts: ExtractionItem[], logistics: ExtractionItem[] }
-- sections: [{ id, title, content, citations }]
+- sections: [{ id, title, content, citations }] — each section MUST include at least one citation
 
 ExtractionItem schema:
 - id: string
@@ -106,7 +106,7 @@ const VALID_DOCUMENT_TYPES = new Set(["HOMEWORK", "LECTURE", "SYLLABUS"]);
  * or uses mixed-case document_type values. Walk the parsed JSON and fix both
  * so Zod validation succeeds.
  */
-function normalizeModelOutput(obj: unknown): unknown {
+export function normalizeModelOutput(obj: unknown): unknown {
   if (obj === null || typeof obj !== "object") return obj;
   if (Array.isArray(obj)) return obj.map(normalizeModelOutput);
 

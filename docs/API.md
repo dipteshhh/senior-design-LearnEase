@@ -160,7 +160,11 @@ Errors:
 - `404` document not found
 - `409` already processing (`ALREADY_PROCESSING`)
 - `409` failed state requires retry endpoint (`ILLEGAL_RETRY_STATE`)
-- `422` document unsupported (`DOCUMENT_UNSUPPORTED`) OR validation failed (schema/quotes/citations)
+- `422` document unsupported (`DOCUMENT_UNSUPPORTED`)
+
+Async failures (schema validation, quote grounding, citation range) are **not** returned as HTTP errors.
+They surface as `status: "failed"` with `error_code` / `error_message` on the document object
+(poll via `GET /api/documents`). See `docs/API_ERRORS.md` for error code reference.
 
 ---
 
@@ -191,7 +195,9 @@ Errors:
 - `404` document not found
 - `409` already processing (`ALREADY_PROCESSING`)
 - `409` illegal retry state (`ILLEGAL_RETRY_STATE`)
-- `422` document unsupported (`DOCUMENT_UNSUPPORTED`) OR validation failed (schema/quotes/citations)
+- `422` document unsupported (`DOCUMENT_UNSUPPORTED`)
+
+Async failures surface via document status polling (see create endpoint above).
 
 ---
 
@@ -235,7 +241,11 @@ Errors:
 - `404` document not found
 - `409` already processing (`ALREADY_PROCESSING`)
 - `409` failed state requires retry endpoint (`ILLEGAL_RETRY_STATE`)
-- `422` not lecture (`DOCUMENT_NOT_LECTURE`) OR validation failed (schema/quotes/citations)
+- `422` not lecture (`DOCUMENT_NOT_LECTURE`)
+
+Async failures (schema validation, quote grounding, citation range) are **not** returned as HTTP errors.
+They surface as `status: "failed"` with `error_code` / `error_message` on the document object
+(poll via `GET /api/documents`). See `docs/API_ERRORS.md` for error code reference.
 
 ---
 
@@ -266,7 +276,9 @@ Errors:
 - `404` document not found
 - `409` already processing (`ALREADY_PROCESSING`)
 - `409` illegal retry state (`ILLEGAL_RETRY_STATE`)
-- `422` not lecture (`DOCUMENT_NOT_LECTURE`) OR validation failed (schema/quotes/citations)
+- `422` not lecture (`DOCUMENT_NOT_LECTURE`)
+
+Async failures surface via document status polling (see quiz create endpoint above).
 
 ---
 
