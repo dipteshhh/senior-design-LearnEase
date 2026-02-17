@@ -40,16 +40,18 @@ export const ExtractionItem = z.object({
 export type ExtractionItem = z.infer<typeof ExtractionItem>;
 
 export const StudyGuideOverview = z.object({
-  title: z.string(),
+  title: z.string().min(1),
   document_type: z.enum(["HOMEWORK", "LECTURE", "SYLLABUS"]),
-  summary: z.string(),
+  summary: z.string().min(1),
 });
 
+// content is intentionally ungrounded — sections summarize/restructure source material.
+// Traceability is enforced via citations (min 1) which are validated against the document.
 export const StudyGuideSection = z.object({
   id: z.string(),
   title: z.string(),
   content: z.string(),
-  citations: z.array(Citation),
+  citations: z.array(Citation).min(1),
 });
 
 export const ImportantDetails = z.object({
@@ -73,7 +75,7 @@ export const QuizQuestion = z.object({
   question: z.string(),
   options: z.array(z.string()).min(1),
   answer: z.string(),
-  supporting_quote: z.string(),
+  supporting_quote: z.string().min(1),
   citations: z.array(Citation).min(1),
 });
 
