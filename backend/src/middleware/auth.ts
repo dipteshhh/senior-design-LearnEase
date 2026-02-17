@@ -53,8 +53,8 @@ function verifySignedSession(
     .update(payloadPart)
     .digest("base64url");
 
-  const actualBuffer = Buffer.from(signaturePart);
-  const expectedBuffer = Buffer.from(expectedSignature);
+  const actualBuffer = Buffer.from(signaturePart, "base64url");
+  const expectedBuffer = Buffer.from(expectedSignature, "base64url");
   if (
     actualBuffer.length !== expectedBuffer.length ||
     !timingSafeEqual(actualBuffer, expectedBuffer)
@@ -70,11 +70,12 @@ function verifySignedSession(
       return null;
     }
 
-    if (typeof parsed.exp === "number") {
-      const nowSeconds = Math.floor(Date.now() / 1000);
-      if (parsed.exp <= nowSeconds) {
-        return null;
-      }
+    if (typeof parsed.exp !== "number" || !Number.isFinite(parsed.exp)) {
+      return null;
+    }
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (parsed.exp <= nowSeconds) {
+      return null;
     }
 
     const name = parsed.user?.name?.trim() || undefined;

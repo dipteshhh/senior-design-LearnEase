@@ -1,7 +1,7 @@
 /**
  * Integration test – calls OpenAI via analyzeDocument with a small sample.
- * Requires OPENAI_API_KEY in .env.  Run manually:
- *   node --import tsx --test src/tests/contentAnalyzer.integration.test.ts
+ * Requires OPENAI_API_KEY in .env.  Run via:
+ *   npm run test:integration
  */
 import "dotenv/config";
 import test from "node:test";
@@ -42,9 +42,11 @@ test("analyzeDocument returns a valid StudyGuide for a syllabus", async () => {
       paragraphCount: null,
     });
   } catch (err: any) {
-    console.error("analyzeDocument threw:", err.code, err.message);
-    if (err.details?.issues) {
-      console.error("Zod issues:", JSON.stringify(err.details.issues, null, 2));
+    if (process.env.DEBUG) {
+      console.error("analyzeDocument threw:", err.code, err.message);
+      if (err.details?.issues) {
+        console.error("Zod issues:", JSON.stringify(err.details.issues, null, 2));
+      }
     }
     throw err;
   }
@@ -79,8 +81,10 @@ test("analyzeDocument returns a valid StudyGuide for a syllabus", async () => {
     }
   }
 
-  console.log("✅ StudyGuide overview:", JSON.stringify(result.overview, null, 2));
-  console.log(`✅ key_actions: ${result.key_actions.length}`);
-  console.log(`✅ checklist: ${result.checklist.length}`);
-  console.log(`✅ sections: ${result.sections.length}`);
+  if (process.env.DEBUG) {
+    console.log("✅ StudyGuide overview:", JSON.stringify(result.overview, null, 2));
+    console.log(`✅ key_actions: ${result.key_actions.length}`);
+    console.log(`✅ checklist: ${result.checklist.length}`);
+    console.log(`✅ sections: ${result.sections.length}`);
+  }
 });

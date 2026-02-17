@@ -236,7 +236,7 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
       documentType: detected.documentType,
       status: "uploaded",
       uploadedAt: new Date().toISOString(),
-      pageCount: extracted.pageCount ?? 0,
+      pageCount: extracted.fileType === "PDF" ? Math.max(extracted.pageCount ?? 1, 1) : extracted.pageCount ?? 0,
       paragraphCount: extracted.paragraphCount,
       extractedText: normalizedText,
       originalFileBuffer: file.buffer,

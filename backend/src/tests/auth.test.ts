@@ -157,3 +157,68 @@ test("requireAuth handles malformed cookie encoding without throwing", () => {
   assert.equal(nextCalled, false);
   assert.equal(res.statusCode, 401);
 });
+
+test("requireAuth rejects session with missing exp", () => {
+  const secret = "test-secret";
+  process.env.SESSION_SECRET = secret;
+  process.env.NODE_ENV = "test";
+  process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
+
+  const session = signSession(secret, {
+    user: { id: "user-123", email: "student@example.edu" },
+  });
+  const req = makeReq(`learnease_session=${encodeURIComponent(session)}`);
+  const res = makeRes();
+  let nextCalled = false;
+
+  requireAuth(req as any, res as any, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, false);
+  assert.equal(res.statusCode, 401);
+});
+
+test("requireAuth rejects session with non-numeric exp", () => {
+  const secret = "test-secret";
+  process.env.SESSION_SECRET = secret;
+  process.env.NODE_ENV = "test";
+  process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
+
+  const session = signSession(secret, {
+    user: { id: "user-123", email: "student@example.edu" },
+    exp: "not-a-number",
+  });
+  const req = makeReq(`learnease_session=${encodeURIComponent(session)}`);
+  const res = makeRes();
+  let nextCalled = false;
+
+  requireAuth(req as any, res as any, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, false);
+  assert.equal(res.statusCode, 401);
+});
+
+test("requireAuth rejects session with Infinity exp", () => {
+  const secret = "test-secret";
+  process.env.SESSION_SECRET = secret;
+  process.env.NODE_ENV = "test";
+  process.env.ALLOW_LEGACY_AUTH_COOKIES = "false";
+
+  const session = signSession(secret, {
+    user: { id: "user-123", email: "student@example.edu" },
+    exp: Infinity,
+  });
+  const req = makeReq(`learnease_session=${encodeURIComponent(session)}`);
+  const res = makeRes();
+  let nextCalled = false;
+
+  requireAuth(req as any, res as any, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, false);
+  assert.equal(res.statusCode, 401);
+});

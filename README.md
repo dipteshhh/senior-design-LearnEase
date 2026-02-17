@@ -11,7 +11,6 @@ LearnEase is **not** a homework solver. It does **not** generate answers, soluti
 ---
 
 ## 🚫 What LearnEase Will Never Do
-
 - Solve homework problems
 - Provide answers, hints, or solution steps
 - Generate essays, code, or computed results

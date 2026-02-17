@@ -32,7 +32,16 @@ import { sendApiError } from "./lib/apiError.js";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
-const RETENTION_DAYS = Number(process.env.RETENTION_DAYS ?? "30");
+const RETENTION_DAYS = (() => {
+  const raw = process.env.RETENTION_DAYS;
+  if (!raw) return 30;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    logger.warn("Invalid RETENTION_DAYS value, falling back to 30", { raw });
+    return 30;
+  }
+  return Math.floor(parsed);
+})();
 const isProduction = process.env.NODE_ENV === "production";
 const CORS_ORIGINS = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
@@ -79,6 +88,14 @@ setInterval(
   () => purgeExpiredDocuments(RETENTION_DAYS),
   24 * 60 * 60 * 1000
 ).unref();
+
+if (isProduction) {
+  const trustProxy = process.env.TRUST_PROXY?.trim();
+  if (trustProxy) {
+    const asNumber = Number(trustProxy);
+    app.set("trust proxy", Number.isFinite(asNumber) ? asNumber : trustProxy);
+  }
+}
 
 app.use(
   cors({

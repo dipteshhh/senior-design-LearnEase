@@ -141,6 +141,33 @@ test("validateStudyGuideAgainstDocument rejects missing citation excerpt", () =>
   );
 });
 
+test("validateStudyGuideAgainstDocument rejects section with no citations", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        citations: [],
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text: "Review the weekly schedule before class.",
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "SCHEMA_VALIDATION_FAILED");
+      return true;
+    }
+  );
+});
+
 test("validateStudyGuideAgainstDocument enforces DOCX paragraph range", () => {
   const docxGuide: StudyGuide = {
     ...BASE_STUDY_GUIDE,

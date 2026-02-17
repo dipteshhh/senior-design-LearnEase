@@ -101,6 +101,17 @@ test("StudyGuide schema rejects missing overview fields", () => {
   assert.equal(StudyGuide.safeParse(noTitle).success, false);
 });
 
+test("StudyGuide schema rejects section with no citations", () => {
+  const noSectionCitations = {
+    overview: { title: "Title", document_type: "LECTURE", summary: "Summary" },
+    key_actions: [],
+    checklist: [],
+    important_details: { dates: [], policies: [], contacts: [], logistics: [] },
+    sections: [{ id: "s1", title: "Section", content: "Body", citations: [] }],
+  };
+  assert.equal(StudyGuide.safeParse(noSectionCitations).success, false);
+});
+
 test("StudyGuide schema rejects UNSUPPORTED as overview document_type", () => {
   const unsupported = {
     overview: { title: "Title", document_type: "UNSUPPORTED", summary: "Summary" },

@@ -21,6 +21,7 @@ interface SessionPayload {
 interface GoogleTokenInfo {
   aud?: string;
   email?: string;
+  email_verified?: string;
   exp?: string;
   name?: string;
   sub?: string;
@@ -207,6 +208,11 @@ export async function googleAuthHandler(req: Request, res: Response): Promise<vo
 
     if (!userId || !email) {
       sendApiError(res, 401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.");
+      return;
+    }
+
+    if (tokenInfo.email_verified !== "true") {
+      sendApiError(res, 401, "EMAIL_NOT_VERIFIED", "Google email is not verified.");
       return;
     }
 

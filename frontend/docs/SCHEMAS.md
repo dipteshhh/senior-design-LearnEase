@@ -97,6 +97,7 @@ Where:
 Rules:
 - `overview.summary` may paraphrase but MUST NOT change meaning.
 - `sections[].content` may restructure but MUST remain faithful to source.
+- Every `sections[]` entry MUST include at least one citation.
 - Every `ExtractionItem` MUST have a quote and citations.
 
 ---

@@ -183,6 +183,14 @@ export function validateStudyGuideAgainstDocument(
   );
 
   studyGuide.sections.forEach((section, sectionIndex) => {
+    if (section.citations.length === 0) {
+      throw new ContractValidationError(
+        "SCHEMA_VALIDATION_FAILED",
+        "Each section must include at least one citation.",
+        { path: `sections[${sectionIndex}].citations` }
+      );
+    }
+
     section.citations.forEach((citation, citationIndex) => {
       validateCitation(
         citation,
