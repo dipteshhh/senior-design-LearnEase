@@ -68,10 +68,10 @@ Schema requirements:
 ExtractionItem schema:
 - id: string
 - label: string
-- supporting_quote: verbatim quote from the input text
-- citations: at least one citation
+- supporting_quote: an EXACT substring copied verbatim from the document text (must appear character-for-character in the input)
+- citations: a JSON array with at least one citation object, e.g. [{...}]
 
-Citations:
+Citations (MUST always be a JSON array, even for a single citation):
 - For pdf: { source_type: "pdf", page: number, excerpt: string }
 - For docx: { source_type: "docx", anchor_type: "paragraph", paragraph: number, excerpt: string }
 
@@ -80,7 +80,8 @@ IMPORTANT RULES:
 - Do NOT write essay content or code
 - Do NOT complete any part of the assignment
 - Every extracted item MUST include supporting_quote and citations
-- Quotes and excerpts must come from the provided text
+- supporting_quote MUST be copied exactly from the document text — do NOT paraphrase, reword, or summarize
+- citation excerpt MUST also be an exact substring from the document text
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
@@ -96,6 +97,40 @@ interface AnalysisMetadata {
   fileType: FileType;
   pageCount: number;
   paragraphCount: number | null;
+}
+
+const VALID_DOCUMENT_TYPES = new Set(["HOMEWORK", "LECTURE", "SYLLABUS"]);
+
+/**
+ * The model sometimes returns a bare citation object instead of an array,
+ * or uses mixed-case document_type values. Walk the parsed JSON and fix both
+ * so Zod validation succeeds.
+ */
+function normalizeModelOutput(obj: unknown): unknown {
+  if (obj === null || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) return obj.map(normalizeModelOutput);
+
+  const record = obj as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(record)) {
+    if (key === "citations") {
+      if (Array.isArray(value)) {
+        result[key] = value.map(normalizeModelOutput);
+      } else if (value !== null && typeof value === "object") {
+        result[key] = [normalizeModelOutput(value)];
+      } else {
+        result[key] = value;
+      }
+    } else if (key === "document_type" && typeof value === "string") {
+      const upper = value.toUpperCase();
+      result[key] = VALID_DOCUMENT_TYPES.has(upper) ? upper : value;
+    } else {
+      result[key] = normalizeModelOutput(value);
+    }
+  }
+
+  return result;
 }
 
 function buildCitationRequirements(metadata: AnalysisMetadata): string {
@@ -237,7 +272,8 @@ export async function analyzeDocument(
         );
       }
 
-      const validated = StudyGuideSchema.safeParse(parsed);
+      const normalized = normalizeModelOutput(parsed);
+      const validated = StudyGuideSchema.safeParse(normalized);
       if (!validated.success) {
         throw new ContractValidationError(
           "SCHEMA_VALIDATION_FAILED",
