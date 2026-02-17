@@ -92,8 +92,14 @@ setInterval(
 if (isProduction) {
   const trustProxy = process.env.TRUST_PROXY?.trim();
   if (trustProxy) {
-    const asNumber = Number(trustProxy);
-    app.set("trust proxy", Number.isFinite(asNumber) ? asNumber : trustProxy);
+    if (trustProxy === "true") {
+      app.set("trust proxy", true);
+    } else if (trustProxy === "false") {
+      // explicitly disabled — no-op
+    } else {
+      const asNumber = Number(trustProxy);
+      app.set("trust proxy", Number.isFinite(asNumber) ? asNumber : trustProxy);
+    }
   }
 }
 

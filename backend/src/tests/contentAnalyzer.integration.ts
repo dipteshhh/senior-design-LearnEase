@@ -2,12 +2,22 @@
  * Integration test – calls OpenAI via analyzeDocument with a small sample.
  * Requires OPENAI_API_KEY in .env.  Run via:
  *   npm run test:integration
+ * Or with debug output:
+ *   DEBUG=1 npm run test:integration
+ *
+ * Skipped automatically unless RUN_INTEGRATION=true (for CI gating).
  */
 import "dotenv/config";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeDocument } from "../services/contentAnalyzer.js";
-import { StudyGuide as StudyGuideSchema } from "../schemas/analyze.js";
+
+if (process.env.RUN_INTEGRATION !== "true" && !process.env.OPENAI_API_KEY) {
+  test("integration tests skipped (set RUN_INTEGRATION=true and OPENAI_API_KEY to run)", { skip: true }, () => {});
+  process.exit(0);
+}
+
+const { analyzeDocument } = await import("../services/contentAnalyzer.js");
+const { StudyGuide: StudyGuideSchema } = await import("../schemas/analyze.js");
 
 const SAMPLE_SYLLABUS = `
 Course Syllabus – Introduction to Computer Science (CS 101)

@@ -35,6 +35,7 @@ Response:
 Errors:
 - `400` missing credential
 - `401` invalid or expired Google token
+- `401` email not verified (`EMAIL_NOT_VERIFIED`)
 - `500` auth provider unavailable (`AUTH_PROVIDER_UNAVAILABLE`)
 - `500` auth configuration error (`AUTH_CONFIG_ERROR`)
 
