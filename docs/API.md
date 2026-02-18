@@ -85,6 +85,9 @@ Request:
 - `multipart/form-data`
 - `file`: PDF or DOCX
 
+Notes:
+- Max upload size defaults to `10MB` and can be configured with `UPLOAD_MAX_FILE_SIZE_MB`.
+
 Responses:
 - `201`
 ```json
@@ -97,6 +100,7 @@ Responses:
 
 Errors:
 - `400` missing file
+- `400` file too large (`FILE_TOO_LARGE`)
 - `401` unauthorized
 - `415` unsupported file type
 - `500` extraction failure
@@ -116,6 +120,8 @@ Response:
     "filename": "hw1.pdf",
     "document_type": "HOMEWORK | LECTURE | SYLLABUS | UNSUPPORTED",
     "status": "uploaded | processing | ready | failed",
+    "study_guide_status": "idle | processing | ready | failed",
+    "quiz_status": "idle | processing | ready | failed",
     "page_count": 5,
     "uploaded_at": "timestamp",
     "error_code": "SCHEMA_VALIDATION_FAILED | QUOTE_NOT_FOUND | GENERATION_INTERRUPTED | ... | null",
@@ -127,11 +133,31 @@ Response:
 ```
 
 Notes:
+- `status` is the derived overall document status. `study_guide_status` and `quiz_status` are independent per-flow statuses.
 - `error_code` and `error_message` are populated only when `status = "failed"`.
 - `error_message` is a sanitized user-facing message, not raw provider/internal error text.
+- Frontend should use `study_guide_status` / `quiz_status` to show per-flow loading spinners, retry buttons, etc.
 
 Errors:
 - `401` unauthorized
+
+---
+
+## DELETE /api/documents/:documentId
+
+Delete one document owned by the authenticated user.
+
+Response:
+- `200`
+```json
+{ "success": true }
+```
+
+Errors:
+- `401` unauthorized
+- `403` not owner
+- `404` document not found
+- `422` malformed `documentId` (must be UUID)
 
 ---
 

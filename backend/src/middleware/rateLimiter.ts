@@ -1,26 +1,33 @@
 import rateLimit from "express-rate-limit";
 
-const DEFAULT_RATE_LIMIT_MAX = 10;
+const DEFAULT_RATE_LIMIT_MAX = 30;
+const DEFAULT_RATE_LIMIT_POLL_MAX = 120;
 
-function readRateLimitMax(): number {
-  const raw = process.env.RATE_LIMIT_MAX?.trim();
+function readRateLimitMax(name: string, defaultValue: number): number {
+  const raw = process.env[name]?.trim();
   if (!raw) {
-    return DEFAULT_RATE_LIMIT_MAX;
+    return defaultValue;
   }
 
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 1) {
-    return DEFAULT_RATE_LIMIT_MAX;
+    return defaultValue;
   }
 
   return Math.floor(parsed);
 }
 
-const maxRequests = readRateLimitMax();
+function isPollingEndpoint(method: string, path: string): boolean {
+  if (method !== "GET") return false;
+  return path === "/api/documents" || path.startsWith("/api/study-guide/") || path.startsWith("/api/quiz/");
+}
+
+const maxRequests = readRateLimitMax("RATE_LIMIT_MAX", DEFAULT_RATE_LIMIT_MAX);
+const pollMaxRequests = readRateLimitMax("RATE_LIMIT_POLL_MAX", DEFAULT_RATE_LIMIT_POLL_MAX);
 
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: maxRequests, // requests per minute per IP (default 10)
+  max: (req) => (isPollingEndpoint(req.method, req.path) ? pollMaxRequests : maxRequests),
   message: {
     error: {
       code: "RATE_LIMITED",

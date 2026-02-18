@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { sendApiError } from "../lib/apiError.js";
+import { logger } from "../lib/logger.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { detectDocumentType } from "../services/documentDetector.js";
 import { analyzeDocument } from "../services/contentAnalyzer.js";
@@ -15,6 +16,7 @@ import {
   normalizeDocumentText,
 } from "../services/outputValidator.js";
 import {
+  deleteDocumentById,
   deleteDocumentsByUser,
   getDocument,
   listDocumentsByUser,
@@ -204,9 +206,10 @@ function validateUploadedFileSignature(
 }
 
 export async function uploadDocumentHandler(req: Request, res: Response): Promise<void> {
+  const file = req.file;
+  let userId: string | null = null;
   try {
-    const userId = getUserId(req);
-    const file = req.file;
+    userId = getUserId(req);
     if (!file) {
       sendApiError(res, 400, "MISSING_FILE", "Missing file upload.");
       return;
@@ -258,8 +261,12 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
       status: "uploaded",
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Upload failed";
-    sendApiError(res, 500, "EXTRACTION_FAILED", message);
+    logger.error("Upload extraction failed", {
+      error,
+      userId,
+      filename: file?.originalname ?? null,
+    });
+    sendApiError(res, 500, "EXTRACTION_FAILED", "Failed to process uploaded file.");
   }
 }
 
@@ -277,6 +284,8 @@ export async function listDocumentsHandler(_req: Request, res: Response): Promis
     filename: doc.filename,
     document_type: doc.documentType,
     status: doc.status,
+    study_guide_status: doc.studyGuideStatus,
+    quiz_status: doc.quizStatus,
     page_count: doc.pageCount,
     uploaded_at: doc.uploadedAt,
     has_study_guide: doc.studyGuide !== null,
@@ -590,5 +599,16 @@ export async function updateChecklistHandler(req: Request, res: Response): Promi
 export async function deleteUserDataHandler(_req: Request, res: Response): Promise<void> {
   const userId = getUserId(_req);
   deleteDocumentsByUser(userId);
+  res.status(200).json({ success: true });
+}
+
+export async function deleteDocumentHandler(req: Request, res: Response): Promise<void> {
+  const documentId = readDocumentIdParam(req, res);
+  if (!documentId) return;
+
+  const doc = ensureOwnership(req, res, documentId);
+  if (!doc) return;
+
+  deleteDocumentById(documentId);
   res.status(200).json({ success: true });
 }

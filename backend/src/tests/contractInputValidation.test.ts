@@ -91,3 +91,15 @@ test("updateChecklistHandler rejects malformed :documentId with 422", async () =
 
   assert.equal(res.statusCode, 422);
 });
+
+test("deleteDocumentHandler rejects malformed :documentId with 422", async () => {
+  const { deleteDocumentHandler } = await loadHandlers();
+  const req: MockReq = {
+    params: { documentId: "bad-id" },
+  };
+  const res = makeRes();
+
+  await deleteDocumentHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 422);
+});

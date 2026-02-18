@@ -29,12 +29,13 @@ All endpoints must return consistent error payloads.
 - `404` Not Found (document_id not found)
 - `409` Conflict (illegal state transition, e.g., create study guide while processing)
 - `415` Unsupported Media Type (non PDF/DOCX upload)
-- `422` Unprocessable Entity (schema validation failed OR quote/citation validation failed)
+- `422` Unprocessable Entity (invalid request payload or endpoint guard failure, e.g. malformed `document_id`, unsupported/lecture-only checks)
 - `500` Internal Server Error
 
 Notes:
 - `202` does not imply background cron/queue jobs; processing is still user-triggered and request-scoped per `docs/SPEC.md`.
 - Retention cleanup jobs are allowed; this restriction applies to OpenAI generation flow orchestration.
+- For async generation endpoints (`/api/study-guide/create|retry`, `/api/quiz/create|retry`), schema/grounding failures surface through document lifecycle state (`status: failed`, `error_code`) via polling, not as immediate HTTP `422`.
 
 ---
 
@@ -72,6 +73,22 @@ Suggested error codes:
 - `DOCUMENT_NOT_LECTURE`
 - `ALREADY_PROCESSING`
 - `ILLEGAL_RETRY_STATE`
-- `ACADEMIC_INTEGRITY_VIOLATION`
+- `ACADEMIC_INTEGRITY_VIOLATION` (reserved for future policy-enforcement flows)
 - `AUTH_PROVIDER_UNAVAILABLE`
 - `EMAIL_NOT_VERIFIED`
+- `BAD_REQUEST`
+- `RATE_LIMITED`
+- `MISSING_CREDENTIAL`
+- `INVALID_GOOGLE_TOKEN`
+- `AUTH_CONFIG_ERROR`
+- `MISSING_DOCUMENT_ID`
+- `MISSING_FILE`
+- `MISSING_FIELDS`
+- `UNSUPPORTED_MEDIA_TYPE`
+- `EXTRACTION_FAILED`
+- `FILE_TOO_LARGE`
+- `UPLOAD_FAILED`
+- `UNAUTHORIZED`
+- `FORBIDDEN`
+- `NOT_FOUND`
+- `INTERNAL_SERVER_ERROR`

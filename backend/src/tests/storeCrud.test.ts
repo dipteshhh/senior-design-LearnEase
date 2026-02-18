@@ -177,6 +177,19 @@ test("deleteDocumentsByUser removes all documents and user record", () => {
   assert.equal(store.listDocumentsByUser("user-keep").length, 1);
 });
 
+test("deleteDocumentById removes only the target document", () => {
+  const removeId = "aaaaaaaa-4445-4aaa-8aaa-aaaaaaaaaaaa";
+  const keepId = "bbbbbbbb-4445-4bbb-8bbb-bbbbbbbbbbbb";
+  store.saveDocument(makeDoc(removeId, "user-del-one"));
+  store.saveDocument(makeDoc(keepId, "user-del-one"));
+
+  const removed = store.deleteDocumentById(removeId);
+  assert.equal(removed, true);
+
+  assert.equal(store.getDocument(removeId), undefined);
+  assert.ok(store.getDocument(keepId));
+});
+
 test("purgeExpiredDocuments removes old documents and keeps recent ones", () => {
   const oldDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
   const recentDate = new Date().toISOString();

@@ -7,7 +7,24 @@ const ALLOWED_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const DEFAULT_MAX_FILE_SIZE_MB = 10;
+
+function readUploadMaxFileSizeMb(): number {
+  const raw = process.env.UPLOAD_MAX_FILE_SIZE_MB?.trim();
+  if (!raw) {
+    return DEFAULT_MAX_FILE_SIZE_MB;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return DEFAULT_MAX_FILE_SIZE_MB;
+  }
+
+  return Math.floor(parsed);
+}
+
+const maxFileSizeMb = readUploadMaxFileSizeMb();
+const MAX_FILE_SIZE = maxFileSizeMb * 1024 * 1024;
 
 const storage = multer.memoryStorage();
 
@@ -39,7 +56,12 @@ export function handleMulterError(
 ): void {
   if (err instanceof multer.MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
-      sendApiError(res, 400, "FILE_TOO_LARGE", "File too large. Maximum size is 10MB.");
+      sendApiError(
+        res,
+        400,
+        "FILE_TOO_LARGE",
+        `File too large. Maximum size is ${maxFileSizeMb}MB.`
+      );
       return;
     }
     sendApiError(res, 400, "UPLOAD_FAILED", err.message);

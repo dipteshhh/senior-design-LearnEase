@@ -205,3 +205,46 @@ test("retryStudyGuideHandler returns 422 for UNSUPPORTED document", async () => 
 
   assert.equal(res.statusCode, 422);
 });
+
+test("listDocumentsHandler returns per-flow statuses for each document", async () => {
+  const { listDocumentsHandler } = await loadHandlers();
+  const doc = seedDocument({
+    studyGuideStatus: "processing",
+    quizStatus: "failed",
+    quizErrorCode: "QUIZ:SCHEMA_VALIDATION_FAILED",
+    quizErrorMessage: "Schema invalid",
+    status: "failed",
+    errorCode: "QUIZ:SCHEMA_VALIDATION_FAILED",
+    errorMessage: "Schema invalid",
+  });
+  const req: MockReq = {
+    auth: { userId: "test-user", email: "test@example.com" },
+  };
+  const res = makeRes();
+
+  await listDocumentsHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(Array.isArray(res.body));
+  const items = res.body as Array<Record<string, unknown>>;
+  const item = items.find((entry) => entry.id === doc.id);
+  assert.ok(item, "expected seeded document in list response");
+  assert.equal(item.study_guide_status, "processing");
+  assert.equal(item.quiz_status, "failed");
+});
+
+test("deleteDocumentHandler deletes an owned document", async () => {
+  const { deleteDocumentHandler } = await loadHandlers();
+  const doc = seedDocument();
+  const req: MockReq = {
+    params: { documentId: doc.id },
+    auth: { userId: "test-user", email: "test@example.com" },
+  };
+  const res = makeRes();
+
+  await deleteDocumentHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { success: true });
+  assert.equal(getDocument(doc.id), undefined);
+});

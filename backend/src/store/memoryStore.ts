@@ -759,6 +759,28 @@ export function deleteDocumentsByUser(userId: string): void {
   db.prepare("DELETE FROM users WHERE id = ?").run(userId);
 }
 
+export function deleteDocumentById(documentId: string): boolean {
+  const artifactPaths = listArtifactPathsByDocumentIds([documentId]);
+  const result = db
+    .prepare(
+      `
+        DELETE FROM documents
+        WHERE id = ?
+      `
+    )
+    .run(documentId);
+  if (result.changes === 0) {
+    return false;
+  }
+
+  for (const artifactPath of artifactPaths) {
+    removePathIfExists(artifactPath);
+  }
+  cleanupDocumentDirectory(documentId);
+
+  return true;
+}
+
 export function updateChecklistItem(
   documentId: string,
   itemId: string,

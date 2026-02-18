@@ -5,6 +5,7 @@ import type { Server } from "http";
 import {
   createQuizHandler,
   createStudyGuideHandler,
+  deleteDocumentHandler,
   deleteUserDataHandler,
   getQuizHandler,
   getStudyGuideHandler,
@@ -109,9 +110,9 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: "10mb" }));
 app.use(requestLogger);
 app.use(apiLimiter);
+app.use(express.json({ limit: "10mb" }));
 
 // Public auth routes (no session required)
 app.post("/api/auth/google", googleAuthHandler);
@@ -124,6 +125,7 @@ app.get("/api/auth/me", meHandler);
 
 app.post("/api/upload", upload.single("file"), handleMulterError, uploadDocumentHandler);
 app.get("/api/documents", listDocumentsHandler);
+app.delete("/api/documents/:documentId", deleteDocumentHandler);
 
 app.post("/api/study-guide/create", createStudyGuideHandler);
 app.post("/api/study-guide/retry", retryStudyGuideHandler);
@@ -138,6 +140,27 @@ app.delete("/api/user/data", deleteUserDataHandler);
 app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
   if (res.headersSent) {
     next(err);
+    return;
+  }
+
+  const parseErrorContext =
+    typeof err === "object" && err !== null
+      ? (err as { status?: unknown; body?: unknown })
+      : undefined;
+  const maybeStatus = parseErrorContext?.status;
+  const bodyParseError =
+    err instanceof SyntaxError &&
+    maybeStatus === 400 &&
+    parseErrorContext !== undefined &&
+    Object.prototype.hasOwnProperty.call(parseErrorContext, "body");
+  if (bodyParseError) {
+    logger.warn("Malformed JSON request body", {
+      error: err,
+      method: req.method,
+      path: req.originalUrl,
+      requestId: (req as Request & { requestId?: string }).requestId ?? null,
+    });
+    sendApiError(res, 400, "BAD_REQUEST", "Malformed JSON request body.");
     return;
   }
 

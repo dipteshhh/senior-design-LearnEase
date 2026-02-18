@@ -1,6 +1,7 @@
 import { createHmac } from "crypto";
 import type { Request, Response } from "express";
 import { sendApiError } from "../lib/apiError.js";
+import { logger } from "../lib/logger.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { upsertAuthenticatedUser } from "../store/memoryStore.js";
 
@@ -256,11 +257,14 @@ export async function googleAuthHandler(req: Request, res: Response): Promise<vo
       return;
     }
 
+    logger.warn("Unexpected Google auth verification error", {
+      error,
+    });
     sendApiError(
       res,
       401,
       "INVALID_GOOGLE_TOKEN",
-      error instanceof Error ? error.message : "Invalid Google token."
+      "Invalid Google token."
     );
   }
 }

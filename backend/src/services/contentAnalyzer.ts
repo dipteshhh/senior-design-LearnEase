@@ -1,10 +1,4 @@
 import OpenAI from "openai";
-import {
-  APIConnectionError,
-  APIConnectionTimeoutError,
-  APIError,
-  RateLimitError,
-} from "openai/error";
 import type {
   DocumentType,
   StudyGuide,
@@ -17,21 +11,23 @@ import {
   validateStudyGuideAgainstDocument,
 } from "./outputValidator.js";
 import type { FileType } from "../store/memoryStore.js";
+import { logger } from "../lib/logger.js";
+import { readEnvInt } from "../lib/env.js";
+import {
+  classifyGenerationError,
+  computeTransientBackoffMs,
+  getGenerationPolicy,
+  selectModelForAttempt,
+  sleepMs,
+} from "./generationReliability.js";
+import {
+  buildCitationRequirements,
+  buildRepairHint,
+  normalizeUpstreamError,
+} from "./generationServiceUtils.js";
 
 const DEFAULT_OPENAI_TIMEOUT_MS = 30000;
 const DEFAULT_OPENAI_MAX_RETRIES = 2;
-
-function readEnvInt(name: string, defaultValue: number, minValue: number): number {
-  const raw = process.env[name];
-  if (!raw) return defaultValue;
-
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < minValue) {
-    return defaultValue;
-  }
-
-  return Math.floor(parsed);
-}
 
 function getOpenAiTimeoutMs(): number {
   return readEnvInt("OPENAI_TIMEOUT_MS", DEFAULT_OPENAI_TIMEOUT_MS, 1000);
@@ -133,76 +129,6 @@ export function normalizeModelOutput(obj: unknown): unknown {
   return result;
 }
 
-function buildCitationRequirements(metadata: AnalysisMetadata): string {
-  if (metadata.fileType === "PDF") {
-    const maxPage = Math.max(1, metadata.pageCount);
-    return `Citation requirements for this document:
-- Document file type is PDF.
-- You MUST use only PDF citations: { "source_type": "pdf", "page": number, "excerpt": string }.
-- "page" MUST be an integer between 1 and ${maxPage}.
-- NEVER use DOCX citation fields (anchor_type, paragraph).`;
-  }
-
-  const maxParagraph = Math.max(1, metadata.paragraphCount ?? 1);
-  return `Citation requirements for this document:
-- Document file type is DOCX.
-- You MUST use only DOCX citations: { "source_type": "docx", "anchor_type": "paragraph", "paragraph": number, "excerpt": string }.
-- "paragraph" MUST be an integer between 1 and ${maxParagraph}.
-- NEVER use PDF citation fields (page).`;
-}
-
-function buildRepairHint(error: unknown): string {
-  if (!(error instanceof ContractValidationError)) {
-    return "";
-  }
-
-  const details = error.details ? JSON.stringify(error.details) : "{}";
-  return `The previous output was rejected.
-Error code: ${error.code}
-Error message: ${error.message}
-Validation details: ${details}
-
-Regenerate the entire JSON and fix these issues exactly.`;
-}
-
-function normalizeUpstreamError(error: unknown): unknown {
-  if (error instanceof ContractValidationError) {
-    return error;
-  }
-
-  if (error instanceof APIConnectionTimeoutError) {
-    return new ContractValidationError(
-      "GENERATION_FAILED",
-      "OpenAI request timed out."
-    );
-  }
-
-  if (error instanceof APIConnectionError) {
-    return new ContractValidationError(
-      "GENERATION_FAILED",
-      "OpenAI service is temporarily unavailable."
-    );
-  }
-
-  if (error instanceof RateLimitError) {
-    return new ContractValidationError(
-      "GENERATION_FAILED",
-      "OpenAI rate limit reached. Retry generation."
-    );
-  }
-
-  if (error instanceof APIError) {
-    return new ContractValidationError(
-      "GENERATION_FAILED",
-      error.status && error.status >= 500
-        ? "OpenAI service error. Retry generation."
-        : "OpenAI request failed."
-    );
-  }
-
-  return error;
-}
-
 export async function analyzeDocument(
   text: string,
   providedDocumentType: DocumentType | undefined,
@@ -233,14 +159,20 @@ export async function analyzeDocument(
     prompt += `\n\nADDITIONAL RESTRICTIONS:\n${restrictions.map((r) => `- ${r}`).join("\n")}`;
   }
 
-  const citationRequirements = buildCitationRequirements(metadata);
+  const citationRequirements = buildCitationRequirements(metadata, {
+    useMustLanguage: true,
+  });
+  const generationPolicy = getGenerationPolicy();
   let lastError: unknown = null;
   let repairHint = "";
+  let previousFailureBucket: "transient" | "repairable" | "terminal" | null = null;
 
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= generationPolicy.maxAttempts; attempt += 1) {
+    const model = selectModelForAttempt(generationPolicy, attempt, previousFailureBucket);
+    const startedAt = Date.now();
     try {
       const response = await client.chat.completions.create({
-        model: "gpt-4o-mini",
+        model,
         messages: [
           {
             role: "system",
@@ -256,7 +188,7 @@ export async function analyzeDocument(
         ],
         response_format: { type: "json_object" },
         max_tokens: 8192,
-        temperature: 0.2,
+        temperature: 0,
       });
 
       const content = response.choices[0]?.message?.content ?? "{}";
@@ -289,13 +221,45 @@ export async function analyzeDocument(
         paragraphCount: metadata.paragraphCount,
       });
 
+      logger.info("Study guide generation attempt succeeded", {
+        attempt,
+        maxAttempts: generationPolicy.maxAttempts,
+        model,
+        durationMs: Date.now() - startedAt,
+      });
+
       return validated.data satisfies StudyGuide;
     } catch (error) {
       const normalizedError = normalizeUpstreamError(error);
+      const failureBucket = classifyGenerationError(error, normalizedError);
+      const contractCode =
+        normalizedError instanceof ContractValidationError ? normalizedError.code : null;
+      const durationMs = Date.now() - startedAt;
+
+      logger.warn("Study guide generation attempt failed", {
+        attempt,
+        maxAttempts: generationPolicy.maxAttempts,
+        model,
+        failureBucket,
+        errorCode: contractCode,
+        durationMs,
+        error: normalizedError,
+      });
+
       lastError = normalizedError;
-      if (attempt < 3) {
-        repairHint = buildRepairHint(normalizedError);
+      previousFailureBucket = failureBucket;
+
+      if (attempt >= generationPolicy.maxAttempts || failureBucket === "terminal") {
+        break;
       }
+
+      if (failureBucket === "repairable") {
+        repairHint = buildRepairHint(normalizedError);
+        continue;
+      }
+
+      const backoffMs = computeTransientBackoffMs(attempt, generationPolicy);
+      await sleepMs(backoffMs);
     }
   }
 
