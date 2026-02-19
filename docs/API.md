@@ -1,10 +1,22 @@
 # LearnEase — API Contract (Source of Truth)
 
-All routes require authentication (see `docs/AUTH.md`) **except** the public auth routes below.
+All routes require authentication (see `docs/AUTH.md`) **except** `GET /health` and the public auth routes below.
 
 All errors MUST follow `docs/API_ERRORS.md`.
 
 Create and retry endpoints return generation status only. Cached Study Guide/Quiz JSON is fetched from the corresponding `GET` endpoints.
+
+---
+
+## GET /health (public — no session required)
+
+Health check endpoint for uptime/readiness probes.
+
+Response:
+- `200`
+```json
+{ "status": "ok" }
+```
 
 ---
 
@@ -86,7 +98,7 @@ Request:
 - `file`: PDF or DOCX
 
 Notes:
-- Max upload size defaults to `10MB` and can be configured with `UPLOAD_MAX_FILE_SIZE_MB`.
+- Max upload size defaults to `50MB` and can be configured with `UPLOAD_MAX_FILE_SIZE_MB`.
 
 Responses:
 - `201`

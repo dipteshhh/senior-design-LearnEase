@@ -16,6 +16,7 @@ import {
   uploadDocumentHandler,
 } from "./routes/contract.js";
 import { googleAuthHandler, logoutHandler, meHandler } from "./routes/auth.js";
+import { healthHandler } from "./routes/health.js";
 import {
   upload,
   handleMulterError,
@@ -114,7 +115,8 @@ app.use(requestLogger);
 app.use(apiLimiter);
 app.use(express.json({ limit: "10mb" }));
 
-// Public auth routes (no session required)
+// Public routes (no session required)
+app.get("/health", healthHandler);
 app.post("/api/auth/google", googleAuthHandler);
 app.post("/api/auth/logout", logoutHandler);
 

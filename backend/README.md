@@ -33,8 +33,9 @@ Default local URL: `http://localhost:3001`
 
 ## Implemented Routes
 
-### Public auth routes
+### Public routes
 
+- `GET /health`
 - `POST /api/auth/google`
 - `POST /api/auth/logout`
 
@@ -76,7 +77,7 @@ Default local URL: `http://localhost:3001`
 - `RETENTION_DAYS` (default `30`)
 - `RATE_LIMIT_MAX` (requests per minute per IP for non-polling routes; default `30`)
 - `RATE_LIMIT_POLL_MAX` (requests per minute per IP for polling-style `GET /api/documents`, `GET /api/study-guide/:id`, and `GET /api/quiz/:id`; default `120`)
-- `UPLOAD_MAX_FILE_SIZE_MB` (upload size limit in MB for `POST /api/upload`; default `10`)
+- `UPLOAD_MAX_FILE_SIZE_MB` (upload size limit in MB for `POST /api/upload`; default `50`)
 - `SESSION_MAX_AGE_SECONDS` (default `604800`)
 - `FILE_ENCRYPTION_KEY` (required for artifact encryption)
 - `ALLOW_LEGACY_UNENCRYPTED_ARTIFACTS` (`false` by default; set `true` only during one-time migration from plaintext artifacts)

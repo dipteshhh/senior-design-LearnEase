@@ -7,7 +7,7 @@ const ALLOWED_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
 
-const DEFAULT_MAX_FILE_SIZE_MB = 10;
+const DEFAULT_MAX_FILE_SIZE_MB = 50;
 
 function readUploadMaxFileSizeMb(): number {
   const raw = process.env.UPLOAD_MAX_FILE_SIZE_MB?.trim();

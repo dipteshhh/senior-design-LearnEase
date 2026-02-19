@@ -1,6 +1,6 @@
 # LearnEase — Authentication Contract
 
-All API routes require an authenticated user **except** the public auth routes (`POST /api/auth/google`, `POST /api/auth/logout`).
+All API routes require an authenticated user **except** the public routes (`GET /health`, `POST /api/auth/google`, `POST /api/auth/logout`).
 
 Authentication uses **Google OAuth**. The backend provides a token exchange endpoint.
 
