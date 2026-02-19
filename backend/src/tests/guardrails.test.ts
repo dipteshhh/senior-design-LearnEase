@@ -47,7 +47,7 @@ test("LECTURE without guidance mode has no restrictions", () => {
 
 test("getPolicy returns correct allowedOutputs for each type", () => {
   const hw = getPolicy("HOMEWORK");
-  assert.ok(hw.allowedOutputs.includes("hints"));
+  assert.equal(hw.allowedOutputs.includes("overview"), true);
   assert.equal(hw.guidanceMode, true);
 
   const lecture = getPolicy("LECTURE");
@@ -59,5 +59,6 @@ test("getPolicy returns correct allowedOutputs for each type", () => {
 
   const unsupported = getPolicy("UNSUPPORTED");
   assert.equal(unsupported.guidanceMode, true);
+  assert.deepEqual(unsupported.allowedOutputs, ["overview"]);
   assert.ok(unsupported.restrictions.length > 0);
 });

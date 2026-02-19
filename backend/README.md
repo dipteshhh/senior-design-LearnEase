@@ -76,6 +76,7 @@ Default local URL: `http://localhost:3001`
 - `UPLOAD_MAX_FILE_SIZE_MB` (upload size limit in MB for `POST /api/upload`; default `10`)
 - `SESSION_MAX_AGE_SECONDS` (default `604800`)
 - `FILE_ENCRYPTION_KEY` (required for artifact encryption)
+- `ALLOW_LEGACY_UNENCRYPTED_ARTIFACTS` (`false` by default; set `true` only during one-time migration from plaintext artifacts)
 - `SESSION_SECRET` (required for signed session cookies)
 - `ALLOW_LEGACY_AUTH_COOKIES` (`false` by default; only honored when `NODE_ENV=test`)
 - `CORS_ORIGINS` (comma-separated allowlist; required in production)

@@ -6,6 +6,7 @@ export type ValidationErrorCode =
   | "QUOTE_NOT_FOUND"
   | "CITATION_EXCERPT_NOT_FOUND"
   | "CITATION_OUT_OF_RANGE"
+  | "ACADEMIC_INTEGRITY_VIOLATION"
   | "DOCUMENT_NOT_LECTURE"
   | "GENERATION_FAILED";
 
@@ -31,6 +32,22 @@ interface ValidationContext {
   paragraphCount: number | null;
   normalizedText: string;
 }
+
+interface IntegrityPattern {
+  pattern: RegExp;
+  reason: string;
+}
+
+const ACADEMIC_INTEGRITY_PATTERNS: IntegrityPattern[] = [
+  { pattern: /\bthe answer is\b/i, reason: 'contains "the answer is"' },
+  { pattern: /\bfinal answer\b/i, reason: 'contains "final answer"' },
+  { pattern: /\bcorrect answer\b/i, reason: 'contains "correct answer"' },
+  { pattern: /\bcorrect option\b/i, reason: 'contains "correct option"' },
+  { pattern: /\bchoose option [a-d]\b/i, reason: "selects a specific option as correct" },
+  { pattern: /\bstep[- ]by[- ]step\b/i, reason: 'contains "step-by-step" guidance' },
+  { pattern: /\bhere(?:'s| is) how to solve\b/i, reason: 'contains "how to solve" guidance' },
+  { pattern: /\bsolution:\b/i, reason: 'contains explicit "solution:" output' },
+];
 
 export interface ValidationInput {
   text: string;
@@ -158,6 +175,52 @@ function validateExtractionItems(
   });
 }
 
+function assertNoAnswerLeakage(text: string, path: string): void {
+  const normalized = normalizeDocumentText(text, "DOCX");
+  if (!normalized) return;
+
+  for (const rule of ACADEMIC_INTEGRITY_PATTERNS) {
+    if (rule.pattern.test(normalized)) {
+      throw new ContractValidationError(
+        "ACADEMIC_INTEGRITY_VIOLATION",
+        "Generated content appears to provide answers or solving guidance.",
+        {
+          path,
+          reason: rule.reason,
+        }
+      );
+    }
+  }
+}
+
+function validateNoAnswerLeakage(studyGuide: StudyGuide): void {
+  assertNoAnswerLeakage(studyGuide.overview.summary, "overview.summary");
+
+  studyGuide.key_actions.forEach((item, index) => {
+    assertNoAnswerLeakage(item.label, `key_actions[${index}].label`);
+  });
+  studyGuide.checklist.forEach((item, index) => {
+    assertNoAnswerLeakage(item.label, `checklist[${index}].label`);
+  });
+  studyGuide.important_details.dates.forEach((item, index) => {
+    assertNoAnswerLeakage(item.label, `important_details.dates[${index}].label`);
+  });
+  studyGuide.important_details.policies.forEach((item, index) => {
+    assertNoAnswerLeakage(item.label, `important_details.policies[${index}].label`);
+  });
+  studyGuide.important_details.contacts.forEach((item, index) => {
+    assertNoAnswerLeakage(item.label, `important_details.contacts[${index}].label`);
+  });
+  studyGuide.important_details.logistics.forEach((item, index) => {
+    assertNoAnswerLeakage(item.label, `important_details.logistics[${index}].label`);
+  });
+
+  studyGuide.sections.forEach((section, index) => {
+    assertNoAnswerLeakage(section.title, `sections[${index}].title`);
+    assertNoAnswerLeakage(section.content, `sections[${index}].content`);
+  });
+}
+
 export function validateStudyGuideAgainstDocument(
   studyGuide: StudyGuide,
   input: ValidationInput
@@ -199,6 +262,8 @@ export function validateStudyGuideAgainstDocument(
       );
     });
   });
+
+  validateNoAnswerLeakage(studyGuide);
 }
 
 function validateQuestionDocumentType(documentType: DocumentType): void {

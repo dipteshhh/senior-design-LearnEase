@@ -5,19 +5,24 @@
  * Or with debug output:
  *   DEBUG=1 npm run test:integration
  *
- * Skipped automatically unless RUN_INTEGRATION=true (for CI gating).
+ * Runs only when RUN_INTEGRATION=true and OPENAI_API_KEY are set.
  */
 import "dotenv/config";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-if (process.env.RUN_INTEGRATION !== "true" && !process.env.OPENAI_API_KEY) {
-  test("integration tests skipped (set RUN_INTEGRATION=true and OPENAI_API_KEY to run)", { skip: true }, () => {});
+if (process.env.RUN_INTEGRATION !== "true") {
+  test("integration tests skipped (set RUN_INTEGRATION=true to run)", { skip: true }, () => {});
   process.exit(0);
 }
 
-const { analyzeDocument } = await import("../services/contentAnalyzer.js");
-const { StudyGuide: StudyGuideSchema } = await import("../schemas/analyze.js");
+if (!process.env.OPENAI_API_KEY) {
+  test("integration tests skipped (set OPENAI_API_KEY when RUN_INTEGRATION=true)", { skip: true }, () => {});
+  process.exit(0);
+}
+
+const { analyzeDocument } = await import("../../services/contentAnalyzer.js");
+const { StudyGuide: StudyGuideSchema } = await import("../../schemas/analyze.js");
 
 const SAMPLE_SYLLABUS = `
 Course Syllabus – Introduction to Computer Science (CS 101)

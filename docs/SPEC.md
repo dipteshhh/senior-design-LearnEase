@@ -86,7 +86,9 @@ OpenAI calls may occur ONLY when the user explicitly triggers:
 - Create Study Guide
 - Test Your Knowledge (Quiz)
 
-No background OpenAI generation jobs.
+In-process async continuation after a user-triggered `POST /create` or `POST /retry` is allowed.
+For example, returning `202` and continuing generation in the same running API process is valid.
+No autonomous/background schedulers are allowed for generation (no cron, queue workers, daemons, or page-load-triggered generation).
 No calls on page load.
 `202` responses represent user-triggered processing start, not autonomous cron/queue execution.
 

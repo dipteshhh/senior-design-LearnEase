@@ -1,14 +1,14 @@
 import type { DocumentType } from "../schemas/analyze.js";
 
 export interface DocumentPolicy {
-  allowedOutputs: ("overview" | "tasks" | "checklist" | "requirements" | "hints")[];
+  allowedOutputs: ("overview" | "tasks" | "checklist" | "requirements")[];
   guidanceMode: boolean;
   restrictions: string[];
 }
 
 const policies: Record<DocumentType, DocumentPolicy> = {
   HOMEWORK: {
-    allowedOutputs: ["overview", "tasks", "checklist", "requirements", "hints"],
+    allowedOutputs: ["overview", "tasks", "checklist", "requirements"],
     guidanceMode: true,
     restrictions: [
       "No direct answers to questions",
@@ -28,7 +28,7 @@ const policies: Record<DocumentType, DocumentPolicy> = {
     restrictions: [],
   },
   UNSUPPORTED: {
-    allowedOutputs: ["overview", "hints"],
+    allowedOutputs: ["overview"],
     guidanceMode: true,
     restrictions: ["Guidance only until document type confirmed"],
   },

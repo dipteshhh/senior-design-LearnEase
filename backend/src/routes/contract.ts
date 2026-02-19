@@ -148,6 +148,8 @@ function toPublicErrorMessage(errorCode: string | null): string | null {
     case "CITATION_EXCERPT_NOT_FOUND":
     case "CITATION_OUT_OF_RANGE":
       return "Generated output failed validation. Retry generation.";
+    case "ACADEMIC_INTEGRITY_VIOLATION":
+      return "Generated output violated academic integrity guardrails. Retry generation.";
     case "DOCUMENT_UNSUPPORTED":
       return "Document type is not supported for generation.";
     case "DOCUMENT_NOT_LECTURE":

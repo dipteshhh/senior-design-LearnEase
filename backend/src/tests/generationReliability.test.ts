@@ -26,6 +26,14 @@ test("classifyGenerationError marks schema failures as repairable", () => {
   assert.equal(classifyGenerationError(error), "repairable");
 });
 
+test("classifyGenerationError marks integrity violations as repairable", () => {
+  const error = new ContractValidationError(
+    "ACADEMIC_INTEGRITY_VIOLATION",
+    "Model produced answer-like content."
+  );
+  assert.equal(classifyGenerationError(error), "repairable");
+});
+
 test("classifyGenerationError marks generation failures as transient", () => {
   const error = new ContractValidationError("GENERATION_FAILED", "Provider timeout.");
   assert.equal(classifyGenerationError(error), "transient");

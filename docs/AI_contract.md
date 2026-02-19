@@ -11,7 +11,8 @@ If there is any conflict, **this contract wins** for model behavior.
 If it is not explicitly stated in the project docs, **DO NOT invent it**.
 
 - Do not add new endpoints, fields, tables, or features that are not documented.
-- Do not add background jobs for OpenAI generation flows.
+- Do not add autonomous background jobs for OpenAI generation flows (no cron/queue/daemon orchestration).
+- In-process async continuation after a user-triggered create/retry request is allowed (for example, returning `202` and finishing generation in the same running API process).
 - Do not change schemas unless you also update the docs that define them.
 - If a required detail is missing, return an error that asks the user/dev to add the missing spec detail.
 

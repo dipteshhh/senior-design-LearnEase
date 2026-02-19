@@ -243,3 +243,30 @@ test("validateStudyGuideAgainstDocument rejects source_type mismatch", () => {
     }
   );
 });
+
+test("validateStudyGuideAgainstDocument rejects solver-style section content", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        content: "Step-by-step: the answer is option A.",
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text: "Review the weekly schedule before class.",
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "ACADEMIC_INTEGRITY_VIOLATION");
+      return true;
+    }
+  );
+});

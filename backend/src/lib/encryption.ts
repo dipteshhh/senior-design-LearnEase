@@ -5,6 +5,8 @@ import path from "path";
 const MAGIC = Buffer.from("LE1");
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
+const ALLOW_LEGACY_UNENCRYPTED_ARTIFACTS_ENV =
+  "ALLOW_LEGACY_UNENCRYPTED_ARTIFACTS";
 
 let cachedKey: Buffer | null = null;
 
@@ -43,6 +45,10 @@ function getEncryptionKey(): Buffer {
   return cachedKey;
 }
 
+function allowsLegacyUnencryptedArtifacts(): boolean {
+  return process.env[ALLOW_LEGACY_UNENCRYPTED_ARTIFACTS_ENV] === "true";
+}
+
 export function encryptBuffer(input: Buffer): Buffer {
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv("aes-256-gcm", getEncryptionKey(), iv);
@@ -57,9 +63,14 @@ export function decryptBuffer(input: Buffer): Buffer {
     input.length > MAGIC.length + IV_LENGTH + TAG_LENGTH &&
     input.subarray(0, MAGIC.length).equals(MAGIC);
 
-  // Backward compatibility for artifacts written before encryption was enabled.
+  // Legacy compatibility is opt-in for migration only.
   if (!hasEnvelope) {
-    return input;
+    if (allowsLegacyUnencryptedArtifacts()) {
+      return input;
+    }
+    throw new Error(
+      "Artifact is not encrypted with LearnEase envelope. Set ALLOW_LEGACY_UNENCRYPTED_ARTIFACTS=true only for migration."
+    );
   }
 
   const ivStart = MAGIC.length;
@@ -96,4 +107,3 @@ export function readEncryptedBuffer(filePath: string): Buffer {
 export function readEncryptedText(filePath: string): string {
   return readEncryptedBuffer(filePath).toString("utf8");
 }
-

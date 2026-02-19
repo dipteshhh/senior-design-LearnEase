@@ -29,6 +29,7 @@ const REPAIRABLE_CODES = new Set([
   "QUOTE_NOT_FOUND",
   "CITATION_EXCERPT_NOT_FOUND",
   "CITATION_OUT_OF_RANGE",
+  "ACADEMIC_INTEGRITY_VIOLATION",
 ]);
 
 export function getGenerationPolicy(): GenerationPolicy {
