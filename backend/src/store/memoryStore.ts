@@ -781,6 +781,33 @@ export function deleteDocumentById(documentId: string): boolean {
   return true;
 }
 
+export function getChecklistCompletion(
+  documentId: string
+): Record<string, boolean> {
+  const rows = db
+    .prepare(
+      `
+        SELECT id, completed
+        FROM checklist_items
+        WHERE document_id = ?
+      `
+    )
+    .all(documentId) as Array<{ id: string; completed: number }>;
+
+  const result: Record<string, boolean> = {};
+  for (const row of rows) {
+    const logicalId = toLogicalChecklistId(documentId, row.id);
+    result[logicalId] = row.completed === 1;
+  }
+  return result;
+}
+
+export function getDocumentMetadata(documentId: string): DocumentRecord | undefined {
+  const row = readDocumentRowById(documentId);
+  if (!row) return undefined;
+  return hydrateDocument(row, { includeExtractedText: false });
+}
+
 export function updateChecklistItem(
   documentId: string,
   itemId: string,

@@ -155,6 +155,41 @@ Errors:
 
 ---
 
+## GET /api/documents/:documentId
+
+Fetch a single document's metadata by ID.
+
+Response:
+- `200`
+```json
+{
+  "id": "uuid",
+  "filename": "hw1.pdf",
+  "document_type": "HOMEWORK | LECTURE | SYLLABUS | UNSUPPORTED",
+  "status": "uploaded | processing | ready | failed",
+  "study_guide_status": "idle | processing | ready | failed",
+  "quiz_status": "idle | processing | ready | failed",
+  "page_count": 5,
+  "uploaded_at": "timestamp",
+  "error_code": "... | null",
+  "error_message": "safe user-facing message | null",
+  "has_study_guide": true,
+  "has_quiz": false
+}
+```
+
+Notes:
+- Same shape as individual items in `GET /api/documents` response.
+- Preferred over listing all documents when only one document's status is needed (e.g., polling during generation).
+
+Errors:
+- `401` unauthorized
+- `403` not owner
+- `404` document not found
+- `422` malformed `documentId` (must be UUID)
+
+---
+
 ## DELETE /api/documents/:documentId
 
 Delete one document owned by the authenticated user.
@@ -242,10 +277,29 @@ Async failures surface via document status polling (see create endpoint above).
 
 ## GET /api/study-guide/:documentId
 
-Fetch cached Study Guide JSON.
+Fetch cached Study Guide JSON with checklist completion state.
 
 Response:
-- `200` returns `StudyGuide` object exactly as defined in `docs/SCHEMAS.md`
+- `200` returns `StudyGuide` object as defined in `docs/SCHEMAS.md`, plus `checklist_completion`:
+```json
+{
+  "overview": { ... },
+  "key_actions": [ ... ],
+  "checklist": [ ... ],
+  "important_details": { ... },
+  "sections": [ ... ],
+  "checklist_completion": {
+    "item-id-1": true,
+    "item-id-2": false
+  }
+}
+```
+
+Notes:
+- `checklist_completion` is a map of checklist item `id` to `boolean` completion status.
+- Keys correspond to `id` fields in the `checklist` array.
+- Items not present in the map should be treated as `false` (not completed).
+- Completion state is persisted server-side via `PATCH /api/checklist/:documentId`.
 
 Errors:
 - `401` unauthorized

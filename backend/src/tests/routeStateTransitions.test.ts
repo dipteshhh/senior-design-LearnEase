@@ -24,7 +24,12 @@ process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
 const sqlite = await import("../db/sqlite.js");
 sqlite.initializeDatabase();
 
-import { saveDocument, getDocument, updateDocument } from "../store/memoryStore.js";
+import {
+  saveDocument,
+  getDocument,
+  updateChecklistItem as updateChecklistItemStore,
+  updateDocument,
+} from "../store/memoryStore.js";
 import type { DocumentRecord } from "../store/memoryStore.js";
 
 type MockReq = {
@@ -251,6 +256,89 @@ test("listDocumentsHandler returns per-flow statuses for each document", async (
   assert.ok(item, "expected seeded document in list response");
   assert.equal(item.study_guide_status, "processing");
   assert.equal(item.quiz_status, "failed");
+});
+
+test("getDocumentHandler returns metadata for owned document", async () => {
+  const { getDocumentHandler } = await loadHandlers();
+  const doc = seedDocument({
+    studyGuideStatus: "ready",
+    quizStatus: "failed",
+    quizErrorCode: "QUIZ:GENERATION_FAILED",
+    quizErrorMessage: "Quiz failed",
+  });
+  const req: MockReq = {
+    params: { documentId: doc.id },
+    auth: { userId: "test-user", email: "test@example.com" },
+  };
+  const res = makeRes();
+
+  await getDocumentHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 200);
+  const body = res.body as Record<string, unknown>;
+  assert.equal(body.id, doc.id);
+  assert.equal(body.filename, doc.filename);
+  assert.equal(body.study_guide_status, "ready");
+  assert.equal(body.quiz_status, "failed");
+});
+
+test("getDocumentHandler returns 403 for non-owner", async () => {
+  const { getDocumentHandler } = await loadHandlers();
+  const doc = seedDocument();
+  const req: MockReq = {
+    params: { documentId: doc.id },
+    auth: { userId: "other-user", email: "other@example.com" },
+  };
+  const res = makeRes();
+
+  await getDocumentHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 403);
+});
+
+test("getStudyGuideHandler includes checklist_completion state", async () => {
+  const { getStudyGuideHandler } = await loadHandlers();
+  const fakeGuide = {
+    overview: { title: "T", document_type: "LECTURE", summary: "S" },
+    key_actions: [],
+    checklist: [
+      {
+        id: "item-1",
+        label: "Read section 1",
+        supporting_quote: "Read section 1 before class.",
+        citations: [
+          { source_type: "pdf", page: 1, excerpt: "Read section 1 before class." },
+        ],
+      },
+    ],
+    important_details: { dates: [], policies: [], contacts: [], logistics: [] },
+    sections: [
+      {
+        id: "sec-1",
+        title: "Section 1",
+        content: "Read section 1 before class.",
+        citations: [
+          { source_type: "pdf", page: 1, excerpt: "Read section 1 before class." },
+        ],
+      },
+    ],
+  };
+  const doc = seedDocument({ studyGuide: fakeGuide as any, studyGuideStatus: "ready" });
+  const updated = updateChecklistItemStore(doc.id, "item-1", true);
+  assert.equal(updated, true);
+
+  const req: MockReq = {
+    params: { documentId: doc.id },
+    auth: { userId: "test-user", email: "test@example.com" },
+  };
+  const res = makeRes();
+
+  await getStudyGuideHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 200);
+  const body = res.body as Record<string, unknown>;
+  const checklistCompletion = body.checklist_completion as Record<string, boolean>;
+  assert.equal(checklistCompletion["item-1"], true);
 });
 
 test("deleteDocumentHandler deletes an owned document", async () => {

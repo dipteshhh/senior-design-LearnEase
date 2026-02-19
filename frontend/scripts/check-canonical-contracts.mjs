@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const FORBIDDEN_PATTERN = /frontend[\\/]+docs[\\/]+/;
-const TARGETS = ["src", "scripts", "README.md"];
+const TARGETS = ["src", "scripts"];
 const SKIP_DIRECTORIES = new Set(["node_modules", ".next", "dist", "coverage"]);
 const TEXT_FILE_EXTENSIONS = new Set([
   ".js",

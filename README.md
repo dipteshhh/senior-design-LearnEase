@@ -70,11 +70,11 @@ Tabs are shown or hidden based on document type and extracted content.
 
 ---
 
-### 🎯 Focus Mode (Lecture Documents Only)
+### 🎯 Focus Mode
 
 - Displays one section at a time
 - Provides a distraction-free reading experience
-- Hidden for homework and syllabus documents
+- Available wherever Study Guide sections are available
 
 ---
 

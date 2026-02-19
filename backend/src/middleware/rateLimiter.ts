@@ -19,7 +19,7 @@ function readRateLimitMax(name: string, defaultValue: number): number {
 
 function isPollingEndpoint(method: string, path: string): boolean {
   if (method !== "GET") return false;
-  return path === "/api/documents" || path.startsWith("/api/study-guide/") || path.startsWith("/api/quiz/");
+  return path.startsWith("/api/documents") || path.startsWith("/api/study-guide/") || path.startsWith("/api/quiz/");
 }
 
 const maxRequests = readRateLimitMax("RATE_LIMIT_MAX", DEFAULT_RATE_LIMIT_MAX);

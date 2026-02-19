@@ -18,7 +18,9 @@ import {
 import {
   deleteDocumentById,
   deleteDocumentsByUser,
+  getChecklistCompletion,
   getDocument,
+  getDocumentMetadata,
   listDocumentsByUser,
   saveDocument,
   updateChecklistItem,
@@ -302,6 +304,38 @@ export async function listDocumentsHandler(_req: Request, res: Response): Promis
   res.status(200).json(items);
 }
 
+export async function getDocumentHandler(req: Request, res: Response): Promise<void> {
+  const documentId = readDocumentIdParam(req, res);
+  if (!documentId) return;
+
+  const userId = getUserId(req);
+  const doc = getDocumentMetadata(documentId);
+  if (!doc) {
+    sendApiError(res, 404, "NOT_FOUND", "Document not found.");
+    return;
+  }
+  if (doc.userId !== userId) {
+    sendApiError(res, 403, "FORBIDDEN", "You do not own this document.");
+    return;
+  }
+
+  const publicErrorCode = normalizePublicErrorCode(doc.status, doc.errorCode);
+  res.status(200).json({
+    id: doc.id,
+    filename: doc.filename,
+    document_type: doc.documentType,
+    status: doc.status,
+    study_guide_status: doc.studyGuideStatus,
+    quiz_status: doc.quizStatus,
+    page_count: doc.pageCount,
+    uploaded_at: doc.uploadedAt,
+    error_code: publicErrorCode,
+    error_message: toPublicErrorMessage(publicErrorCode),
+    has_study_guide: doc.studyGuide !== null,
+    has_quiz: doc.quiz !== null,
+  });
+}
+
 export async function createStudyGuideHandler(req: Request, res: Response): Promise<void> {
   const documentId = readDocumentId(req, res);
   if (!documentId) return;
@@ -429,7 +463,12 @@ export async function getStudyGuideHandler(req: Request, res: Response): Promise
     );
     return;
   }
-  res.status(200).json(doc.studyGuide);
+
+  const checklistCompletion = getChecklistCompletion(documentId);
+  res.status(200).json({
+    ...doc.studyGuide,
+    checklist_completion: checklistCompletion,
+  });
 }
 
 export async function createQuizHandler(req: Request, res: Response): Promise<void> {

@@ -7,6 +7,7 @@ import {
   createStudyGuideHandler,
   deleteDocumentHandler,
   deleteUserDataHandler,
+  getDocumentHandler,
   getQuizHandler,
   getStudyGuideHandler,
   listDocumentsHandler,
@@ -127,6 +128,7 @@ app.get("/api/auth/me", meHandler);
 
 app.post("/api/upload", upload.single("file"), handleMulterError, uploadDocumentHandler);
 app.get("/api/documents", listDocumentsHandler);
+app.get("/api/documents/:documentId", getDocumentHandler);
 app.delete("/api/documents/:documentId", deleteDocumentHandler);
 
 app.post("/api/study-guide/create", createStudyGuideHandler);

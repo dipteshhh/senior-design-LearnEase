@@ -2,70 +2,17 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errorUx";
 
-type Mode = "key_concepts" | "action_items" | "focus_mode";
-
-const MODES: Array<{
-  id: Mode;
-  title: string;
-  desc: string;
-  badge?: string;
-}> = [
-  {
-    id: "key_concepts",
-    title: "Key concepts",
-    desc: "Extract main ideas and themes from your document.",
-  },
-  {
-    id: "action_items",
-    title: "Action items",
-    desc: "Identify tasks, deadlines, and requirements.",
-  },
-  {
-    id: "focus_mode",
-    title: "Focus mode",
-    desc: "Study one section at a time, distraction-free.",
-    badge: "Optional",
-  },
-];
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 const SUPPORTED_MIME_TYPES = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 
-interface ApiErrorPayload {
-  error?: {
-    code?: string;
-    message?: string;
-  };
-}
-
 interface UploadResponse {
   document_id?: string;
-}
-
-function getUploadErrorMessage(status: number, payload: ApiErrorPayload): string {
-  const code = payload.error?.code;
-  const message = payload.error?.message?.trim();
-
-  if (code === "FILE_TOO_LARGE") {
-    return "File is too large. Max size is 50MB.";
-  }
-  if (code === "UNSUPPORTED_MEDIA_TYPE" || status === 415) {
-    return "Only PDF and DOCX files are supported.";
-  }
-  if (status === 401) {
-    return "Please sign in before uploading a document.";
-  }
-  if (code === "EXTRACTION_FAILED") {
-    return "We could not process this file. Please try another file.";
-  }
-  return message && message.length > 0
-    ? message
-    : "Upload failed. Please try again.";
 }
 
 export default function UploadPage() {
@@ -74,7 +21,6 @@ export default function UploadPage() {
 
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [selectedMode, setSelectedMode] = useState<Mode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -133,18 +79,10 @@ export default function UploadPage() {
       const body = new FormData();
       body.append("file", file);
 
-      const response = await fetch(`${API_BASE_URL}/api/upload`, {
+      const payload = await api<UploadResponse>("/api/upload", {
         method: "POST",
         body,
-        credentials: "include",
       });
-
-      const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload & UploadResponse;
-
-      if (!response.ok) {
-        setError(getUploadErrorMessage(response.status, payload));
-        return;
-      }
 
       const documentId = payload.document_id;
       if (!documentId) {
@@ -153,14 +91,14 @@ export default function UploadPage() {
       }
 
       router.push(`/documents/${documentId}/processing`);
-    } catch {
-      setError("Unable to reach the backend. Check your connection and try again.");
+    } catch (error) {
+      setError(getErrorMessage(error, "Unable to upload right now. Please try again."));
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  const canContinue = Boolean(file && selectedMode) && !isSubmitting;
+  const canContinue = Boolean(file) && !isSubmitting;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-10">
@@ -254,46 +192,6 @@ export default function UploadPage() {
             🔒 Files are encrypted and auto-deleted after 30 days.
           </p>
         </div>
-      </div>
-
-      {/* Mode cards */}
-      <div className="mt-10 grid gap-5 md:grid-cols-3">
-        {MODES.map((m) => {
-          const active = selectedMode === m.id;
-          return (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => setSelectedMode(m.id)}
-              className={[
-                "group rounded-2xl border bg-white p-6 text-left transition",
-                active ? "border-black/60 shadow-sm" : "border-black/10 hover:border-black/30",
-              ].join(" ")}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="text-sm font-semibold">{m.title}</div>
-                {m.badge && (
-                  <span className="rounded-full border border-black/10 bg-black/[0.03] px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {m.badge}
-                  </span>
-                )}
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">{m.desc}</p>
-
-              <div className="mt-4 flex items-center gap-2 text-xs">
-                <span
-                  className={[
-                    "h-2 w-2 rounded-full",
-                    active ? "bg-green-500" : "bg-black/15 group-hover:bg-black/25",
-                  ].join(" ")}
-                />
-                <span className={active ? "text-black" : "text-muted-foreground"}>
-                  {active ? "Selected" : "Select"}
-                </span>
-              </div>
-            </button>
-          );
-        })}
       </div>
 
       {/* CTA */}

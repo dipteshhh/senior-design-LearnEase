@@ -64,7 +64,8 @@ Important:
   - `200 { status: "ready", cached: true }` (already generated)
 
 ### D. Poll until ready/failed
-- Poll `GET /api/documents` (or document-specific derived list lookup).
+- Poll `GET /api/documents/:documentId` for a single document's status.
+  - Preferred over `GET /api/documents` (which returns all documents) during generation polling.
 - Stop when `study_guide_status` is:
   - `ready` -> fetch full payload
   - `failed` -> show retry action with sanitized `error_message`
@@ -102,7 +103,7 @@ Important:
   - non-lecture docs return `422 DOCUMENT_NOT_LECTURE`
 
 ### Poll and fetch
-- Poll `GET /api/documents` until `quiz_status` is `ready` or `failed`
+- Poll `GET /api/documents/:documentId` until `quiz_status` is `ready` or `failed`
 - Fetch payload:
   - `GET /api/quiz/:documentId`
 - While status is still `processing`, `GET /api/quiz/:documentId` may return `404`.
@@ -113,9 +114,14 @@ Important:
 
 ## 5) Checklist (Study Guide Tab)
 
-- Update item completion:
-  - `PATCH /api/checklist/:documentId`
-  - body: `{ item_id, completed }`
+### Read checklist state
+- `GET /api/study-guide/:documentId` returns `checklist_completion` alongside the study guide payload.
+- `checklist_completion` is a `Record<string, boolean>` mapping checklist `id` to completion status.
+- Backend is the source of truth for checklist state. Do not rely on `localStorage`.
+
+### Update item completion
+- `PATCH /api/checklist/:documentId`
+- body: `{ item_id, completed }`
 - Success: `200 { success: true }`
 
 ## 6) Delete Flows
@@ -135,6 +141,7 @@ Important:
   - `RATE_LIMIT_MAX` for non-poll routes
   - `RATE_LIMIT_POLL_MAX` for polling routes:
     - `GET /api/documents`
+    - `GET /api/documents/:documentId`
     - `GET /api/study-guide/:id`
     - `GET /api/quiz/:id`
 - Handle `429 RATE_LIMITED` with short backoff and continue polling.
@@ -187,9 +194,7 @@ await api("/api/study-guide/create", {
 
 const poll = async () => {
   while (true) {
-    const docs = await api<any[]>("/api/documents");
-    const doc = docs.find((d) => d.id === document_id);
-    if (!doc) throw new Error("Document missing");
+    const doc = await api<any>(`/api/documents/${document_id}`);
     if (doc.study_guide_status === "ready") return;
     if (doc.study_guide_status === "failed") throw doc;
     await new Promise((r) => setTimeout(r, 1200));
