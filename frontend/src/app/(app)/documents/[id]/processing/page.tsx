@@ -145,6 +145,7 @@ export default function ProcessingPage() {
           nextDelayMs = transientDelayMs;
         } else {
           setError(getErrorMessage(err, "Unable to check generation status."));
+          return;
         }
       }
 
