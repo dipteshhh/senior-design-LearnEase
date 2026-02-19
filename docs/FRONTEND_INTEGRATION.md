@@ -11,6 +11,7 @@ Source-of-truth docs:
 ## 1) Base Rules
 
 - Backend base URL (local): `http://localhost:3001`
+- Public health probe endpoint: `GET /health` -> `{ "status": "ok" }`
 - All authenticated requests must include cookies:
   - `fetch(..., { credentials: "include" })`
 - Error shape is always:
@@ -41,6 +42,8 @@ Source-of-truth docs:
 
 ### A. Upload document
 - `POST /api/upload` (`multipart/form-data`, field name: `file`)
+- Accepted file types: PDF and DOCX only (no PPT/PPTX)
+- Max file size: 50MB
 - Success `201`:
   - `{ document_id, document_type, status: "uploaded" }`
 
@@ -147,8 +150,11 @@ Important:
   - missing document or payload not generated yet (depending on endpoint/flow)
 - `409 ALREADY_PROCESSING` / `ILLEGAL_RETRY_STATE`:
   - show current lifecycle state and disable invalid actions
+  - for `ALREADY_PROCESSING`, read `Retry-After` response header and wait that duration before re-trying
 - `422 DOCUMENT_UNSUPPORTED` / `DOCUMENT_NOT_LECTURE`:
   - show contextual guidance, disable invalid flow action
+- `GENERATION_FAILED` on failed documents:
+  - show "try again later" guidance when error message indicates temporary upstream unavailability (for example, repeated transient failures/circuit-breaker style protection)
 
 ## 9) Minimal Fetch Helpers
 

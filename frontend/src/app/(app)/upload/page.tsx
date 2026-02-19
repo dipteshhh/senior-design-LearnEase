@@ -29,6 +29,45 @@ const MODES: Array<{
   },
 ];
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+const SUPPORTED_MIME_TYPES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
+interface ApiErrorPayload {
+  error?: {
+    code?: string;
+    message?: string;
+  };
+}
+
+interface UploadResponse {
+  document_id?: string;
+}
+
+function getUploadErrorMessage(status: number, payload: ApiErrorPayload): string {
+  const code = payload.error?.code;
+  const message = payload.error?.message?.trim();
+
+  if (code === "FILE_TOO_LARGE") {
+    return "File is too large. Max size is 50MB.";
+  }
+  if (code === "UNSUPPORTED_MEDIA_TYPE" || status === 415) {
+    return "Only PDF and DOCX files are supported.";
+  }
+  if (status === 401) {
+    return "Please sign in before uploading a document.";
+  }
+  if (code === "EXTRACTION_FAILED") {
+    return "We could not process this file. Please try another file.";
+  }
+  return message && message.length > 0
+    ? message
+    : "Upload failed. Please try again.";
+}
+
 export default function UploadPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -37,9 +76,9 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [selectedMode, setSelectedMode] = useState<Mode | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const supportedHint = "PDF, PowerPoint • Up to 50MB";
-  const accept = ".pdf,.ppt,.pptx";
+  const accept = ".pdf,.docx";
 
   const fileLabel = useMemo(() => {
     if (!file) return null;
@@ -50,15 +89,15 @@ export default function UploadPage() {
   function validateAndSetFile(f: File) {
     setError(null);
 
-    const maxBytes = 50 * 1024 * 1024;
     const ext = f.name.split(".").pop()?.toLowerCase();
+    const hasValidExt = ext === "pdf" || ext === "docx";
+    const hasValidMime = f.type.length === 0 || SUPPORTED_MIME_TYPES.has(f.type);
 
-    const okExt = ext === "pdf" || ext === "ppt" || ext === "pptx";
-    if (!okExt) {
-      setError("Only PDF or PowerPoint files are supported.");
+    if (!hasValidExt || !hasValidMime) {
+      setError("Only PDF and DOCX files are supported.");
       return;
     }
-    if (f.size > maxBytes) {
+    if (f.size > MAX_FILE_SIZE_BYTES) {
       setError("File is too large. Max size is 50MB.");
       return;
     }
@@ -83,14 +122,45 @@ export default function UploadPage() {
   }
 
   async function onCreateSession() {
-    // For now: simulate creating a doc and navigating to it.
-    // Later: replace with real API call.
-  const fakeId = crypto.randomUUID();
-router.push(`/documents/${fakeId}/processing`);
+    if (!file) {
+      setError("Please choose a PDF or DOCX file first.");
+      return;
+    }
 
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+
+      const response = await fetch(`${API_BASE_URL}/api/upload`, {
+        method: "POST",
+        body,
+        credentials: "include",
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload & UploadResponse;
+
+      if (!response.ok) {
+        setError(getUploadErrorMessage(response.status, payload));
+        return;
+      }
+
+      const documentId = payload.document_id;
+      if (!documentId) {
+        setError("Upload succeeded but no document id was returned.");
+        return;
+      }
+
+      router.push(`/documents/${documentId}/processing`);
+    } catch {
+      setError("Unable to reach the backend. Check your connection and try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  const canContinue = Boolean(file && selectedMode);
+  const canContinue = Boolean(file && selectedMode) && !isSubmitting;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-10">
@@ -98,7 +168,7 @@ router.push(`/documents/${fakeId}/processing`);
       <div className="text-center">
         <h1 className="text-3xl font-semibold tracking-tight">Upload document</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Choose a PDF or PowerPoint file to transform into a personalized study guide.
+          Choose a PDF or DOCX file to transform into a personalized study guide.
         </p>
       </div>
 
@@ -158,7 +228,7 @@ router.push(`/documents/${fakeId}/processing`);
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-green-500" />
-              PowerPoint
+              DOCX files
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-green-500" />
@@ -239,7 +309,7 @@ router.push(`/documents/${fakeId}/processing`);
               : "cursor-not-allowed bg-black/10 text-black/40",
           ].join(" ")}
         >
-          Create study session
+          {isSubmitting ? "Uploading..." : "Create study session"}
         </button>
       </div>
     </div>

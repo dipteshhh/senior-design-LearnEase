@@ -6,14 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "check:contracts": "node scripts/check-canonical-contracts.mjs",
+    "lint": "npm run check:contracts && eslint"
   },
   "dependencies": {
     "lucide-react": "^0.563.0",
-    "mammoth": "^1.11.0",
-    "multer": "^2.0.2",
     "next": "16.1.5",
-    "pdf-parse": "^2.4.5",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
