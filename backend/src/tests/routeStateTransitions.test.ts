@@ -36,18 +36,25 @@ type MockReq = {
 type MockRes = {
   statusCode?: number;
   body?: unknown;
+  headers: Record<string, string>;
   status: (code: number) => MockRes;
   json: (payload: unknown) => MockRes;
+  setHeader: (name: string, value: string) => MockRes;
 };
 
 function makeRes(): MockRes {
   const res: MockRes = {
+    headers: {},
     status(code: number) {
       this.statusCode = code;
       return this;
     },
     json(payload: unknown) {
       this.body = payload;
+      return this;
+    },
+    setHeader(name: string, value: string) {
+      this.headers[name.toLowerCase()] = value;
       return this;
     },
   };
@@ -136,6 +143,19 @@ test("createStudyGuideHandler returns 409 when already processing", async () => 
   await createStudyGuideHandler(req as any, res as any);
 
   assert.equal(res.statusCode, 409);
+  assert.equal(res.headers["retry-after"], "5");
+});
+
+test("createQuizHandler returns 409 with Retry-After when already processing", async () => {
+  const { createQuizHandler } = await loadHandlers();
+  const doc = seedDocument({ quizStatus: "processing", documentType: "LECTURE" });
+  const req = makeAuthReq({ document_id: doc.id });
+  const res = makeRes();
+
+  await createQuizHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.headers["retry-after"], "5");
 });
 
 test("createStudyGuideHandler returns 200 cached when study guide exists", async () => {

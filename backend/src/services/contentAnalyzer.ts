@@ -14,9 +14,13 @@ import type { FileType } from "../store/memoryStore.js";
 import { logger } from "../lib/logger.js";
 import { readEnvInt } from "../lib/env.js";
 import {
+  assertCircuitBreakerAllowsGeneration,
   classifyGenerationError,
+  computeAttemptTimeoutMs,
   computeTransientBackoffMs,
   getGenerationPolicy,
+  isCircuitBreakerError,
+  recordGenerationOutcome,
   selectModelForAttempt,
   sleepMs,
 } from "./generationReliability.js";
@@ -28,6 +32,8 @@ import {
 
 const DEFAULT_OPENAI_TIMEOUT_MS = 30000;
 const DEFAULT_OPENAI_MAX_RETRIES = 2;
+const OPENAI_RETRY_TIMEOUT_MULTIPLIER = 1.5;
+const OPENAI_RETRY_TIMEOUT_CAP_MS = 60000;
 
 function getOpenAiTimeoutMs(): number {
   return readEnvInt("OPENAI_TIMEOUT_MS", DEFAULT_OPENAI_TIMEOUT_MS, 1000);
@@ -37,9 +43,11 @@ function getOpenAiMaxRetries(): number {
   return readEnvInt("OPENAI_MAX_RETRIES", DEFAULT_OPENAI_MAX_RETRIES, 0);
 }
 
+const openAiTimeoutMs = getOpenAiTimeoutMs();
+
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  timeout: getOpenAiTimeoutMs(),
+  timeout: openAiTimeoutMs,
   maxRetries: getOpenAiMaxRetries(),
 });
 
@@ -132,7 +140,8 @@ export function normalizeModelOutput(obj: unknown): unknown {
 export async function analyzeDocument(
   text: string,
   providedDocumentType: DocumentType | undefined,
-  metadata: AnalysisMetadata
+  metadata: AnalysisMetadata,
+  openAiClient: OpenAI = client
 ): Promise<StudyGuide> {
   const detection = detectDocumentType(text);
   const documentType = providedDocumentType ?? detection.documentType;
@@ -169,9 +178,17 @@ export async function analyzeDocument(
 
   for (let attempt = 1; attempt <= generationPolicy.maxAttempts; attempt += 1) {
     const model = selectModelForAttempt(generationPolicy, attempt, previousFailureBucket);
+    const requestTimeoutMs = computeAttemptTimeoutMs(
+      openAiTimeoutMs,
+      attempt,
+      OPENAI_RETRY_TIMEOUT_MULTIPLIER,
+      OPENAI_RETRY_TIMEOUT_CAP_MS
+    );
     const startedAt = Date.now();
     try {
-      const response = await client.chat.completions.create({
+      assertCircuitBreakerAllowsGeneration();
+
+      const response = await openAiClient.chat.completions.create({
         model,
         messages: [
           {
@@ -189,7 +206,7 @@ export async function analyzeDocument(
         response_format: { type: "json_object" },
         max_tokens: 8192,
         temperature: 0,
-      });
+      }, { timeout: requestTimeoutMs });
 
       const content = response.choices[0]?.message?.content ?? "{}";
 
@@ -220,11 +237,13 @@ export async function analyzeDocument(
         pageCount: metadata.pageCount,
         paragraphCount: metadata.paragraphCount,
       });
+      recordGenerationOutcome("success");
 
       logger.info("Study guide generation attempt succeeded", {
         attempt,
         maxAttempts: generationPolicy.maxAttempts,
         model,
+        timeoutMs: requestTimeoutMs,
         durationMs: Date.now() - startedAt,
       });
 
@@ -235,11 +254,17 @@ export async function analyzeDocument(
       const contractCode =
         normalizedError instanceof ContractValidationError ? normalizedError.code : null;
       const durationMs = Date.now() - startedAt;
+      const blockedByCircuitBreaker = isCircuitBreakerError(normalizedError);
+
+      if (!blockedByCircuitBreaker) {
+        recordGenerationOutcome(failureBucket);
+      }
 
       logger.warn("Study guide generation attempt failed", {
         attempt,
         maxAttempts: generationPolicy.maxAttempts,
         model,
+        timeoutMs: requestTimeoutMs,
         failureBucket,
         errorCode: contractCode,
         durationMs,
@@ -248,6 +273,10 @@ export async function analyzeDocument(
 
       lastError = normalizedError;
       previousFailureBucket = failureBucket;
+
+      if (blockedByCircuitBreaker) {
+        break;
+      }
 
       if (attempt >= generationPolicy.maxAttempts || failureBucket === "terminal") {
         break;

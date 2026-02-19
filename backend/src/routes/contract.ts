@@ -40,6 +40,7 @@ interface ChecklistBody {
 
 const UUID_V4_OR_V1_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ALREADY_PROCESSING_RETRY_AFTER_SECONDS = "5";
 
 function isUuid(value: string): boolean {
   return UUID_V4_OR_V1_REGEX.test(value);
@@ -163,6 +164,11 @@ function toPublicErrorMessage(errorCode: string | null): string | null {
     default:
       return "Generation failed. Retry generation.";
   }
+}
+
+function sendAlreadyProcessingError(res: Response, message: string): void {
+  res.setHeader("Retry-After", ALREADY_PROCESSING_RETRY_AFTER_SECONDS);
+  sendApiError(res, 409, "ALREADY_PROCESSING", message);
 }
 
 function isValidPdfSignature(fileBuffer: Buffer): boolean {
@@ -311,7 +317,7 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
     return;
   }
   if (doc.studyGuideStatus === "processing") {
-    sendApiError(res, 409, "ALREADY_PROCESSING", "Study guide is already processing.");
+    sendAlreadyProcessingError(res, "Study guide is already processing.");
     return;
   }
   if (doc.studyGuideStatus === "failed") {
@@ -365,7 +371,7 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
     return;
   }
   if (doc.studyGuideStatus === "processing") {
-    sendApiError(res, 409, "ALREADY_PROCESSING", "Study guide is already processing.");
+    sendAlreadyProcessingError(res, "Study guide is already processing.");
     return;
   }
   if (doc.studyGuideStatus !== "failed") {
@@ -441,7 +447,7 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
     return;
   }
   if (doc.quizStatus === "processing") {
-    sendApiError(res, 409, "ALREADY_PROCESSING", "Quiz is already processing.");
+    sendAlreadyProcessingError(res, "Quiz is already processing.");
     return;
   }
   if (doc.quizStatus === "failed") {
@@ -499,7 +505,7 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
     return;
   }
   if (doc.quizStatus === "processing") {
-    sendApiError(res, 409, "ALREADY_PROCESSING", "Quiz is already processing.");
+    sendAlreadyProcessingError(res, "Quiz is already processing.");
     return;
   }
   if (doc.quizStatus !== "failed") {
