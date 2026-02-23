@@ -20,17 +20,23 @@ Frontend integration must use root contract docs only:
 
 ## Run locally
 
-1) Install dependencies:
+1) Configure env:
+```bash
+cp .env.example .env.local
+# set NEXT_PUBLIC_GOOGLE_CLIENT_ID to your GIS client id
+```
+
+2) Install dependencies:
 ```bash
 npm install
 ```
 
-2) Run the dev server:
+3) Run the dev server:
 ```bash
 npm run dev
 ```
 
-3) Optional contract drift guard:
+4) Optional contract drift guard:
 ```bash
 npm run check:contracts
 ```

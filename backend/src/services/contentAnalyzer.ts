@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
 import type {
   DocumentType,
   StudyGuide,
@@ -104,6 +105,10 @@ interface AnalysisMetadata {
 }
 
 const VALID_DOCUMENT_TYPES = new Set(["HOMEWORK", "LECTURE", "SYLLABUS"]);
+const STUDY_GUIDE_RESPONSE_FORMAT = zodResponseFormat(
+  StudyGuideSchema,
+  "study_guide"
+);
 
 /**
  * The model sometimes returns a bare citation object instead of an array,
@@ -203,7 +208,7 @@ export async function analyzeDocument(
               `Document text:\n${text}`,
           },
         ],
-        response_format: { type: "json_object" },
+        response_format: STUDY_GUIDE_RESPONSE_FORMAT,
         max_tokens: 8192,
         temperature: 0,
       }, { timeout: requestTimeoutMs });

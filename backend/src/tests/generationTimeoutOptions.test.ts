@@ -40,14 +40,19 @@ function withRetryTestEnv(fn: () => Promise<void>): Promise<void> {
 test("analyzeDocument passes attempt-scaled timeout to OpenAI request options", async () => {
   await withRetryTestEnv(async () => {
     const capturedTimeouts: number[] = [];
+    const responseFormatTypes: string[] = [];
     let calls = 0;
 
     const fakeClient = {
       chat: {
         completions: {
-          async create(_params: unknown, options?: { timeout?: number }) {
+          async create(
+            params: { response_format?: { type?: string } },
+            options?: { timeout?: number }
+          ) {
             calls += 1;
             capturedTimeouts.push(options?.timeout ?? -1);
+            responseFormatTypes.push(params.response_format?.type ?? "missing");
 
             if (calls < 3) {
               throw new ContractValidationError("GENERATION_FAILED", "Transient upstream failure.");
@@ -106,20 +111,26 @@ test("analyzeDocument passes attempt-scaled timeout to OpenAI request options", 
     assert.equal(result.overview.document_type, "SYLLABUS");
     assert.equal(calls, 3);
     assert.deepEqual(capturedTimeouts, [30000, 45000, 60000]);
+    assert.deepEqual(responseFormatTypes, ["json_schema", "json_schema", "json_schema"]);
   });
 });
 
 test("generateQuiz passes attempt-scaled timeout to OpenAI request options", async () => {
   await withRetryTestEnv(async () => {
     const capturedTimeouts: number[] = [];
+    const responseFormatTypes: string[] = [];
     let calls = 0;
 
     const fakeClient = {
       chat: {
         completions: {
-          async create(_params: unknown, options?: { timeout?: number }) {
+          async create(
+            params: { response_format?: { type?: string } },
+            options?: { timeout?: number }
+          ) {
             calls += 1;
             capturedTimeouts.push(options?.timeout ?? -1);
+            responseFormatTypes.push(params.response_format?.type ?? "missing");
 
             if (calls < 3) {
               throw new ContractValidationError("GENERATION_FAILED", "Transient upstream failure.");
@@ -168,5 +179,6 @@ test("generateQuiz passes attempt-scaled timeout to OpenAI request options", asy
     assert.equal(result.document_id, "doc-123");
     assert.equal(calls, 3);
     assert.deepEqual(capturedTimeouts, [30000, 45000, 60000]);
+    assert.deepEqual(responseFormatTypes, ["json_schema", "json_schema", "json_schema"]);
   });
 });

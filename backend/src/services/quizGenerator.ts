@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
 import { Quiz as QuizSchema } from "../schemas/analyze.js";
 import type { DocumentType, Quiz } from "../schemas/analyze.js";
 import {
@@ -45,6 +46,7 @@ const client = new OpenAI({
   timeout: openAiTimeoutMs,
   maxRetries: getOpenAiMaxRetries(),
 });
+const QUIZ_RESPONSE_FORMAT = zodResponseFormat(QuizSchema, "lecture_quiz");
 
 interface QuizGenerationMetadata {
   fileType: FileType;
@@ -156,7 +158,7 @@ export async function generateQuiz(
               `Lecture text:\n${text}`,
           },
         ],
-        response_format: { type: "json_object" },
+        response_format: QUIZ_RESPONSE_FORMAT,
         max_tokens: 4096,
         temperature: 0,
       }, { timeout: requestTimeoutMs });
