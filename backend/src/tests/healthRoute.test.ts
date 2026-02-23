@@ -1,34 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { healthHandler } from "../routes/health.js";
+import { evaluateHealth } from "../routes/health.js";
 
-type MockRes = {
-  statusCode?: number;
-  body?: unknown;
-  status: (code: number) => MockRes;
-  json: (payload: unknown) => MockRes;
-};
-
-function makeRes(): MockRes {
-  const res: MockRes = {
-    status(code: number) {
-      this.statusCode = code;
-      return this;
-    },
-    json(payload: unknown) {
-      this.body = payload;
-      return this;
-    },
-  };
-  return res;
-}
-
-test("healthHandler returns 200 with status ok payload", () => {
-  const res = makeRes();
-
-  healthHandler({} as any, res as any);
-
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, { status: "ok" });
+test("evaluateHealth returns ok status when database check passes", () => {
+  const result = evaluateHealth(() => true);
+  assert.equal(result.statusCode, 200);
+  assert.deepEqual(result.payload, { status: "ok" });
 });
 
+test("evaluateHealth returns degraded status when database check fails", () => {
+  const result = evaluateHealth(() => false);
+  assert.equal(result.statusCode, 503);
+  assert.deepEqual(result.payload, { status: "degraded" });
+});

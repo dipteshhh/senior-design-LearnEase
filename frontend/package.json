@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "check:contracts": "node scripts/check-canonical-contracts.mjs",
-    "lint": "npm run check:contracts && eslint"
+    "lint": "npm run check:contracts && eslint",
+    "test": "node --test scripts/__tests__/*.test.mjs && node --import tsx --test src/__tests__/*.test.ts"
   },
   "dependencies": {
     "lucide-react": "^0.563.0",
@@ -23,6 +24,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.5",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

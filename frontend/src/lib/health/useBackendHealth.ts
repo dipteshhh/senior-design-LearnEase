@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { API_BASE_URL } from "@/lib/config";
 
 type BackendHealth = "checking" | "online" | "offline";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 
 export function useBackendHealth(): BackendHealth {
   const [health, setHealth] = useState<BackendHealth>("checking");

@@ -3,9 +3,11 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
 import { useBackendHealth } from "@/lib/health/useBackendHealth";
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 function NavItem({ href, label }: { href: string; label: string }) {
   const pathname = usePathname();
@@ -56,14 +58,29 @@ function ProtectedShell({ children }: { children: ReactNode }) {
     };
   }, [pathname]);
 
-  function updateQuery(next: string) {
+  const updateQuery = useCallback((next: string) => {
+    const normalized = next.trim();
+    const currentPathname = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
-    if (!next.trim()) params.delete("q");
-    else params.set("q", next);
+    if (!normalized) params.delete("q");
+    else params.set("q", normalized);
 
     const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname);
-  }
+    const target = qs ? `${currentPathname}?${qs}` : currentPathname;
+    const current = `${currentPathname}${window.location.search}`;
+    if (target === current) return;
+    router.replace(target, { scroll: false });
+  }, [router]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      updateQuery(q);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [q, updateQuery]);
 
   if (isLoading) {
     return (
@@ -110,9 +127,7 @@ function ProtectedShell({ children }: { children: ReactNode }) {
                 <input
                   value={q}
                   onChange={(event) => {
-                    const next = event.target.value;
-                    setQ(next);
-                    updateQuery(next);
+                    setQ(event.target.value);
                   }}
                   placeholder="Search documents..."
                   className="w-full bg-transparent text-sm outline-none"

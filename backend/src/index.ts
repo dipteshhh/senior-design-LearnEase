@@ -24,6 +24,7 @@ import {
   apiLimiter,
   requireAuth,
   requestLogger,
+  securityHeaders,
 } from "./middleware/index.js";
 import { closeDatabase, initializeDatabase } from "./db/sqlite.js";
 import {
@@ -112,6 +113,7 @@ app.use(
     credentials: true,
   })
 );
+app.use(securityHeaders);
 app.use(requestLogger);
 app.use(apiLimiter);
 app.use(express.json({ limit: "10mb" }));

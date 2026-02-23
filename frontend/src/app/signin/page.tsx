@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { GOOGLE_CLIENT_ID } from "@/lib/config";
 import { getErrorMessage } from "@/lib/errorUx";
 
 declare global {
@@ -30,7 +31,6 @@ declare global {
 }
 
 const GOOGLE_SCRIPT_URL = "https://accounts.google.com/gsi/client";
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 const IS_DEV = process.env.NODE_ENV !== "production";
 
 function sanitizeReturnTo(raw: string | null): string {
@@ -55,6 +55,10 @@ function SignInPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [manualCredential, setManualCredential] = useState("");
+
+  useEffect(() => {
+    router.prefetch(returnTo);
+  }, [returnTo, router]);
 
   const completeSignIn = useCallback(
     async (credential: string) => {
@@ -129,6 +133,17 @@ function SignInPageContent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-6 py-12">
       <div className="w-full max-w-md rounded-2xl border bg-white p-8 shadow-sm">
+        {isSubmitting ? (
+          <div className="py-8 text-center">
+            <p className="text-lg font-semibold text-gray-900">Signing you in...</p>
+            <p className="mt-2 text-sm text-gray-600">
+              Finishing Google authentication and restoring your session.
+            </p>
+          </div>
+        ) : null}
+
+        {!isSubmitting ? (
+          <>
         <h1 className="text-2xl font-semibold text-gray-900">Sign in to LearnEase</h1>
         <p className="mt-2 text-sm text-gray-600">
           Continue with your Google account to access your study documents.
@@ -149,6 +164,7 @@ function SignInPageContent() {
               rows={4}
               className="mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:border-gray-500"
               placeholder="Google ID token"
+              disabled={isSubmitting}
             />
             <button
               type="button"
@@ -161,6 +177,8 @@ function SignInPageContent() {
               {isSubmitting ? "Signing in..." : "Sign in with token"}
             </button>
           </div>
+        ) : null}
+          </>
         ) : null}
 
         {error ? (

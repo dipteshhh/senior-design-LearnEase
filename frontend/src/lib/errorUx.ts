@@ -1,4 +1,4 @@
-import { ApiClientError } from "@/lib/api";
+import { ApiClientError } from "./api.ts";
 
 export function getErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof ApiClientError)) {
