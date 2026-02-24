@@ -92,4 +92,3 @@ export function findForbiddenReferences({
 
   return findings;
 }
-

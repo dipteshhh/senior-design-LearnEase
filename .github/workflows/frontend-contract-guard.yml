@@ -5,10 +5,12 @@ on:
     branches: ["main"]
     paths:
       - "frontend/**"
+      - "docs/**"
       - ".github/workflows/frontend-contract-guard.yml"
   pull_request:
     paths:
       - "frontend/**"
+      - "docs/**"
       - ".github/workflows/frontend-contract-guard.yml"
 
 jobs:
@@ -43,6 +45,9 @@ jobs:
 
       - name: Test
         run: npm run test
+
+      - name: Type-check
+        run: npm exec tsc --noEmit
 
       - name: Build
         run: npm run build

@@ -1,4 +1,4 @@
-import { ApiClientError, api } from "@/lib/api";
+import { ApiClientError, api, type ApiRequestOptions } from "@/lib/api";
 import type {
   DocumentDetail,
   DocumentListItem,
@@ -13,9 +13,21 @@ export async function listDocuments(q?: string): Promise<DocumentListItem[]> {
   return docs.filter((d) => d.filename.toLowerCase().includes(query));
 }
 
-export async function getDocumentStatus(id: string): Promise<DocumentListItem | null> {
+interface DocumentRequestOptions {
+  signal?: AbortSignal;
+  apiOptions?: ApiRequestOptions;
+}
+
+export async function getDocumentStatus(
+  id: string,
+  options: DocumentRequestOptions = {}
+): Promise<DocumentListItem | null> {
   try {
-    return await api<DocumentListItem>(`/api/documents/${id}`);
+    return await api<DocumentListItem>(
+      `/api/documents/${id}`,
+      options.signal ? { signal: options.signal } : {},
+      options.apiOptions
+    );
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 404) {
       return null;

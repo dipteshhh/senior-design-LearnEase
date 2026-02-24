@@ -5,10 +5,10 @@ import path from "node:path";
 import test from "node:test";
 import { findForbiddenReferences } from "../lib/canonicalContractGuard.mjs";
 
-function withTempProject(fn) {
+function withTempProject(run) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "frontend-guard-test-"));
   try {
-    fn(root);
+    run(root);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

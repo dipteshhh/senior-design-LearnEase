@@ -129,6 +129,15 @@ export default function UploadPage() {
           setDragActive(false);
         }}
         onDrop={onDrop}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) {
+            return;
+          }
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onBrowseClick();
+          }
+        }}
         role="button"
         tabIndex={0}
       >

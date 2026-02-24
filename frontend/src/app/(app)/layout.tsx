@@ -30,7 +30,7 @@ function ProtectedShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [q, setQ] = useState("");
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, hasSessionCheckError, refreshSession, logout } = useAuth();
   const backendHealth = useBackendHealth();
 
   const healthLabel =
@@ -91,7 +91,42 @@ function ProtectedShell({ children }: { children: ReactNode }) {
   }
 
   if (!user) {
-    return null;
+    if (hasSessionCheckError) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-white px-6">
+          <div className="w-full max-w-lg rounded-2xl border border-amber-200 bg-white p-8 shadow-sm">
+            <h1 className="text-xl font-semibold text-gray-900">Can&apos;t verify session</h1>
+            <p className="mt-2 text-sm text-gray-600">
+              LearnEase couldn&apos;t reach the backend to verify your session. Retry when the
+              connection is stable.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  void refreshSession();
+                }}
+                className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
+              >
+                Retry
+              </button>
+              <Link
+                href="/signin"
+                className="rounded-xl border px-4 py-2 text-sm font-semibold text-gray-900"
+              >
+                Go to Sign in
+              </Link>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <p className="text-sm text-gray-600">Redirecting to sign in...</p>
+      </div>
+    );
   }
 
   return (

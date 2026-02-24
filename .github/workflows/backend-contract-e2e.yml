@@ -5,10 +5,12 @@ on:
     branches: ["main"]
     paths:
       - "backend/**"
+      - "docs/**"
       - ".github/workflows/backend-contract-e2e.yml"
   pull_request:
     paths:
       - "backend/**"
+      - "docs/**"
       - ".github/workflows/backend-contract-e2e.yml"
 
 jobs:
@@ -37,6 +39,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Type-check
+        run: npm exec tsc --noEmit
 
       - name: Unit tests
         run: npm test

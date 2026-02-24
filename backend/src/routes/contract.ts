@@ -389,7 +389,23 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
         studyGuideErrorMessage: failure.message,
       }));
     }
-  })();
+  })().catch((error) => {
+    logger.error("Unhandled study guide generation task failure", { documentId, error });
+    const failure = toFailureCode(error);
+    try {
+      updateDocument(documentId, (current) => ({
+        ...current,
+        studyGuideStatus: "failed",
+        studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
+        studyGuideErrorMessage: failure.message,
+      }));
+    } catch (updateError) {
+      logger.error("Failed to persist study guide task failure", {
+        documentId,
+        error: updateError,
+      });
+    }
+  });
 
   res.status(202).json({ status: "processing" });
 }
@@ -443,7 +459,23 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
         studyGuideErrorMessage: failure.message,
       }));
     }
-  })();
+  })().catch((error) => {
+    logger.error("Unhandled study guide retry task failure", { documentId, error });
+    const failure = toFailureCode(error);
+    try {
+      updateDocument(documentId, (current) => ({
+        ...current,
+        studyGuideStatus: "failed",
+        studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
+        studyGuideErrorMessage: failure.message,
+      }));
+    } catch (updateError) {
+      logger.error("Failed to persist study guide retry task failure", {
+        documentId,
+        error: updateError,
+      });
+    }
+  });
 
   res.status(202).json({ status: "processing", retry: true });
 }
@@ -528,7 +560,23 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
         quizErrorMessage: failure.message,
       }));
     }
-  })();
+  })().catch((error) => {
+    logger.error("Unhandled quiz generation task failure", { documentId, error });
+    const failure = toFailureCode(error);
+    try {
+      updateDocument(documentId, (current) => ({
+        ...current,
+        quizStatus: "failed",
+        quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
+        quizErrorMessage: failure.message,
+      }));
+    } catch (updateError) {
+      logger.error("Failed to persist quiz task failure", {
+        documentId,
+        error: updateError,
+      });
+    }
+  });
 
   res.status(202).json({ status: "processing" });
 }
@@ -587,7 +635,23 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
         quizErrorMessage: failure.message,
       }));
     }
-  })();
+  })().catch((error) => {
+    logger.error("Unhandled quiz retry task failure", { documentId, error });
+    const failure = toFailureCode(error);
+    try {
+      updateDocument(documentId, (current) => ({
+        ...current,
+        quizStatus: "failed",
+        quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
+        quizErrorMessage: failure.message,
+      }));
+    } catch (updateError) {
+      logger.error("Failed to persist quiz retry task failure", {
+        documentId,
+        error: updateError,
+      });
+    }
+  });
 
   res.status(202).json({ status: "processing", retry: true });
 }

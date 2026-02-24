@@ -8,6 +8,14 @@ import type { DocumentListItem } from "@/lib/contracts";
 import { getDocumentStatus } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
 import { DEFAULT_POLL_DELAY_MS, getTransientDelayMs, toPollDelayMs } from "@/lib/polling";
+import { usePageVisible } from "@/lib/usePageVisible";
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
+}
 
 export default function ProcessingPage() {
   const router = useRouter();
@@ -16,6 +24,8 @@ export default function ProcessingPage() {
   const [document, setDocument] = useState<DocumentListItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [pollTrigger, setPollTrigger] = useState(0);
+  const isPageVisible = usePageVisible();
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -28,15 +38,15 @@ export default function ProcessingPage() {
   const isFailed = document?.study_guide_status === "failed";
   const isReady = document?.study_guide_status === "ready";
 
-  const refreshDocument = useCallback(async () => {
-    const next = await getDocumentStatus(id);
+  const refreshDocument = useCallback(async (signal?: AbortSignal) => {
+    const next = await getDocumentStatus(id, { signal });
     if (isMountedRef.current) {
       setDocument(next);
     }
     return next;
   }, [id]);
 
-  const startGeneration = useCallback(async (): Promise<number> => {
+  const startGeneration = useCallback(async (signal?: AbortSignal): Promise<number> => {
     if (!id) return DEFAULT_POLL_DELAY_MS;
     try {
       await api<{ status: string; cached?: boolean }>(
@@ -44,6 +54,7 @@ export default function ProcessingPage() {
         {
           method: "POST",
           body: JSON.stringify({ document_id: id }),
+          signal,
         }
       );
       if (isMountedRef.current) {
@@ -51,6 +62,9 @@ export default function ProcessingPage() {
       }
       return DEFAULT_POLL_DELAY_MS;
     } catch (err) {
+      if (isAbortError(err)) {
+        throw err;
+      }
       if (err instanceof ApiClientError) {
         if (err.code === "ALREADY_PROCESSING") {
           if (isMountedRef.current) {
@@ -95,6 +109,9 @@ export default function ProcessingPage() {
         setError(null);
       }
       await refreshDocument();
+      if (isMountedRef.current) {
+        setPollTrigger((current) => current + 1);
+      }
     } catch (err) {
       if (isMountedRef.current) {
         setError(getErrorMessage(err, "Retry failed. Please try again."));
@@ -107,14 +124,21 @@ export default function ProcessingPage() {
   }, [id, refreshDocument]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !isPageVisible) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let requestController: AbortController | null = null;
+
+    const nextSignal = (): AbortSignal => {
+      requestController?.abort();
+      requestController = new AbortController();
+      return requestController.signal;
+    };
 
     const poll = async () => {
       let nextDelayMs = DEFAULT_POLL_DELAY_MS;
       try {
-        const next = await refreshDocument();
+        const next = await refreshDocument(nextSignal());
         if (cancelled || !isMountedRef.current) {
           return;
         }
@@ -138,6 +162,9 @@ export default function ProcessingPage() {
         if (cancelled || !isMountedRef.current) {
           return;
         }
+        if (isAbortError(err)) {
+          return;
+        }
 
         const transientDelayMs = getTransientDelayMs(err);
         if (transientDelayMs != null) {
@@ -156,19 +183,27 @@ export default function ProcessingPage() {
       }
     };
 
-    void startGeneration().then((initialDelayMs) => {
-      if (!cancelled) {
-        timer = setTimeout(() => {
-          void poll();
-        }, initialDelayMs ?? DEFAULT_POLL_DELAY_MS);
-      }
-    });
+    void startGeneration(nextSignal())
+      .then((initialDelayMs) => {
+        if (!cancelled) {
+          timer = setTimeout(() => {
+            void poll();
+          }, initialDelayMs ?? DEFAULT_POLL_DELAY_MS);
+        }
+      })
+      .catch((err) => {
+        if (isAbortError(err) || cancelled || !isMountedRef.current) {
+          return;
+        }
+        setError(getErrorMessage(err, "Unable to start study guide generation."));
+      });
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      requestController?.abort();
     };
-  }, [id, refreshDocument, router, startGeneration]);
+  }, [id, isPageVisible, pollTrigger, refreshDocument, router, startGeneration]);
 
   const statusLine = useMemo(() => {
     if (!document) return "Waiting for document status...";

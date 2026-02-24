@@ -8,8 +8,16 @@ import type { DocumentListItem, Quiz } from "@/lib/contracts";
 import { getDocumentStatus } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
 import { DEFAULT_POLL_DELAY_MS, toPollDelayMs } from "@/lib/polling";
+import { usePageVisible } from "@/lib/usePageVisible";
 
 type QuizState = "loading" | "ready" | "failed" | "blocked";
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
+}
 
 function getAnswerIndex(answer: string, options: string[]): number {
   const trimmed = answer.trim();
@@ -31,7 +39,9 @@ export default function QuizPage() {
   const [checked, setChecked] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [pollTrigger, setPollTrigger] = useState(0);
+  const isPageVisible = usePageVisible();
   const isMountedRef = useRef(true);
+  const hasLoadedQuizRef = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -41,10 +51,25 @@ export default function QuizPage() {
   }, []);
 
   useEffect(() => {
-    if (!id) return;
+    hasLoadedQuizRef.current = false;
+  }, [id]);
+
+  useEffect(() => {
+    hasLoadedQuizRef.current = quiz != null;
+  }, [quiz]);
+
+  useEffect(() => {
+    if (!id || !isPageVisible) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let requestController: AbortController | null = null;
+
+    const nextSignal = (): AbortSignal => {
+      requestController?.abort();
+      requestController = new AbortController();
+      return requestController.signal;
+    };
 
     const schedulePoll = (delayMs: number) => {
       if (cancelled) return;
@@ -53,18 +78,19 @@ export default function QuizPage() {
       }, delayMs);
     };
 
-    const refreshDocument = async (): Promise<DocumentListItem | null> => {
-      const next = await getDocumentStatus(id);
+    const refreshDocument = async (signal?: AbortSignal): Promise<DocumentListItem | null> => {
+      const next = await getDocumentStatus(id, { signal });
       if (!cancelled) {
         setDoc(next);
       }
       return next;
     };
 
-    const fetchQuiz = async (): Promise<boolean> => {
+    const fetchQuiz = async (signal?: AbortSignal): Promise<boolean> => {
       try {
-        const response = await api<Quiz>(`/api/quiz/${id}`);
+        const response = await api<Quiz>(`/api/quiz/${id}`, signal ? { signal } : {});
         if (!cancelled) {
+          hasLoadedQuizRef.current = true;
           setQuiz(response);
           setState("ready");
         }
@@ -80,7 +106,7 @@ export default function QuizPage() {
     const pollOnce = async () => {
       let nextDelayMs = DEFAULT_POLL_DELAY_MS;
       try {
-        const latest = await refreshDocument();
+        const latest = await refreshDocument(nextSignal());
         if (!latest) {
           if (!cancelled) {
             setState("failed");
@@ -90,7 +116,7 @@ export default function QuizPage() {
         }
 
         if (latest.quiz_status === "ready") {
-          const fetched = await fetchQuiz();
+          const fetched = await fetchQuiz(nextSignal());
           if (fetched) {
             if (!cancelled) {
               setError(null);
@@ -111,6 +137,9 @@ export default function QuizPage() {
           setError(null);
         }
       } catch (err) {
+        if (isAbortError(err)) {
+          return;
+        }
         if (
           err instanceof ApiClientError &&
           (err.code === "RATE_LIMITED" || err.code === "ALREADY_PROCESSING")
@@ -132,7 +161,11 @@ export default function QuizPage() {
     };
 
     const startFlow = async () => {
-      if (!cancelled) {
+      if (hasLoadedQuizRef.current) {
+        return;
+      }
+
+      if (!cancelled && !hasLoadedQuizRef.current) {
         setState("loading");
         setError(null);
         setQuiz(null);
@@ -142,7 +175,7 @@ export default function QuizPage() {
       }
 
       try {
-        const nextDoc = await refreshDocument();
+        const nextDoc = await refreshDocument(nextSignal());
         if (!nextDoc) {
           if (!cancelled) {
             setState("failed");
@@ -166,11 +199,12 @@ export default function QuizPage() {
             {
               method: "POST",
               body: JSON.stringify({ document_id: id }),
+              signal: nextSignal(),
             }
           );
 
           if (createResponse.status === "ready") {
-            const fetched = await fetchQuiz();
+            const fetched = await fetchQuiz(nextSignal());
             if (fetched) {
               if (!cancelled) {
                 setError(null);
@@ -179,6 +213,9 @@ export default function QuizPage() {
             }
           }
         } catch (err) {
+          if (isAbortError(err)) {
+            return;
+          }
           if (err instanceof ApiClientError) {
             if (err.code === "ALREADY_PROCESSING") {
               if (!cancelled) {
@@ -208,6 +245,9 @@ export default function QuizPage() {
 
         schedulePoll(initialDelayMs);
       } catch (err) {
+        if (isAbortError(err)) {
+          return;
+        }
         if (!cancelled) {
           setState("failed");
           setError(getErrorMessage(err, "Unable to load quiz right now."));
@@ -222,8 +262,9 @@ export default function QuizPage() {
       if (timer) {
         clearTimeout(timer);
       }
+      requestController?.abort();
     };
-  }, [id, pollTrigger]);
+  }, [id, isPageVisible, pollTrigger]);
 
   async function handleRetry() {
     if (!id || isRetrying) return;

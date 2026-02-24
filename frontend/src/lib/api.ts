@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./config.ts";
+const DEFAULT_API_TIMEOUT_MS = 30_000;
 
 interface ApiErrorPayload {
   error?: {
@@ -10,6 +11,7 @@ interface ApiErrorPayload {
 
 export interface ApiRequestOptions {
   suppressUnauthorizedEvent?: boolean;
+  timeoutMs?: number;
 }
 
 export class ApiClientError extends Error {
@@ -61,29 +63,73 @@ export async function api<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(joinUrl(path), {
-    ...init,
-    headers,
-    credentials: "include",
-  });
+  const timeoutMs = options.timeoutMs ?? DEFAULT_API_TIMEOUT_MS;
+  const upstreamSignal = init.signal;
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
 
-  const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload & T;
-  if (response.ok) {
-    return payload as T;
+  const abortFromUpstream = () => {
+    controller.abort();
+  };
+
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) {
+      controller.abort();
+    } else {
+      upstreamSignal.addEventListener("abort", abortFromUpstream, { once: true });
+    }
   }
 
-  const code = payload.error?.code ?? "UNKNOWN";
-  const message = payload.error?.message ?? "Request failed.";
-  const details = payload.error?.details;
-  const retryAfterSeconds = readRetryAfterSeconds(response.headers.get("Retry-After"));
-
-  if (
-    response.status === 401 &&
-    typeof window !== "undefined" &&
-    !options.suppressUnauthorizedEvent
-  ) {
-    window.dispatchEvent(new CustomEvent("learnease:unauthorized"));
+  if (timeoutMs > 0) {
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
   }
 
-  throw new ApiClientError(response.status, code, message, details, retryAfterSeconds);
+  try {
+    const response = await fetch(joinUrl(path), {
+      ...init,
+      headers,
+      credentials: "include",
+      signal: controller.signal,
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload & T;
+    if (response.ok) {
+      return payload as T;
+    }
+
+    const code = payload.error?.code ?? "UNKNOWN";
+    const message = payload.error?.message ?? "Request failed.";
+    const details = payload.error?.details;
+    const retryAfterSeconds = readRetryAfterSeconds(response.headers.get("Retry-After"));
+
+    if (
+      response.status === 401 &&
+      typeof window !== "undefined" &&
+      !options.suppressUnauthorizedEvent
+    ) {
+      window.dispatchEvent(new CustomEvent("learnease:unauthorized"));
+    }
+
+    throw new ApiClientError(response.status, code, message, details, retryAfterSeconds);
+  } catch (error) {
+    if (timedOut) {
+      throw new ApiClientError(
+        504,
+        "REQUEST_TIMEOUT",
+        "Request timed out. Please try again.",
+        undefined,
+        null
+      );
+    }
+    throw error;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    upstreamSignal?.removeEventListener("abort", abortFromUpstream);
+  }
 }

@@ -16,6 +16,7 @@ import type { AuthMeResponse, AuthUser } from "@/lib/contracts";
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
+  hasSessionCheckError: boolean;
   refreshSession: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -27,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasSessionCheckError, setHasSessionCheckError] = useState(false);
 
   const redirectToSignIn = useCallback(() => {
     if (pathname === "/signin") return;
@@ -40,13 +42,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await api<AuthMeResponse>("/api/auth/me", {}, {
         suppressUnauthorizedEvent: true,
       });
+      setHasSessionCheckError(false);
       setUser(response.user);
     } catch (error) {
       if (error instanceof ApiClientError && error.status === 401) {
+        setHasSessionCheckError(false);
         setUser(null);
-      } else {
-        setUser(null);
+        return;
       }
+      setHasSessionCheckError(true);
     } finally {
       setIsLoading(false);
     }
@@ -73,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleUnauthorized = () => {
+      setHasSessionCheckError(false);
       setUser(null);
       redirectToSignIn();
     };
@@ -84,19 +89,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [redirectToSignIn]);
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (!isLoading && !user && !hasSessionCheckError) {
       redirectToSignIn();
     }
-  }, [isLoading, redirectToSignIn, user]);
+  }, [hasSessionCheckError, isLoading, redirectToSignIn, user]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       isLoading,
+      hasSessionCheckError,
       refreshSession,
       logout,
     }),
-    [isLoading, logout, refreshSession, user]
+    [hasSessionCheckError, isLoading, logout, refreshSession, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
