@@ -62,7 +62,8 @@ test("api calls fetch with credentials: include", async () => {
 
   const fetchMock = globalThis.fetch as unknown as ReturnType<typeof mock.fn>;
   const call = fetchMock.mock.calls[0];
-  assert.equal(call.arguments[1]?.credentials, "include");
+  const requestInit = call.arguments[1] as RequestInit | undefined;
+  assert.equal(requestInit?.credentials, "include");
 });
 
 test("api sets Content-Type application/json when body is provided", async () => {
@@ -72,7 +73,8 @@ test("api sets Content-Type application/json when body is provided", async () =>
 
   const fetchMock = globalThis.fetch as unknown as ReturnType<typeof mock.fn>;
   const call = fetchMock.mock.calls[0];
-  const headers = call.arguments[1]?.headers as Headers;
+  const requestInit = call.arguments[1] as RequestInit | undefined;
+  const headers = new Headers(requestInit?.headers);
   assert.equal(headers.get("Content-Type"), "application/json");
 });
 
@@ -87,7 +89,8 @@ test("api does not override existing Content-Type header", async () => {
 
   const fetchMock = globalThis.fetch as unknown as ReturnType<typeof mock.fn>;
   const call = fetchMock.mock.calls[0];
-  const headers = call.arguments[1]?.headers as Headers;
+  const requestInit = call.arguments[1] as RequestInit | undefined;
+  const headers = new Headers(requestInit?.headers);
   assert.equal(headers.get("Content-Type"), "text/plain");
 });
 
