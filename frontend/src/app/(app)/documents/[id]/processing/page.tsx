@@ -7,7 +7,12 @@ import { ApiClientError, api } from "@/lib/api";
 import type { DocumentListItem } from "@/lib/contracts";
 import { getDocumentStatus } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
-import { DEFAULT_POLL_DELAY_MS, getTransientDelayMs, toPollDelayMs } from "@/lib/polling";
+import {
+  DEFAULT_POLL_DELAY_MS,
+  getTransientDelayMs,
+  shouldRunPolling,
+  toPollDelayMs,
+} from "@/lib/polling";
 import { usePageVisible } from "@/lib/usePageVisible";
 
 function isAbortError(error: unknown): boolean {
@@ -124,7 +129,7 @@ export default function ProcessingPage() {
   }, [id, refreshDocument]);
 
   useEffect(() => {
-    if (!id || !isPageVisible) return;
+    if (!shouldRunPolling(id, isPageVisible)) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let requestController: AbortController | null = null;

@@ -7,7 +7,12 @@ import { ApiClientError, api } from "@/lib/api";
 import type { DocumentListItem, Quiz } from "@/lib/contracts";
 import { getDocumentStatus } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
-import { DEFAULT_POLL_DELAY_MS, toPollDelayMs } from "@/lib/polling";
+import {
+  DEFAULT_POLL_DELAY_MS,
+  shouldResetQuizStateOnFlowStart,
+  shouldRunPolling,
+  toPollDelayMs,
+} from "@/lib/polling";
 import { usePageVisible } from "@/lib/usePageVisible";
 
 type QuizState = "loading" | "ready" | "failed" | "blocked";
@@ -59,7 +64,7 @@ export default function QuizPage() {
   }, [quiz]);
 
   useEffect(() => {
-    if (!id || !isPageVisible) return;
+    if (!shouldRunPolling(id, isPageVisible)) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -165,7 +170,7 @@ export default function QuizPage() {
         return;
       }
 
-      if (!cancelled && !hasLoadedQuizRef.current) {
+      if (!cancelled && shouldResetQuizStateOnFlowStart(hasLoadedQuizRef.current)) {
         setState("loading");
         setError(null);
         setQuiz(null);

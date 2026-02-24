@@ -10,8 +10,9 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ApiClientError, api } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { AuthMeResponse, AuthUser } from "@/lib/contracts";
+import { isUnauthorizedSessionError, shouldRedirectToSignIn } from "@/lib/auth/sessionLogic";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -45,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setHasSessionCheckError(false);
       setUser(response.user);
     } catch (error) {
-      if (error instanceof ApiClientError && error.status === 401) {
+      if (isUnauthorizedSessionError(error)) {
         setHasSessionCheckError(false);
         setUser(null);
         return;
@@ -89,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [redirectToSignIn]);
 
   useEffect(() => {
-    if (!isLoading && !user && !hasSessionCheckError) {
+    if (shouldRedirectToSignIn({ isLoading, hasUser: user != null, hasSessionCheckError })) {
       redirectToSignIn();
     }
   }, [hasSessionCheckError, isLoading, redirectToSignIn, user]);
