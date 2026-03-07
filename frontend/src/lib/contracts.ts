@@ -51,6 +51,9 @@ export interface StudyGuide {
     title: string;
     document_type: Exclude<DocumentType, "UNSUPPORTED">;
     summary: string;
+    topic?: string | null;
+    due_date?: string | null;
+    estimated_time?: string | null;
   };
   key_actions: ExtractionItem[];
   checklist: ExtractionItem[];

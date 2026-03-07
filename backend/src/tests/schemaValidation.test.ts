@@ -112,6 +112,54 @@ test("StudyGuide schema rejects section with no citations", () => {
   assert.equal(StudyGuide.safeParse(noSectionCitations).success, false);
 });
 
+test("StudyGuide schema accepts overview with optional metadata fields", () => {
+  const withAllMetadata = {
+    overview: {
+      title: "Title",
+      document_type: "HOMEWORK",
+      summary: "Summary",
+      topic: "Machine Learning",
+      due_date: "February 28, 2026",
+      estimated_time: "8-10 hours",
+    },
+    key_actions: [],
+    checklist: [],
+    important_details: { dates: [], policies: [], contacts: [], logistics: [] },
+    sections: [],
+  };
+  assert.equal(StudyGuide.safeParse(withAllMetadata).success, true);
+
+  const withNullMetadata = {
+    overview: {
+      title: "Title",
+      document_type: "LECTURE",
+      summary: "Summary",
+      topic: null,
+      due_date: null,
+      estimated_time: null,
+    },
+    key_actions: [],
+    checklist: [],
+    important_details: { dates: [], policies: [], contacts: [], logistics: [] },
+    sections: [],
+  };
+  assert.equal(StudyGuide.safeParse(withNullMetadata).success, true);
+
+  const withPartialMetadata = {
+    overview: {
+      title: "Title",
+      document_type: "SYLLABUS",
+      summary: "Summary",
+      topic: "Biology",
+    },
+    key_actions: [],
+    checklist: [],
+    important_details: { dates: [], policies: [], contacts: [], logistics: [] },
+    sections: [],
+  };
+  assert.equal(StudyGuide.safeParse(withPartialMetadata).success, true);
+});
+
 test("StudyGuide schema rejects UNSUPPORTED as overview document_type", () => {
   const unsupported = {
     overview: { title: "Title", document_type: "UNSUPPORTED", summary: "Summary" },

@@ -64,7 +64,7 @@ Return ONLY a JSON object with exactly these keys:
 - sections
 
 Schema requirements:
-- overview: { title, document_type, summary }
+- overview: { title, document_type, summary, topic, due_date, estimated_time }
 - key_actions: ExtractionItem[]
 - checklist: ExtractionItem[]
 - important_details: { dates: ExtractionItem[], policies: ExtractionItem[], contacts: ExtractionItem[], logistics: ExtractionItem[] }
@@ -79,6 +79,27 @@ ExtractionItem schema:
 Citations (MUST always be a JSON array, even for a single citation):
 - For pdf: { source_type: "pdf", page: number, excerpt: string }
 - For docx: { source_type: "docx", anchor_type: "paragraph", paragraph: number, excerpt: string }
+
+Overview metadata fields:
+- topic: the main subject or course topic of the document (e.g. "Machine Learning", "Calculus II"). Set to null if not identifiable.
+- due_date: the assignment or project due date as mentioned in the document (e.g. "February 28, 2026"). Set to null if no due date is found.
+- estimated_time: estimated time to complete the work if mentioned in the document (e.g. "8-10 hours"). Set to null if not mentioned.
+
+Key actions rules:
+- key_actions MUST NOT be empty. Extract at least 3 key actions from the document.
+- Key actions are the most important things the student needs to know or do based on this document.
+- For homework/assignments: extract key requirements, constraints, submission instructions, and important directives (e.g. "Submit as a single PDF", "Use Python 3.x", "Include citations in APA format", "Work must be individual").
+- For lectures: extract key takeaways, main concepts to remember, and study recommendations.
+- For syllabi: extract critical policies, important deadlines, and key course requirements.
+- Key actions are NOT answers or solutions — they are high-level directives and requirements extracted from the document.
+
+Checklist rules:
+- The checklist MUST include general actionable items extracted from the document (e.g. "Review submission guidelines", "Check formatting requirements", "Submit before deadline"). Always include these regardless of whether the document has numbered problems.
+- IN ADDITION, if the document contains numbered or labeled problems, questions, exercises, or tasks, ALSO list EACH one as a separate checklist item in sequential order.
+- Problem checklist items should appear first in document order, followed by the general actionable items.
+- The label for problem items should be a short, actionable description of the task (e.g. "Set up development environment", "Download MNIST dataset", "Implement forward propagation", "Train the model"). Do NOT use generic labels like "Problem 1" — instead describe the actual work the student needs to do.
+- The supporting_quote must be an exact substring from the document that identifies or introduces that problem or action item.
+- Maintain the original order from the document — do NOT reorder problems.
 
 IMPORTANT RULES:
 - Do NOT solve problems or provide answers

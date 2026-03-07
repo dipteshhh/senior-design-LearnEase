@@ -43,6 +43,9 @@ export const StudyGuideOverview = z.object({
   title: z.string().min(1),
   document_type: z.enum(["HOMEWORK", "LECTURE", "SYLLABUS"]),
   summary: z.string().min(1),
+  topic: z.string().nullable().optional(),
+  due_date: z.string().nullable().optional(),
+  estimated_time: z.string().nullable().optional(),
 });
 
 // content is intentionally ungrounded — sections summarize/restructure source material.

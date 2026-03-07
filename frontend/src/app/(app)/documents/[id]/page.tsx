@@ -328,9 +328,29 @@ export default function DocumentPage() {
         <Card>
           <h2 className="text-base font-semibold text-gray-900">{studyGuide.overview.title}</h2>
           <p className="mt-2 text-sm leading-7 text-gray-700">{studyGuide.overview.summary}</p>
-          <div className="mt-4">
-            <StatusPill status={document.status} />
-          </div>
+
+          {(studyGuide.overview.topic || studyGuide.overview.due_date || studyGuide.overview.estimated_time) ? (
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {studyGuide.overview.topic ? (
+                <div className="rounded-2xl border bg-gray-50 px-5 py-4">
+                  <p className="text-xs font-medium text-gray-500">Topic</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-900">{studyGuide.overview.topic}</p>
+                </div>
+              ) : null}
+              {studyGuide.overview.due_date ? (
+                <div className="rounded-2xl border bg-gray-50 px-5 py-4">
+                  <p className="text-xs font-medium text-gray-500">Due Date</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-900">{studyGuide.overview.due_date}</p>
+                </div>
+              ) : null}
+              {studyGuide.overview.estimated_time ? (
+                <div className="rounded-2xl border bg-gray-50 px-5 py-4">
+                  <p className="text-xs font-medium text-gray-500">Estimated Time</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-900">{studyGuide.overview.estimated_time}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </Card>
       ) : null}
 
