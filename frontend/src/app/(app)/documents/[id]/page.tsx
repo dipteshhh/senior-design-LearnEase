@@ -289,12 +289,19 @@ function formatDate(value: string): string {
   });
 }
 
-function buildTabHref(documentId: string, tab: TabId, isFocusMode = false): string {
+function buildTabHref(
+  documentId: string,
+  tab: TabId,
+  isFocusMode: boolean = false
+): string {
   const params = new URLSearchParams();
+
   params.set("tab", tab);
+
   if (isFocusMode) {
     params.set("focus", "1");
   }
+
   return `/documents/${documentId}?${params.toString()}`;
 }
 
@@ -724,7 +731,7 @@ export default function DocumentPage() {
 
           <div className="flex flex-wrap items-center gap-3">
             <Link
-              href={buildTabHref(document.id, "sections", true)}
+              href={`/documents/${document.id}/focus`}
               className="inline-flex items-center justify-center rounded-2xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-950 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-gray-50"
             >
               <span className="mr-2">
@@ -827,7 +834,7 @@ export default function DocumentPage() {
         </nav>
 
         {tab === "overview" ? (
-          <Card className="space-y-8">
+          <Card className="space-y-10">
             <SectionHeading icon={<SummaryIcon />} title="Document Summary" />
 
             <p className="max-w-3xl text-[17px] leading-8 text-gray-700">
