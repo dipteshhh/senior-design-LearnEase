@@ -1,14 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import type { DocumentDetail, DocumentListItem, ExtractionItem } from "@/lib/contracts";
-import { deleteDocument, getDocument, updateChecklistItem } from "@/lib/data/documents";
+import type {
+  Citation,
+  DocumentDetail,
+  DocumentListItem,
+  ExtractionItem,
+  StudyGuideSection,
+} from "@/lib/contracts";
+import {
+  deleteDocument,
+  getDocument,
+  updateChecklistItem,
+} from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
 
+type TabId = "overview" | "actions" | "checklist" | "details" | "sections";
+
 function StatusPill({ status }: { status: DocumentListItem["status"] }) {
-  const base = "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold";
+  const base =
+    "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium";
+
   if (status === "ready") {
     return (
       <span className={`${base} bg-emerald-50 text-emerald-700`}>
@@ -17,6 +31,7 @@ function StatusPill({ status }: { status: DocumentListItem["status"] }) {
       </span>
     );
   }
+
   if (status === "processing" || status === "uploaded") {
     return (
       <span className={`${base} bg-amber-50 text-amber-700`}>
@@ -25,6 +40,7 @@ function StatusPill({ status }: { status: DocumentListItem["status"] }) {
       </span>
     );
   }
+
   return (
     <span className={`${base} bg-rose-50 text-rose-700`}>
       <span className="h-2 w-2 rounded-full bg-rose-500" />
@@ -33,62 +49,333 @@ function StatusPill({ status }: { status: DocumentListItem["status"] }) {
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <section className="rounded-3xl border bg-white p-6 shadow-sm">{children}</section>;
+function Card({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={`rounded-[28px] border border-gray-200 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)] ${className}`}
+    >
+      {children}
+    </section>
+  );
 }
 
-function SubCard({ title, children }: { title: string; children: React.ReactNode }) {
+function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-2xl border bg-white p-5">
-      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-      <div className="mt-3 text-sm text-gray-700">{children}</div>
+    <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+      {text}
     </div>
+  );
+}
+
+function SectionHeading({
+  icon,
+  title,
+  description,
+  right,
+}: {
+  icon: ReactNode;
+  title: string;
+  description?: string;
+  right?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex items-start gap-4">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gray-100 text-gray-600">
+          {icon}
+        </div>
+        <div>
+          <h2 className="text-[22px] font-semibold tracking-tight text-gray-950 sm:text-[24px]">
+            {title}
+          </h2>
+          {description ? (
+            <p className="mt-1 text-sm text-gray-500">{description}</p>
+          ) : null}
+        </div>
+      </div>
+      {right ? <div className="shrink-0">{right}</div> : null}
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 px-5 py-5">
+      <p className="text-sm font-medium text-gray-400">{label}</p>
+      <p className="mt-2 text-[24px] font-semibold leading-snug tracking-tight text-gray-950 sm:text-[20px]">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SummaryIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M7 3.75h7l4.25 4.25v11A1.75 1.75 0 0 1 16.5 20.75h-9A1.75 1.75 0 0 1 5.75 19V5.5A1.75 1.75 0 0 1 7.5 3.75Z" />
+      <path d="M14 3.75V8h4.25" />
+      <path d="M8.5 11.25h7" />
+      <path d="M8.5 14.5h7" />
+    </svg>
+  );
+}
+
+function ActionsIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m5 12 4 4L19 6" />
+    </svg>
+  );
+}
+
+function ChecklistIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m9 6 1.5 1.5L13 5" />
+      <path d="m9 12 1.5 1.5L13 11" />
+      <path d="m9 18 1.5 1.5L13 17" />
+      <path d="M5 6h1" />
+      <path d="M5 12h1" />
+      <path d="M5 18h1" />
+      <path d="M16 6h3" />
+      <path d="M16 12h3" />
+      <path d="M16 18h3" />
+    </svg>
+  );
+}
+
+function DetailsIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 8.5h.01" />
+      <path d="M11.25 12h1.5v4h1.5" />
+      <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" />
+    </svg>
+  );
+}
+
+function SectionsIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4.75 6.75h14.5" />
+      <path d="M4.75 12h14.5" />
+      <path d="M4.75 17.25h14.5" />
+    </svg>
+  );
+}
+
+function WarningIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 9.25v4.5" />
+      <path d="M12 17h.01" />
+      <path d="m10.29 3.86-7 12.12A2 2 0 0 0 5 19h14a2 2 0 0 0 1.73-3.02l-7-12.12a2 2 0 0 0-3.46 0Z" />
+    </svg>
+  );
+}
+
+function InfoIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 8.5h.01" />
+      <path d="M11.25 12h1.5v4h1.5" />
+      <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" />
+    </svg>
+  );
+}
+
+function QuoteIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10 11H6.75A1.75 1.75 0 0 1 5 9.25V8a3 3 0 0 1 3-3" />
+      <path d="M19 11h-3.25A1.75 1.75 0 0 1 14 9.25V8a3 3 0 0 1 3-3" />
+      <path d="M9 11v3.25A2.75 2.75 0 0 1 6.25 17H5" />
+      <path d="M18 11v3.25A2.75 2.75 0 0 1 15.25 17H14" />
+    </svg>
   );
 }
 
 function formatDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+  return date.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
-function ExtractionList({ items }: { items: ExtractionItem[] }) {
-  if (items.length === 0) {
-    return <p className="text-gray-500">No items generated.</p>;
+function buildTabHref(documentId: string, tab: TabId, isFocusMode = false): string {
+  const params = new URLSearchParams();
+  params.set("tab", tab);
+  if (isFocusMode) {
+    params.set("focus", "1");
   }
+  return `/documents/${documentId}?${params.toString()}`;
+}
+
+function formatCitationLabel(citation: Citation): string {
+  if (citation.source_type === "pdf") {
+    return `Page ${citation.page}`;
+  }
+
+  return `Paragraph ${citation.paragraph}`;
+}
+
+function formatCitationSubLabel(citation: Citation): string | null {
+  if (citation.source_type === "pdf") {
+    return null;
+  }
+
+  return citation.anchor_type === "paragraph" ? "DOCX paragraph reference" : null;
+}
+
+function flattenImportantDetails(items: {
+  dates: ExtractionItem[];
+  policies: ExtractionItem[];
+  contacts: ExtractionItem[];
+  logistics: ExtractionItem[];
+}): Array<ExtractionItem & { bucket: "dates" | "policies" | "contacts" | "logistics" }> {
+  return [
+    ...items.dates.map((item) => ({ ...item, bucket: "dates" as const })),
+    ...items.policies.map((item) => ({ ...item, bucket: "policies" as const })),
+    ...items.contacts.map((item) => ({ ...item, bucket: "contacts" as const })),
+    ...items.logistics.map((item) => ({ ...item, bucket: "logistics" as const })),
+  ];
+}
+
+function isDeadlineLike(item: ExtractionItem): boolean {
+  const text = `${item.label} ${item.supporting_quote}`.toLowerCase();
   return (
-    <ul className="space-y-3">
-      {items.map((item) => (
-        <li key={item.id} className="space-y-1">
-          <p className="font-medium text-gray-900">{item.label}</p>
-          <p className="text-xs text-gray-600">{item.supporting_quote}</p>
-        </li>
-      ))}
-    </ul>
+    text.includes("deadline") ||
+    text.includes("due date") ||
+    text.includes("due ") ||
+    text.includes("late submission") ||
+    text.includes("late penalty")
   );
+}
+
+function getTabBadgeStyles(active: boolean, emphasis: "default" | "success" = "default") {
+  if (emphasis === "success") {
+    return "bg-emerald-100 text-emerald-700";
+  }
+
+  return active ? "bg-gray-950 text-white" : "bg-gray-100 text-gray-600";
 }
 
 export default function DocumentPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
+
   const id = params?.id;
-  const tab = (searchParams.get("tab") ?? "overview").toLowerCase();
+  const requestedTab = (searchParams.get("tab") ?? "overview").toLowerCase() as TabId;
   const isFocusMode = searchParams.get("focus") === "1";
+
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [checklistCompleted, setChecklistCompleted] = useState<Record<string, boolean>>({});
   const [isDeleting, setIsDeleting] = useState(false);
   const [focusIndex, setFocusIndex] = useState(0);
+  const [openSectionId, setOpenSectionId] = useState<string | null>(null);
+  const [citationDrawerOpen, setCitationDrawerOpen] = useState(false);
+  const [citationDrawerTitle, setCitationDrawerTitle] = useState("Source Citations");
+  const [activeCitations, setActiveCitations] = useState<Citation[]>([]);
 
   useEffect(() => {
     if (!id) return;
+
     let cancelled = false;
 
     const load = async () => {
       setIsLoading(true);
       setError(null);
+
       try {
         const response = await getDocument(id);
         if (!cancelled) {
@@ -107,6 +394,7 @@ export default function DocumentPage() {
     };
 
     void load();
+
     return () => {
       cancelled = true;
     };
@@ -114,24 +402,6 @@ export default function DocumentPage() {
 
   const document = detail?.document ?? null;
   const studyGuide = detail?.studyGuide ?? null;
-  const canOpenQuiz = document?.document_type === "LECTURE";
-
-  const importantDetails = useMemo(() => {
-    if (!studyGuide) {
-      return [
-        { title: "Dates", items: [] as ExtractionItem[] },
-        { title: "Policies", items: [] as ExtractionItem[] },
-        { title: "Contacts", items: [] as ExtractionItem[] },
-        { title: "Logistics", items: [] as ExtractionItem[] },
-      ];
-    }
-    return [
-      { title: "Dates", items: studyGuide.important_details.dates },
-      { title: "Policies", items: studyGuide.important_details.policies },
-      { title: "Contacts", items: studyGuide.important_details.contacts },
-      { title: "Logistics", items: studyGuide.important_details.logistics },
-    ];
-  }, [studyGuide]);
 
   useEffect(() => {
     if (!detail) return;
@@ -140,12 +410,23 @@ export default function DocumentPage() {
 
   useEffect(() => {
     if (!studyGuide) return;
+
     const total = studyGuide.sections.length;
+
     if (total === 0) {
       setFocusIndex(0);
+      setOpenSectionId(null);
       return;
     }
+
     setFocusIndex((prev) => Math.max(0, Math.min(prev, total - 1)));
+
+    setOpenSectionId((current) => {
+      if (current && studyGuide.sections.some((section) => section.id === current)) {
+        return current;
+      }
+      return studyGuide.sections[0]?.id ?? null;
+    });
   }, [studyGuide]);
 
   if (!id) {
@@ -154,21 +435,33 @@ export default function DocumentPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-5xl space-y-8 animate-pulse">
+      <div className="mx-auto max-w-7xl animate-pulse space-y-8">
         <div className="space-y-3">
-          <div className="h-9 w-2/3 rounded-xl bg-gray-200" />
+          <div className="h-10 w-2/3 rounded-xl bg-gray-200" />
           <div className="h-4 w-1/3 rounded-lg bg-gray-100" />
         </div>
-        <div className="flex gap-8 border-b pb-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-4 w-20 rounded bg-gray-100" />
+
+        <div className="flex gap-6 border-b border-gray-200 pb-3">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="h-10 w-28 rounded-2xl bg-gray-100" />
           ))}
         </div>
-        <div className="rounded-3xl border bg-white p-6 shadow-sm space-y-4">
-          <div className="h-5 w-1/2 rounded bg-gray-200" />
+
+        <div className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)] space-y-5">
+          <div className="flex items-center gap-4">
+            <div className="h-14 w-14 rounded-2xl bg-gray-100" />
+            <div className="space-y-2">
+              <div className="h-5 w-40 rounded bg-gray-200" />
+              <div className="h-4 w-80 rounded bg-gray-100" />
+            </div>
+          </div>
           <div className="h-4 w-full rounded bg-gray-100" />
-          <div className="h-4 w-5/6 rounded bg-gray-100" />
-          <div className="h-4 w-4/6 rounded bg-gray-100" />
+          <div className="h-4 w-11/12 rounded bg-gray-100" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="h-24 rounded-2xl bg-gray-100" />
+            <div className="h-24 rounded-2xl bg-gray-100" />
+            <div className="h-24 rounded-2xl bg-gray-100" />
+          </div>
         </div>
       </div>
     );
@@ -180,7 +473,7 @@ export default function DocumentPage() {
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           {error}
         </div>
-        <Link href="/dashboard" className="text-sm underline">
+        <Link href="/dashboard" className="text-sm font-medium underline">
           Back to Dashboard
         </Link>
       </div>
@@ -190,8 +483,8 @@ export default function DocumentPage() {
   if (!document) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-semibold">Document not found</h1>
-        <Link href="/dashboard" className="text-sm underline">
+        <h1 className="text-2xl font-semibold text-gray-900">Document not found</h1>
+        <Link href="/dashboard" className="text-sm font-medium underline">
           Back to Dashboard
         </Link>
       </div>
@@ -200,37 +493,103 @@ export default function DocumentPage() {
 
   if (!studyGuide) {
     return (
-      <div className="space-y-5">
-        <h1 className="text-3xl font-semibold text-gray-900">{document.filename}</h1>
-        <StatusPill status={document.status} />
-        <p className="text-sm text-gray-600">
-          Study guide is not ready yet. Continue processing or retry from the processing page.
-        </p>
-        {document.error_message ? (
-          <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {document.error_message}
+      <div className="mx-auto max-w-5xl space-y-6">
+        <div className="space-y-3">
+          {document.status !== "failed" ? <StatusPill status={document.status} /> : null}
+          <h1 className="text-3xl font-semibold tracking-tight text-gray-950 sm:text-4xl">
+            {document.filename}
+          </h1>
+          <p className="text-sm text-gray-500">
+            Processed on {formatDate(document.uploaded_at)} • {document.page_count} pages
           </p>
-        ) : null}
-        <div className="flex gap-3">
-          <Link href={`/documents/${document.id}/processing`} className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white">
-            Open Processing
-          </Link>
-          <Link href="/dashboard" className="rounded-xl border px-4 py-2 text-sm font-semibold text-gray-900">
-            Back to Dashboard
-          </Link>
         </div>
+
+        <Card>
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold text-gray-950">
+              Study guide not available yet
+            </h2>
+            <p className="text-sm leading-6 text-gray-600">
+              This document does not have a ready study guide yet. Continue processing or return to
+              your dashboard.
+            </p>
+
+            {document.document_type === "UNSUPPORTED" ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                This document type is not currently supported for full LearnEase results.
+              </div>
+            ) : null}
+
+            {document.error_message ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {document.error_message}
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-3 pt-2">
+              <Link
+                href={`/documents/${document.id}/processing`}
+                className="inline-flex items-center justify-center rounded-2xl bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-black/90"
+              >
+                Open Processing
+              </Link>
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center justify-center rounded-2xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+              >
+                Back to Dashboard
+              </Link>
+            </div>
+          </div>
+        </Card>
       </div>
     );
   }
 
+  const checklistTotal = studyGuide.checklist.length;
+  const checklistDone = studyGuide.checklist.filter(
+    (item) => checklistCompleted[item.id] ?? false
+  ).length;
+  const checklistProgress = checklistTotal > 0 ? (checklistDone / checklistTotal) * 100 : 0;
+
+  const tabs: Array<{
+    id: TabId;
+    label: string;
+    badge?: string;
+    badgeTone?: "default" | "success";
+  }> = [
+    { id: "overview", label: "Overview" },
+    { id: "actions", label: "Key Actions" },
+    {
+      id: "checklist",
+      label: "Checklist",
+      badge: checklistTotal > 0 ? `${checklistDone}/${checklistTotal}` : undefined,
+      badgeTone: "success",
+    },
+    { id: "details", label: "Important Details" },
+    {
+      id: "sections",
+      label: "Sections",
+      badge: studyGuide.sections.length > 0 ? String(studyGuide.sections.length) : undefined,
+      badgeTone: "default",
+    },
+  ];
+
+  const validTabs = new Set<TabId>(tabs.map((tab) => tab.id));
+  const tab: TabId = validTabs.has(requestedTab) ? requestedTab : "overview";
+
+  const detailItems = flattenImportantDetails(studyGuide.important_details);
   const focusSection = studyGuide.sections[focusIndex] ?? null;
+  const canOpenQuiz = document.document_type === "LECTURE";
 
   async function handleChecklistToggle(itemId: string, completed: boolean) {
     if (!document) return;
 
     const previous = checklistCompleted[itemId] ?? false;
     const nextState = { ...checklistCompleted, [itemId]: completed };
+
     setChecklistCompleted(nextState);
+    setError(null);
 
     try {
       await updateChecklistItem(document.id, itemId, completed);
@@ -242,6 +601,7 @@ export default function DocumentPage() {
 
   async function handleDeleteDocument() {
     if (!document || isDeleting) return;
+
     const confirmed = window.confirm(
       "Delete this document and all generated artifacts? This action cannot be undone."
     );
@@ -249,6 +609,7 @@ export default function DocumentPage() {
 
     setIsDeleting(true);
     setError(null);
+
     try {
       await deleteDocument(document.id);
       router.replace("/dashboard");
@@ -258,135 +619,339 @@ export default function DocumentPage() {
     }
   }
 
-  return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      <div className="flex items-start justify-between gap-6">
-        <div className="min-w-0">
-          <h1 className="truncate text-4xl font-semibold tracking-tight text-gray-900">
-            {document.filename}
-          </h1>
-          <p className="mt-2 text-sm text-gray-500">
-            Processed on {formatDate(document.uploaded_at)} • {document.page_count} pages
-          </p>
-        </div>
+  function openCitationDrawer(title: string, citations: Citation[]) {
+    setCitationDrawerTitle(title);
+    setActiveCitations(citations);
+    setCitationDrawerOpen(true);
+  }
 
-        <div className="flex items-center gap-3">
-          <Link
-            href={`/documents/${document.id}?tab=sections&focus=1`}
-            className="inline-flex items-center justify-center rounded-xl border px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm hover:bg-gray-50"
-          >
-            Focus Mode
-          </Link>
+  function renderSectionAccordionRow(section: StudyGuideSection, index: number) {
+    const isOpen = openSectionId === section.id;
 
-          {canOpenQuiz ? (
-            <Link
-              href={`/documents/${document.id}/quiz`}
-              className="inline-flex items-center justify-center rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-black/90"
-            >
-              Test Your Knowledge
-            </Link>
-          ) : (
-            <span className="inline-flex items-center justify-center rounded-xl bg-gray-100 px-5 py-2.5 text-sm font-semibold text-gray-600">
-              Quiz for lecture docs only
-            </span>
-          )}
-
-          <button
-            type="button"
-            onClick={() => {
-              void handleDeleteDocument();
-            }}
-            disabled={isDeleting}
-            className="inline-flex items-center justify-center rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isDeleting ? "Deleting..." : "Delete"}
-          </button>
-        </div>
-      </div>
-
-      <div className="border-b">
-        <div className="flex flex-wrap items-center gap-8">
-          <Link href={`/documents/${document.id}?tab=overview`} className={tab === "overview" ? "pb-3 text-sm font-semibold text-gray-900" : "pb-3 text-sm text-gray-500"}>
-            Overview
-          </Link>
-          <Link href={`/documents/${document.id}?tab=actions`} className={tab === "actions" ? "pb-3 text-sm font-semibold text-gray-900" : "pb-3 text-sm text-gray-500"}>
-            Key Actions
-          </Link>
-          <Link href={`/documents/${document.id}?tab=checklist`} className={tab === "checklist" ? "pb-3 text-sm font-semibold text-gray-900" : "pb-3 text-sm text-gray-500"}>
-            Checklist
-          </Link>
-          <Link href={`/documents/${document.id}?tab=details`} className={tab === "details" ? "pb-3 text-sm font-semibold text-gray-900" : "pb-3 text-sm text-gray-500"}>
-            Important Details
-          </Link>
-          <Link href={`/documents/${document.id}?tab=sections`} className={tab === "sections" ? "pb-3 text-sm font-semibold text-gray-900" : "pb-3 text-sm text-gray-500"}>
-            Sections
-          </Link>
-        </div>
-      </div>
-
-      {tab === "overview" ? (
-        <Card>
-          <h2 className="text-base font-semibold text-gray-900">{studyGuide.overview.title}</h2>
-          <p className="mt-2 text-sm leading-7 text-gray-700">{studyGuide.overview.summary}</p>
-
-          {(studyGuide.overview.topic || studyGuide.overview.due_date || studyGuide.overview.estimated_time) ? (
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {studyGuide.overview.topic ? (
-                <div className="rounded-2xl border bg-gray-50 px-5 py-4">
-                  <p className="text-xs font-medium text-gray-500">Topic</p>
-                  <p className="mt-1 text-sm font-semibold text-gray-900">{studyGuide.overview.topic}</p>
-                </div>
-              ) : null}
-              {studyGuide.overview.due_date ? (
-                <div className="rounded-2xl border bg-gray-50 px-5 py-4">
-                  <p className="text-xs font-medium text-gray-500">Due Date</p>
-                  <p className="mt-1 text-sm font-semibold text-gray-900">{studyGuide.overview.due_date}</p>
-                </div>
-              ) : null}
-              {studyGuide.overview.estimated_time ? (
-                <div className="rounded-2xl border bg-gray-50 px-5 py-4">
-                  <p className="text-xs font-medium text-gray-500">Estimated Time</p>
-                  <p className="mt-1 text-sm font-semibold text-gray-900">{studyGuide.overview.estimated_time}</p>
-                </div>
-              ) : null}
+    return (
+      <div
+        key={section.id}
+        className="overflow-hidden rounded-3xl border border-gray-200 bg-white"
+      >
+        <button
+          type="button"
+          onClick={() =>
+            setOpenSectionId((current) => (current === section.id ? null : section.id))
+          }
+          className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left hover:bg-gray-50"
+        >
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-500">
+              {index + 1}
             </div>
-          ) : null}
-        </Card>
-      ) : null}
-
-      {tab === "actions" ? (
-        <Card>
-          <h2 className="text-base font-semibold text-gray-900">Key Actions</h2>
-          <div className="mt-4">
-            <ExtractionList items={studyGuide.key_actions} />
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
+                Section {index + 1}
+              </p>
+              <p className="mt-1 truncate text-base font-semibold text-gray-950">
+                {section.title}
+              </p>
+            </div>
           </div>
-        </Card>
-      ) : null}
 
-      {tab === "checklist" ? (
-        <Card>
-          <h2 className="text-base font-semibold text-gray-900">Checklist</h2>
-          <div className="mt-4">
-            {studyGuide.checklist.length === 0 ? (
-              <p className="text-gray-500">No checklist items generated.</p>
+          <span className="shrink-0 text-gray-500">
+            {isOpen ? (
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m6 15 6-6 6 6" />
+              </svg>
             ) : (
-              <ul className="space-y-3">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            )}
+          </span>
+        </button>
+
+        {isOpen ? (
+          <div className="border-t border-gray-200 px-6 py-5">
+            <p className="text-[15px] leading-8 text-gray-700">{section.content}</p>
+
+            <button
+              type="button"
+              onClick={() => openCitationDrawer(section.title, section.citations)}
+              className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800"
+            >
+              <QuoteIcon />
+              View source citations ({section.citations.length})
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="mx-auto max-w-7xl space-y-8">
+        {error ? (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {error}
+          </div>
+        ) : null}
+
+        <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="truncate text-3xl font-semibold tracking-tight text-gray-950 sm:text-4xl">
+              {document.filename}
+            </h1>
+            <p className="mt-3 text-[15px] text-gray-500">
+              Processed on {formatDate(document.uploaded_at)} • {document.page_count} pages
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href={buildTabHref(document.id, "sections", true)}
+              className="inline-flex items-center justify-center rounded-2xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-950 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-gray-50"
+            >
+              <span className="mr-2">
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M15 3h6v6" />
+                  <path d="M9 21H3v-6" />
+                  <path d="m21 3-7 7" />
+                  <path d="m3 21 7-7" />
+                </svg>
+              </span>
+              Focus Mode
+            </Link>
+
+            {canOpenQuiz ? (
+              <Link
+                href={`/documents/${document.id}/quiz`}
+                className="inline-flex items-center justify-center rounded-2xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-black/90"
+              >
+                <span className="mr-2">
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 3-3 3" />
+                    <path d="M12 17h.01" />
+                    <path d="M4.5 8.5a8 8 0 0 1 15 0" />
+                    <path d="M4.5 15.5a8 8 0 0 0 15 0" />
+                  </svg>
+                </span>
+                Test Your Knowledge
+              </Link>
+            ) : (
+              <span className="inline-flex items-center justify-center rounded-2xl bg-gray-100 px-6 py-3 text-sm font-semibold text-gray-600">
+                Quiz for lecture docs only
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                void handleDeleteDocument();
+              }}
+              disabled={isDeleting}
+              className="inline-flex items-center justify-center rounded-2xl border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </button>
+          </div>
+        </header>
+
+        <nav className="border-b border-gray-200">
+          <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+            {tabs.map((tabItem) => {
+              const active = tab === tabItem.id;
+
+              return (
+                <Link
+                  key={tabItem.id}
+                  href={buildTabHref(
+                    document.id,
+                    tabItem.id,
+                    tabItem.id === "sections" && isFocusMode
+                  )}
+                  className={`inline-flex items-center gap-2 rounded-t-2xl border-b-[3px] px-4 py-3 text-[15px] transition ${
+                    active
+                      ? "border-gray-950 bg-white font-semibold text-gray-950 shadow-[inset_0_0_0_1px_rgb(229,231,235)]"
+                      : "border-transparent text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  <span>{tabItem.label}</span>
+                  {tabItem.badge ? (
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${getTabBadgeStyles(
+                        active,
+                        tabItem.badgeTone ?? "default"
+                      )}`}
+                    >
+                      {tabItem.badge}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+
+        {tab === "overview" ? (
+          <Card className="space-y-8">
+            <SectionHeading icon={<SummaryIcon />} title="Document Summary" />
+
+            <p className="max-w-3xl text-[17px] leading-8 text-gray-700">
+              {studyGuide.overview.summary}
+            </p>
+
+            {(studyGuide.overview.topic ||
+              studyGuide.overview.due_date ||
+              studyGuide.overview.estimated_time) ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {studyGuide.overview.topic ? (
+                  <MetricCard label="Topic" value={studyGuide.overview.topic} />
+                ) : null}
+                {studyGuide.overview.due_date ? (
+                  <MetricCard label="Due Date" value={studyGuide.overview.due_date} />
+                ) : null}
+                {studyGuide.overview.estimated_time ? (
+                  <MetricCard
+                    label="Estimated Time"
+                    value={studyGuide.overview.estimated_time}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+          </Card>
+        ) : null}
+
+        {tab === "actions" ? (
+          <Card className="space-y-6">
+            <SectionHeading
+              icon={<ActionsIcon />}
+              title="Key Actions"
+              description="The most important directives, takeaways, and requirements extracted from this document."
+            />
+
+            {studyGuide.key_actions.length === 0 ? (
+              <EmptyState text="No key actions were generated for this document." />
+            ) : (
+              <div className="space-y-4">
+                {studyGuide.key_actions.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-3xl border border-gray-200 bg-white px-6 py-6"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600">
+                        <ActionsIcon />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-lg font-semibold tracking-tight text-gray-950">
+                          {item.label}
+                        </p>
+                        <p className="mt-2 text-[15px] leading-7 text-gray-500">
+                          {item.supporting_quote}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        ) : null}
+
+        {tab === "checklist" ? (
+          <Card className="space-y-7">
+            <SectionHeading
+              icon={<ChecklistIcon />}
+              title={
+                document.document_type === "HOMEWORK"
+                  ? "Assignment Checklist"
+                  : document.document_type === "LECTURE"
+                  ? "Study Checklist"
+                  : "Checklist"
+              }
+              right={
+                <div className="text-sm font-medium text-gray-500">
+                  {checklistDone} of {checklistTotal} completed
+                </div>
+              }
+            />
+
+            {checklistTotal > 0 ? (
+              <div className="space-y-3">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full bg-emerald-600 transition-all"
+                    style={{ width: `${checklistProgress}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {studyGuide.checklist.length === 0 ? (
+              <EmptyState text="No checklist items were generated for this document." />
+            ) : (
+              <ul className="space-y-5">
                 {studyGuide.checklist.map((item) => {
                   const checked = checklistCompleted[item.id] ?? false;
+
                   return (
-                    <li key={item.id} className="rounded-xl border p-3">
-                      <label className="flex items-start gap-3">
+                    <li key={item.id}>
+                      <label className="flex cursor-pointer items-start gap-4">
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={(event) => {
                             void handleChecklistToggle(item.id, event.target.checked);
                           }}
-                          className="mt-1 h-4 w-4 rounded border-gray-300"
+                          className="mt-1 h-5 w-5 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
                         />
-                        <span className="space-y-1">
-                          <span className="block font-medium text-gray-900">{item.label}</span>
-                          <span className="block text-xs text-gray-600">{item.supporting_quote}</span>
+                        <span className="min-w-0">
+                          <span
+                            className={`block text-lg font-semibold tracking-tight ${
+                              checked
+                                ? "text-gray-500 line-through"
+                                : "text-gray-950"
+                            }`}
+                          >
+                            {item.label}
+                          </span>
+                          <span className="mt-1 block text-sm leading-7 text-gray-500">
+                            {item.supporting_quote}
+                          </span>
                         </span>
                       </label>
                     </li>
@@ -394,99 +959,252 @@ export default function DocumentPage() {
                 })}
               </ul>
             )}
-          </div>
-        </Card>
-      ) : null}
+          </Card>
+        ) : null}
 
-      {tab === "details" ? (
-        <Card>
-          <h2 className="text-base font-semibold text-gray-900">Important Details</h2>
-          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-            {importantDetails.map((group) => (
-              <SubCard key={group.title} title={group.title}>
-                <ExtractionList items={group.items} />
-              </SubCard>
-            ))}
-          </div>
-        </Card>
-      ) : null}
+        {tab === "details" ? (
+          <Card className="space-y-6">
+            <SectionHeading
+              icon={<DetailsIcon />}
+              title="Important Details"
+              description="Key dates, policies, contacts, and logistics extracted from the document."
+            />
 
-      {tab === "sections" ? (
-        <Card>
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-base font-semibold text-gray-900">
-              {isFocusMode ? "Focus Mode" : "Sections"}
-            </h2>
-            <Link
-              href={
-                isFocusMode
-                  ? `/documents/${document.id}?tab=sections`
-                  : `/documents/${document.id}?tab=sections&focus=1`
-              }
-              className="text-sm font-medium text-gray-600 underline"
-            >
-              {isFocusMode ? "Exit Focus Mode" : "Enter Focus Mode"}
-            </Link>
-          </div>
+            {detailItems.length === 0 ? (
+              <EmptyState text="No important details were generated for this document." />
+            ) : (
+              <div className="space-y-4">
+                {detailItems.map((item) => {
+                  const highlighted = isDeadlineLike(item);
 
-          {studyGuide.sections.length === 0 ? (
-            <p className="mt-4 text-sm text-gray-500">No sections available.</p>
-          ) : isFocusMode ? (
-            <div className="mt-6 space-y-4">
-              {focusSection ? (
-                <SubCard title={focusSection.title}>
-                  <p className="text-sm text-gray-700">{focusSection.content}</p>
-                  <p className="mt-3 text-xs text-gray-500">
-                    Citations: {focusSection.citations.length}
-                  </p>
-                </SubCard>
-              ) : null}
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setFocusIndex((prev) => Math.max(0, prev - 1))}
-                  disabled={focusIndex <= 0}
-                  className="rounded-xl border px-4 py-2 text-sm font-semibold text-gray-900 disabled:opacity-50"
-                >
-                  Previous Section
-                </button>
-                <p className="text-xs text-gray-500">
-                  Section {focusIndex + 1} of {studyGuide.sections.length}
-                </p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFocusIndex((prev) =>
-                      Math.min(studyGuide.sections.length - 1, prev + 1)
-                    )
-                  }
-                  disabled={focusIndex >= studyGuide.sections.length - 1}
-                  className="rounded-xl border px-4 py-2 text-sm font-semibold text-gray-900 disabled:opacity-50"
-                >
-                  Next Section
-                </button>
+                  return (
+                    <div
+                      key={item.id}
+                      className={`rounded-3xl border px-6 py-6 ${
+                        highlighted
+                          ? "border-amber-200 bg-amber-50"
+                          : "border-gray-200 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start gap-4">
+                        <div
+                          className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center ${
+                            highlighted ? "text-amber-500" : "text-gray-400"
+                          }`}
+                        >
+                          {highlighted ? <WarningIcon /> : <InfoIcon />}
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-xl font-semibold tracking-tight text-gray-950">
+                            {item.label}
+                          </h3>
+                          <p className="mt-2 text-[15px] leading-8 text-gray-700">
+                            {item.supporting_quote}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-          ) : (
-            <div className="mt-6 grid grid-cols-1 gap-4">
-              {studyGuide.sections.map((section) => (
-                <SubCard key={section.id} title={section.title}>
-                  <p className="text-sm text-gray-700">{section.content}</p>
-                  <p className="mt-3 text-xs text-gray-500">
-                    Citations: {section.citations.length}
-                  </p>
-                </SubCard>
-              ))}
-            </div>
-          )}
-        </Card>
-      ) : null}
+            )}
+          </Card>
+        ) : null}
 
-      <div className="pt-2">
-        <Link href="/dashboard" className="text-sm font-medium text-gray-600 hover:text-gray-900">
-          Back to Dashboard
-        </Link>
+        {tab === "sections" ? (
+          <Card className="space-y-6">
+            {isFocusMode ? (
+              <>
+                <SectionHeading
+                  icon={<SectionsIcon />}
+                  title="Focus Mode"
+                  description="Read one section at a time in a distraction-free view."
+                  right={
+                    <Link
+                      href={buildTabHref(document.id, "sections", false)}
+                      className="text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800"
+                    >
+                      Exit Focus Mode
+                    </Link>
+                  }
+                />
+
+                {studyGuide.sections.length === 0 ? (
+                  <EmptyState text="No sections were generated for this document." />
+                ) : focusSection ? (
+                  <div className="space-y-6">
+                    <div className="rounded-3xl border border-gray-200 bg-white px-6 py-6">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-500">
+                          {focusIndex + 1}
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
+                            Section {focusIndex + 1}
+                          </p>
+                          <h3 className="mt-1 text-xl font-semibold tracking-tight text-gray-950">
+                            {focusSection.title}
+                          </h3>
+                        </div>
+                      </div>
+
+                      <p className="mt-6 text-[16px] leading-8 text-gray-700">
+                        {focusSection.content}
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openCitationDrawer(focusSection.title, focusSection.citations)
+                        }
+                        className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800"
+                      >
+                        <QuoteIcon />
+                        View source citations ({focusSection.citations.length})
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setFocusIndex((prev) => Math.max(0, prev - 1))}
+                        disabled={focusIndex <= 0}
+                        className="rounded-2xl border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Previous Section
+                      </button>
+
+                      <p className="text-sm text-gray-500">
+                        Section {focusIndex + 1} of {studyGuide.sections.length}
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFocusIndex((prev) =>
+                            Math.min(studyGuide.sections.length - 1, prev + 1)
+                          )
+                        }
+                        disabled={focusIndex >= studyGuide.sections.length - 1}
+                        className="rounded-2xl border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Next Section
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <SectionHeading
+                  icon={<SectionsIcon />}
+                  title="Sections"
+                  description="Browse the main sections extracted from the document."
+                  right={
+                    <Link
+                      href={buildTabHref(document.id, "sections", true)}
+                      className="text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800"
+                    >
+                      Enter Focus Mode
+                    </Link>
+                  }
+                />
+
+                {studyGuide.sections.length === 0 ? (
+                  <EmptyState text="No sections were generated for this document." />
+                ) : (
+                  <div className="space-y-4">
+                    {studyGuide.sections.map((section, index) =>
+                      renderSectionAccordionRow(section, index)
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </Card>
+        ) : null}
+
+        <div className="pt-1">
+          <Link
+            href="/dashboard"
+            className="text-base font-medium text-gray-600 hover:text-gray-900"
+          >
+            Back to Dashboard
+          </Link>
+        </div>
       </div>
-    </div>
+
+      {citationDrawerOpen ? (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <button
+            type="button"
+            aria-label="Close citations panel"
+            onClick={() => setCitationDrawerOpen(false)}
+            className="absolute inset-0 bg-black/10"
+          />
+          <aside className="relative z-10 h-full w-full max-w-md border-l border-gray-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
+              <div>
+                <p className="text-lg font-semibold text-gray-950">Source Citations</p>
+                <p className="mt-1 text-sm text-gray-500">{citationDrawerTitle}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCitationDrawerOpen(false)}
+                className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m18 6-12 12" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="h-[calc(100%-88px)] overflow-y-auto px-5 py-5">
+              {activeCitations.length === 0 ? (
+                <EmptyState text="No citations available." />
+              ) : (
+                <div className="space-y-4">
+                  {activeCitations.map((citation, index) => (
+                    <div
+                      key={`${citation.source_type}-${index}-${formatCitationLabel(citation)}`}
+                      className="rounded-2xl border border-gray-200 bg-white p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 text-gray-400">
+                          <QuoteIcon />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-950">
+                            {formatCitationLabel(citation)}
+                          </p>
+                          {formatCitationSubLabel(citation) ? (
+                            <p className="mt-1 text-xs uppercase tracking-wide text-gray-400">
+                              {formatCitationSubLabel(citation)}
+                            </p>
+                          ) : null}
+                          <p className="mt-3 text-sm leading-7 text-gray-600">
+                            {citation.excerpt}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
+      ) : null}
+    </>
   );
 }
