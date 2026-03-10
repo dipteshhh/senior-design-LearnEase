@@ -275,6 +275,7 @@ export default function ProcessingPage() {
 
   const isFailed = document?.study_guide_status === "failed";
   const isReady = document?.study_guide_status === "ready";
+  const isUnsupported = document?.error_code === "DOCUMENT_UNSUPPORTED";
 
   const refreshDocument = useCallback(
     async (signal?: AbortSignal) => {
@@ -330,7 +331,6 @@ export default function ProcessingPage() {
             return DEFAULT_POLL_DELAY_MS;
           }
         }
-
         if (isMountedRef.current) {
           setError(getErrorMessage(err, "Unable to start study guide generation."));
         }
@@ -436,7 +436,11 @@ export default function ProcessingPage() {
         }
 
         if (next.study_guide_status === "failed") {
-          setError(next.error_message ?? "Study guide generation failed.");
+          if (next.error_code === "DOCUMENT_UNSUPPORTED") {
+            setError("This document type is not supported for study guide generation.");
+          } else {
+            setError(next.error_message ?? "Study guide generation failed.");
+          }
           return;
         }
 
@@ -469,7 +473,7 @@ export default function ProcessingPage() {
 
     void startGeneration(nextSignal())
       .then((initialDelayMs) => {
-        if (!cancelled) {
+        if (!cancelled && initialDelayMs >= 0) {
           timer = setTimeout(() => {
             void poll();
           }, initialDelayMs ?? DEFAULT_POLL_DELAY_MS);
@@ -490,6 +494,7 @@ export default function ProcessingPage() {
   }, [id, isPageVisible, pollTrigger, processingStartedAt, refreshDocument, router, startGeneration]);
 
   const statusLine = useMemo(() => {
+    if (isUnsupported) return "This document type is not supported.";
     if (!document) return "Waiting for document status...";
     if (document.study_guide_status === "ready") return "Study guide is ready.";
     if (document.study_guide_status === "failed") return "Study guide generation failed.";
@@ -499,6 +504,7 @@ export default function ProcessingPage() {
 
   const progressLabel = useMemo(() => {
     if (isReady) return "100% complete";
+    if (document?.error_code === "DOCUMENT_UNSUPPORTED") return "Unsupported document";
     if (isFailed) return "Generation interrupted";
     if (!document) return "Preparing…";
     if (document.study_guide_status === "idle") return "Queued";
@@ -574,11 +580,12 @@ export default function ProcessingPage() {
 }, [isFailed, isReady, visualStepIndex]);
 
   const statusPill = useMemo(() => {
+    if (isUnsupported) return { label: "Unsupported", tone: "danger" as const };
     if (isFailed) return { label: "Failed", tone: "danger" as const };
     if (isReady) return { label: "Ready", tone: "success" as const };
     if (document?.study_guide_status === "idle") return { label: "Queued", tone: "neutral" as const };
     return { label: "Processing", tone: "neutral" as const };
-  }, [document?.study_guide_status, isFailed, isReady]);
+  }, [document?.study_guide_status, isFailed, isReady, isUnsupported]);
 
   if (!id) {
     return <p className="px-6 py-10 text-sm text-gray-600">Missing document id.</p>;
@@ -591,11 +598,11 @@ export default function ProcessingPage() {
           <ProcessingGlyph failed={isFailed} />
 
           <h1 className="mt-7 max-w-2xl text-3xl font-semibold tracking-tight text-gray-950 md:text-4xl">
-            {getStatusHeading(document?.study_guide_status)}
+            {isUnsupported ? "Document not supported" : getStatusHeading(document?.study_guide_status)}
           </h1>
 
           <p className="mt-3 max-w-xl text-sm leading-7 text-gray-600 md:text-base">
-            {getStatusDescription(document?.study_guide_status)}
+            {isUnsupported ? "This document type is not supported for study guide generation. Please upload a different document." : getStatusDescription(document?.study_guide_status)}
           </p>
 
           <p className="mt-4 text-sm font-medium text-gray-400">{progressLabel}</p>
@@ -615,9 +622,9 @@ export default function ProcessingPage() {
               <div
                 className={[
                   "h-full rounded-full transition-all duration-700",
-                  isFailed ? "bg-rose-500" : isReady ? "bg-emerald-500" : "bg-gray-950",
+                  isUnsupported ? "bg-amber-500" : isFailed ? "bg-rose-500" : isReady ? "bg-emerald-500" : "bg-gray-950",
                 ].join(" ")}
-                style={{ width: `${completionPercent}%` }}
+                style={{ width: isUnsupported ? "100%" : `${completionPercent}%` }}
               />
             </div>
 
@@ -697,7 +704,14 @@ export default function ProcessingPage() {
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">
-                {isFailed ? (
+                {isUnsupported ? (
+                  <Link
+                    href="/upload"
+                    className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                  >
+                    Upload a different document
+                  </Link>
+                ) : isFailed ? (
                   <button
                     type="button"
                     onClick={() => {

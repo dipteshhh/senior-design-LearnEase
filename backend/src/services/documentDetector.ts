@@ -1,9 +1,19 @@
 import type { DocumentType } from "../schemas/analyze.js";
 
-interface DetectionResult {
+export interface DetectionResult {
   documentType: DocumentType;
   isAssignment: boolean;
 }
+
+// ── Positive signals (first-match-wins per CLASSIFICATION.md) ───────
+
+const SYLLABUS_TRIGGERS = [
+  "syllabus",
+  "course policies",
+  "grading",
+  "office hours",
+  "learning outcomes",
+];
 
 const HOMEWORK_TRIGGERS = [
   "homework",
@@ -21,14 +31,6 @@ const LECTURE_TRIGGERS = [
   "week",
   "module",
   "chapter",
-];
-
-const SYLLABUS_TRIGGERS = [
-  "syllabus",
-  "course policies",
-  "grading",
-  "office hours",
-  "learning outcomes",
 ];
 
 function hasAnyTrigger(text: string, triggers: string[]): boolean {

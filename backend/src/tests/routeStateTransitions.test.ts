@@ -1,7 +1,7 @@
 /**
  * Tests for route async state transitions:
  * - createStudyGuideHandler: idle → processing → 202
- * - createStudyGuideHandler: UNSUPPORTED → 422 (synchronous rejection)
+ * - createStudyGuideHandler: UNSUPPORTED → 202 (LLM pre-classifier gates async)
  * - createStudyGuideHandler: already processing → 409
  * - createStudyGuideHandler: already cached → 200
  * - retryStudyGuideHandler: failed → processing → 202
@@ -123,7 +123,7 @@ test("createStudyGuideHandler returns 202 and sets status to processing", async 
   assert.equal(updated.studyGuideStatus, "processing");
 });
 
-test("createStudyGuideHandler returns 422 for UNSUPPORTED document", async () => {
+test("createStudyGuideHandler returns 202 for UNSUPPORTED document (LLM gates async)", async () => {
   const { createStudyGuideHandler } = await loadHandlers();
   const doc = seedDocument({ documentType: "UNSUPPORTED" });
   const req = makeAuthReq({ document_id: doc.id });
@@ -131,12 +131,10 @@ test("createStudyGuideHandler returns 422 for UNSUPPORTED document", async () =>
 
   await createStudyGuideHandler(req as any, res as any);
 
-  assert.equal(res.statusCode, 422);
-
-  // Document state should NOT have changed
-  const unchanged = getDocument(doc.id);
-  assert.ok(unchanged);
-  assert.equal(unchanged.studyGuideStatus, "idle");
+  // Handler returns 202 immediately; the LLM pre-classifier will gate
+  // generation asynchronously inside the background task.
+  assert.equal(res.statusCode, 202);
+  assert.deepEqual(res.body, { status: "processing" });
 });
 
 test("createStudyGuideHandler returns 409 when already processing", async () => {
@@ -220,7 +218,7 @@ test("retryStudyGuideHandler returns 409 when not in failed state", async () => 
   assert.equal(res.statusCode, 409);
 });
 
-test("retryStudyGuideHandler returns 422 for UNSUPPORTED document", async () => {
+test("retryStudyGuideHandler returns 202 for UNSUPPORTED document (LLM gates async)", async () => {
   const { retryStudyGuideHandler } = await loadHandlers();
   const doc = seedDocument({ documentType: "UNSUPPORTED", studyGuideStatus: "failed" });
   const req = makeAuthReq({ document_id: doc.id });
@@ -228,7 +226,10 @@ test("retryStudyGuideHandler returns 422 for UNSUPPORTED document", async () => 
 
   await retryStudyGuideHandler(req as any, res as any);
 
-  assert.equal(res.statusCode, 422);
+  // Handler returns 202 immediately; the LLM pre-classifier will gate
+  // generation asynchronously inside the background task.
+  assert.equal(res.statusCode, 202);
+  assert.deepEqual(res.body, { status: "processing" });
 });
 
 test("listDocumentsHandler returns per-flow statuses for each document", async () => {

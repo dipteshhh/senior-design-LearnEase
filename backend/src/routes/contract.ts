@@ -4,6 +4,7 @@ import { sendApiError } from "../lib/apiError.js";
 import { logger } from "../lib/logger.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { detectDocumentType } from "../services/documentDetector.js";
+import { classifyWithLlm } from "../services/llmClassifier.js";
 import { analyzeDocument } from "../services/contentAnalyzer.js";
 import {
   FLOW_PROCESSING_CODE,
@@ -342,10 +343,6 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
 
   const doc = ensureOwnership(req, res, documentId);
   if (!doc) return;
-  if (doc.documentType === "UNSUPPORTED") {
-    sendApiError(res, 422, "DOCUMENT_UNSUPPORTED", "Unsupported document type.");
-    return;
-  }
   if (doc.studyGuide) {
     res.status(200).json({ status: "ready", cached: true });
     return;
@@ -368,7 +365,27 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
 
   void (async () => {
     try {
-      const generated = await analyzeDocument(doc.extractedText, doc.documentType, {
+      // LLM pre-classification: gate generation on semantic document type check
+      const classification = await classifyWithLlm(doc.extractedText);
+
+      // Persist the LLM-determined type so all downstream flows
+      // (list, detail, quiz, checklist) use the authoritative type.
+      updateDocument(documentId, (current) => ({
+        ...current,
+        documentType: classification.llmDocumentType,
+      }));
+
+      if (classification.llmDocumentType === "UNSUPPORTED") {
+        updateDocument(documentId, (current) => ({
+          ...current,
+          studyGuideStatus: "failed",
+          studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", "DOCUMENT_UNSUPPORTED"),
+          studyGuideErrorMessage: "This document type is not supported for study guide generation.",
+        }));
+        return;
+      }
+
+      const generated = await analyzeDocument(doc.extractedText, classification.llmDocumentType, {
         fileType: doc.fileType,
         pageCount: doc.pageCount,
         paragraphCount: doc.paragraphCount,
@@ -416,10 +433,6 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
 
   const doc = ensureOwnership(req, res, documentId);
   if (!doc) return;
-  if (doc.documentType === "UNSUPPORTED") {
-    sendApiError(res, 422, "DOCUMENT_UNSUPPORTED", "Unsupported document type.");
-    return;
-  }
   if (doc.studyGuideStatus === "processing") {
     sendAlreadyProcessingError(res, "Study guide is already processing.");
     return;
@@ -438,7 +451,27 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
 
   void (async () => {
     try {
-      const generated = await analyzeDocument(doc.extractedText, doc.documentType, {
+      // LLM pre-classification: gate generation on semantic document type check
+      const classification = await classifyWithLlm(doc.extractedText);
+
+      // Persist the LLM-determined type so all downstream flows
+      // (list, detail, quiz, checklist) use the authoritative type.
+      updateDocument(documentId, (current) => ({
+        ...current,
+        documentType: classification.llmDocumentType,
+      }));
+
+      if (classification.llmDocumentType === "UNSUPPORTED") {
+        updateDocument(documentId, (current) => ({
+          ...current,
+          studyGuideStatus: "failed",
+          studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", "DOCUMENT_UNSUPPORTED"),
+          studyGuideErrorMessage: "This document type is not supported for study guide generation.",
+        }));
+        return;
+      }
+
+      const generated = await analyzeDocument(doc.extractedText, classification.llmDocumentType, {
         fileType: doc.fileType,
         pageCount: doc.pageCount,
         paragraphCount: doc.paragraphCount,
