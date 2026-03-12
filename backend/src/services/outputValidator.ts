@@ -7,6 +7,7 @@ export type ValidationErrorCode =
   | "CITATION_EXCERPT_NOT_FOUND"
   | "CITATION_OUT_OF_RANGE"
   | "ACADEMIC_INTEGRITY_VIOLATION"
+  | "DOCUMENT_TOO_LARGE_FOR_GENERATION"
   | "DOCUMENT_NOT_LECTURE"
   | "GENERATION_FAILED";
 
@@ -32,6 +33,19 @@ interface ValidationContext {
   paragraphCount: number | null;
   normalizedText: string;
 }
+
+const MIN_SECTION_COUNT_FOR_STRUCTURED_DOC = 3;
+const MIN_STRUCTURED_TEXT_CHARS = 2500;
+const MIN_STRUCTURED_PDF_PAGES = 3;
+const MIN_STRUCTURED_DOCX_PARAGRAPHS = 8;
+
+const GENERIC_SECTION_TITLE_PATTERNS: RegExp[] = [
+  /^section\s+\d+$/i,
+  /^part\s+\d+$/i,
+  /^chapter\s+\d+$/i,
+  /^topic\s+\d+$/i,
+  /^untitled$/i,
+];
 
 interface IntegrityPattern {
   pattern: RegExp;
@@ -221,6 +235,60 @@ function validateNoAnswerLeakage(studyGuide: StudyGuide): void {
   });
 }
 
+function shouldRequireMinimumSections(context: ValidationContext): boolean {
+  if (context.fileType === "PDF" && context.pageCount >= MIN_STRUCTURED_PDF_PAGES) {
+    return true;
+  }
+
+  if (
+    context.fileType === "DOCX" &&
+    (context.paragraphCount ?? 0) >= MIN_STRUCTURED_DOCX_PARAGRAPHS
+  ) {
+    return true;
+  }
+
+  return context.normalizedText.length >= MIN_STRUCTURED_TEXT_CHARS;
+}
+
+function validateSectionStructure(studyGuide: StudyGuide, context: ValidationContext): void {
+  if (
+    shouldRequireMinimumSections(context) &&
+    studyGuide.sections.length < MIN_SECTION_COUNT_FOR_STRUCTURED_DOC
+  ) {
+    throw new ContractValidationError(
+      "SCHEMA_VALIDATION_FAILED",
+      "Study guide must include at least three sections for sufficiently structured documents.",
+      {
+        min_sections: MIN_SECTION_COUNT_FOR_STRUCTURED_DOC,
+        actual_sections: studyGuide.sections.length,
+        file_type: context.fileType,
+        page_count: context.pageCount,
+        paragraph_count: context.paragraphCount,
+        text_length: context.normalizedText.length,
+      }
+    );
+  }
+
+  studyGuide.sections.forEach((section, sectionIndex) => {
+    const title = section.title.trim();
+    if (title.length < 3) {
+      throw new ContractValidationError(
+        "SCHEMA_VALIDATION_FAILED",
+        "Section title must be student-readable and descriptive.",
+        { path: `sections[${sectionIndex}].title`, reason: "too_short", title }
+      );
+    }
+
+    if (GENERIC_SECTION_TITLE_PATTERNS.some((pattern) => pattern.test(title))) {
+      throw new ContractValidationError(
+        "SCHEMA_VALIDATION_FAILED",
+        "Section title must be student-readable and descriptive.",
+        { path: `sections[${sectionIndex}].title`, reason: "generic_title", title }
+      );
+    }
+  });
+}
+
 export function validateStudyGuideAgainstDocument(
   studyGuide: StudyGuide,
   input: ValidationInput
@@ -263,6 +331,7 @@ export function validateStudyGuideAgainstDocument(
     });
   });
 
+  validateSectionStructure(studyGuide, context);
   validateNoAnswerLeakage(studyGuide);
 }
 

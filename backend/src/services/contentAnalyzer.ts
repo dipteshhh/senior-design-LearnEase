@@ -26,6 +26,7 @@ import {
   sleepMs,
 } from "./generationReliability.js";
 import {
+  assertGenerationInputWithinLimit,
   buildCitationRequirements,
   buildRepairHint,
   normalizeUpstreamError,
@@ -52,7 +53,7 @@ const client = new OpenAI({
   maxRetries: getOpenAiMaxRetries(),
 });
 
-const ANALYSIS_PROMPT = `You are LearnEase, an educational assistant that helps students organize and understand their learning materials.
+const ANALYSIS_PROMPT_BASE = `You are LearnEase, an educational assistant that helps students organize and understand their learning materials.
 
 Your role is to EXTRACT and RESTRUCTURE content from a document - NOT to complete assignments or provide answers.
 
@@ -91,15 +92,13 @@ Key actions rules:
 - For homework/assignments: extract key requirements, constraints, submission instructions, and important directives (e.g. "Submit as a single PDF", "Use Python 3.x", "Include citations in APA format", "Work must be individual").
 - For lectures: extract key takeaways, main concepts to remember, and study recommendations.
 - For syllabi: extract critical policies, important deadlines, and key course requirements.
-- Key actions are NOT answers or solutions — they are high-level directives and requirements extracted from the document.
+- Key actions are NOT answers or solutions - they are high-level directives and requirements extracted from the document.
 
-Checklist rules:
-- The checklist MUST include general actionable items extracted from the document (e.g. "Review submission guidelines", "Check formatting requirements", "Submit before deadline"). Always include these regardless of whether the document has numbered problems.
-- IN ADDITION, if the document contains numbered or labeled problems, questions, exercises, or tasks, ALSO list EACH one as a separate checklist item in sequential order.
-- Problem checklist items should appear first in document order, followed by the general actionable items.
-- The label for problem items should be a short, actionable description of the task (e.g. "Set up development environment", "Download MNIST dataset", "Implement forward propagation", "Train the model"). Do NOT use generic labels like "Problem 1" — instead describe the actual work the student needs to do.
-- The supporting_quote must be an exact substring from the document that identifies or introduces that problem or action item.
-- Maintain the original order from the document — do NOT reorder problems.
+Sections rules:
+- Sections should be organized into clean, student-readable topics (not generic placeholders like "Section 1" or "Part 2").
+- Prefer concise descriptive titles (e.g. "Submission Requirements", "Key Concepts", "Exam Topics", "Project Scope").
+- When the source document has enough structure/content, produce at least 3 sections.
+- For short or sparse documents, fewer than 3 sections is acceptable if additional sections would be repetitive or low-value.
 
 IMPORTANT RULES:
 - Do NOT solve problems or provide answers
@@ -125,11 +124,67 @@ interface AnalysisMetadata {
   paragraphCount: number | null;
 }
 
+type SupportedAnalysisDocumentType = "HOMEWORK" | "LECTURE" | "SYLLABUS";
 const VALID_DOCUMENT_TYPES = new Set(["HOMEWORK", "LECTURE", "SYLLABUS"]);
 const STUDY_GUIDE_RESPONSE_FORMAT = zodResponseFormat(
   StudyGuideSchema,
   "study_guide"
 );
+
+function buildDocumentTypeInstructions(documentType: SupportedAnalysisDocumentType): string {
+  switch (documentType) {
+    case "HOMEWORK":
+      return `Document-type instructions: HOMEWORK
+- Checklist MUST remain action-oriented and task-oriented.
+- Include general actionable homework items (submission prep, formatting checks, deadline checks) and also include each explicit numbered/labeled problem/task in source order when present.
+- For problem/task items, use concise actionable labels grounded in document language (do NOT use generic labels like "Problem 1").
+- Prioritize high-value important_details for homework:
+  - dates: due dates, submission deadlines, milestone dates
+  - policies: rubric expectations, grading breakdown, late policy, collaboration/academic-integrity constraints
+  - logistics: allowed file types, naming conventions, required tools/software versions/programming language/formatting rules, zip/unzip or packaging requirements
+  - contacts: instructor/TA contact channels only when explicitly present
+- Preserve overview.due_date behavior. If a due date exists, keep it in overview.due_date and also capture additional deadline context in important_details when present.
+- For sufficiently structured homework documents, target at least 3 sections with clear student-readable titles.
+- Never provide answers or solved work; only organize and extract requirements already present in the document.`;
+    case "LECTURE":
+      return `Document-type instructions: LECTURE
+- This includes class notes/course notes normalized to LECTURE behavior.
+- Checklist should be study-oriented, grounded in the source text, and phrased as review/comprehension goals (e.g., understand, review, compare, revisit, summarize, memorize only when terminology is explicitly present).
+- Do NOT default to assignment-style checklist items for lecture output unless the document explicitly contains actionable tasks or exercises.
+- Prioritize high-value important_details for lecture/class-notes:
+  - dates: exam dates, quiz dates, review-session dates, and other study-relevant dates when present
+  - contacts: instructor/TA names, emails, office hours, and contact logistics when present
+  - logistics: study-relevant logistics such as session timing, required materials/tools, or review logistics
+  - policies: class policies only when explicitly present
+- Surface key definitions, formulas, and named concepts through key_actions/checklist/sections with grounding; keep important_details focused on the four contract buckets above.
+- For sufficiently structured lecture/class-notes documents, target at least 3 sections with clear student-readable titles.
+- Never invent teaching content; only reorganize and extract from the document.`;
+    case "SYLLABUS":
+      return `Document-type instructions: SYLLABUS
+- Keep extraction faithful to source text with no external additions.
+- Keep checklist action-oriented where the document contains explicit actions.
+- Prioritize key dates, policies, contacts, and logistics grounded in the document.`;
+    default:
+      return "";
+  }
+}
+
+export function buildAnalysisPrompt(
+  documentType: SupportedAnalysisDocumentType,
+  guidanceMode: boolean,
+  restrictions: string[]
+): string {
+  let prompt = `${ANALYSIS_PROMPT_BASE}\n\n${buildDocumentTypeInstructions(documentType)}`;
+  if (guidanceMode) {
+    prompt += GUIDANCE_MODE_ADDITION;
+  }
+
+  if (restrictions.length > 0) {
+    prompt += `\n\nADDITIONAL RESTRICTIONS:\n${restrictions.map((r) => `- ${r}`).join("\n")}`;
+  }
+
+  return prompt;
+}
 
 /**
  * The model sometimes returns a bare citation object instead of an array,
@@ -169,6 +224,8 @@ export async function analyzeDocument(
   metadata: AnalysisMetadata,
   openAiClient: OpenAI = client
 ): Promise<StudyGuide> {
+  assertGenerationInputWithinLimit(text);
+
   const detection = detectDocumentType(text);
   const documentType = providedDocumentType ?? detection.documentType;
   if (documentType === "UNSUPPORTED") {
@@ -179,20 +236,13 @@ export async function analyzeDocument(
     );
   }
 
-  const supportedType = documentType as "HOMEWORK" | "LECTURE" | "SYLLABUS";
+  const supportedType = documentType as SupportedAnalysisDocumentType;
   const guidanceMode = shouldEnableGuidanceMode(
     documentType,
     detection.isAssignment
   );
   const restrictions = getRestrictions(documentType, guidanceMode);
-
-  let prompt = guidanceMode
-    ? ANALYSIS_PROMPT + GUIDANCE_MODE_ADDITION
-    : ANALYSIS_PROMPT;
-
-  if (restrictions.length > 0) {
-    prompt += `\n\nADDITIONAL RESTRICTIONS:\n${restrictions.map((r) => `- ${r}`).join("\n")}`;
-  }
+  const prompt = buildAnalysisPrompt(supportedType, guidanceMode, restrictions);
 
   const citationRequirements = buildCitationRequirements(metadata, {
     useMustLanguage: true,

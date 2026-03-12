@@ -168,6 +168,81 @@ test("validateStudyGuideAgainstDocument rejects section with no citations", () =
   );
 });
 
+test("validateStudyGuideAgainstDocument requires at least three sections for structured documents", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      {
+        id: "s1",
+        title: "Overview",
+        content: "Lecture intro.",
+        citations: [{ source_type: "pdf", page: 1, excerpt: "Review the weekly schedule before class." }],
+      },
+      {
+        id: "s2",
+        title: "Key Concepts",
+        content: "Concept summary.",
+        citations: [{ source_type: "pdf", page: 2, excerpt: "Review the weekly schedule before class." }],
+      },
+    ],
+  };
+
+  const text = `${"Reading notes and lecture context. ".repeat(120)} Review the weekly schedule before class.`;
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text,
+        fileType: "PDF",
+        pageCount: 4,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "SCHEMA_VALIDATION_FAILED");
+      return true;
+    }
+  );
+});
+
+test("validateStudyGuideAgainstDocument rejects generic section titles", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        title: "Section 1",
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text: "Review the weekly schedule before class.",
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "SCHEMA_VALIDATION_FAILED");
+      return true;
+    }
+  );
+});
+
+test("validateStudyGuideAgainstDocument allows fewer sections for short documents", () => {
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(BASE_STUDY_GUIDE, {
+      text: "Review the weekly schedule before class.",
+      fileType: "PDF",
+      pageCount: 1,
+      paragraphCount: null,
+    })
+  );
+});
+
 test("validateStudyGuideAgainstDocument enforces DOCX paragraph range", () => {
   const docxGuide: StudyGuide = {
     ...BASE_STUDY_GUIDE,
