@@ -432,7 +432,105 @@ test("validateStudyGuideAgainstDocument rejects solver-style section content", (
     sections: [
       {
         ...BASE_STUDY_GUIDE.sections[0],
-        content: "Step-by-step: the answer is option A.",
+        content: "The answer is option A.",
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text: "Review the weekly schedule before class.",
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "ACADEMIC_INTEGRITY_VIOLATION");
+      return true;
+    }
+  );
+});
+
+test("validateStudyGuideAgainstDocument rejects 'here's a step-by-step' solver guidance", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        content: "Here's a step-by-step guide to completing this problem.",
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text: "Review the weekly schedule before class.",
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "ACADEMIC_INTEGRITY_VIOLATION");
+      return true;
+    }
+  );
+});
+
+test("validateStudyGuideAgainstDocument allows descriptive 'step by step' in section content", () => {
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        content: "Implement the attention mechanism step by step using Python.",
+      },
+    ],
+  };
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text: "Review the weekly schedule before class.",
+      fileType: "PDF",
+      pageCount: 1,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument allows descriptive 'step-by-step' in checklist labels", () => {
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    checklist: [
+      {
+        id: "c1",
+        label: "Complete the step-by-step implementation of scaled dot-product attention",
+        supporting_quote: "Review the weekly schedule before class.",
+        citations: [{ source_type: "pdf", page: 1, excerpt: "Review the weekly schedule before class." }],
+      },
+    ],
+  };
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text: "Review the weekly schedule before class.",
+      fileType: "PDF",
+      pageCount: 1,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument rejects 'follow these step-by-step' solver guidance", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        content: "Follow these step-by-step instructions to solve the problem.",
       },
     ],
   };

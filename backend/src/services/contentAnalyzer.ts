@@ -124,8 +124,8 @@ interface AnalysisMetadata {
   paragraphCount: number | null;
 }
 
-type SupportedAnalysisDocumentType = "HOMEWORK" | "LECTURE" | "SYLLABUS";
-const VALID_DOCUMENT_TYPES = new Set(["HOMEWORK", "LECTURE", "SYLLABUS"]);
+type SupportedAnalysisDocumentType = "HOMEWORK" | "LECTURE";
+const VALID_DOCUMENT_TYPES = new Set(["HOMEWORK", "LECTURE"]);
 const STUDY_GUIDE_RESPONSE_FORMAT = zodResponseFormat(
   StudyGuideSchema,
   "study_guide"
@@ -135,9 +135,9 @@ function buildDocumentTypeInstructions(documentType: SupportedAnalysisDocumentTy
   switch (documentType) {
     case "HOMEWORK":
       return `Document-type instructions: HOMEWORK
-- Checklist MUST remain action-oriented and task-oriented.
-- Include general actionable homework items (submission prep, formatting checks, deadline checks) and also include each explicit numbered/labeled problem/task in source order when present.
-- For problem/task items, use concise actionable labels grounded in document language (do NOT use generic labels like "Problem 1").
+- Checklist MUST remain action-oriented and task-oriented and MUST contain two groups of items in this order:
+  1. Problem items: EVERY numbered or labeled problem, question, or task in the document MUST appear as its own checklist item, in the same order as the source document. Do not skip or merge problems. Label each with its number/label followed by a brief topic descriptor (e.g., "Problem 1: ER diagram for university database", "Question 3: Normalize to 3NF"). Never use bare labels like just "Problem 1" with no descriptor.
+  2. General items: Include actionable homework logistics items grounded in the document such as submission prep, formatting checks, file naming conventions, deadline reminders, and any other explicit requirements. These MUST appear after the problem items but MUST NOT be omitted.
 - Prioritize high-value important_details for homework:
   - dates: due dates, submission deadlines, milestone dates
   - policies: rubric expectations, grading breakdown, late policy, collaboration/academic-integrity constraints
@@ -159,11 +159,6 @@ function buildDocumentTypeInstructions(documentType: SupportedAnalysisDocumentTy
 - Surface key definitions, formulas, and named concepts through key_actions/checklist/sections with grounding; keep important_details focused on the four contract buckets above.
 - For sufficiently structured lecture/class-notes documents, target at least 3 sections with clear student-readable titles.
 - Never invent teaching content; only reorganize and extract from the document.`;
-    case "SYLLABUS":
-      return `Document-type instructions: SYLLABUS
-- Keep extraction faithful to source text with no external additions.
-- Keep checklist action-oriented where the document contains explicit actions.
-- Prioritize key dates, policies, contacts, and logistics grounded in the document.`;
     default:
       return "";
   }

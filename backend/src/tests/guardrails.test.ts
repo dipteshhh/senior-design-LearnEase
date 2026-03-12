@@ -16,11 +16,6 @@ test("LECTURE disables guidance mode unless isAssignment is true", () => {
   assert.equal(shouldEnableGuidanceMode("LECTURE", true), true);
 });
 
-test("SYLLABUS disables guidance mode unless isAssignment is true", () => {
-  assert.equal(shouldEnableGuidanceMode("SYLLABUS", false), false);
-  assert.equal(shouldEnableGuidanceMode("SYLLABUS", true), true);
-});
-
 test("UNSUPPORTED always enables guidance mode", () => {
   assert.equal(shouldEnableGuidanceMode("UNSUPPORTED", false), true);
   assert.equal(shouldEnableGuidanceMode("UNSUPPORTED", true), true);
@@ -53,9 +48,6 @@ test("getPolicy returns correct allowedOutputs for each type", () => {
   const lecture = getPolicy("LECTURE");
   assert.equal(lecture.guidanceMode, false);
   assert.equal(lecture.restrictions.length, 0);
-
-  const syllabus = getPolicy("SYLLABUS");
-  assert.equal(syllabus.guidanceMode, false);
 
   const unsupported = getPolicy("UNSUPPORTED");
   assert.equal(unsupported.guidanceMode, true);

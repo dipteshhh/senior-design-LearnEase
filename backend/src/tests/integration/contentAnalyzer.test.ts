@@ -24,34 +24,28 @@ if (!process.env.OPENAI_API_KEY) {
 const { analyzeDocument } = await import("../../services/contentAnalyzer.js");
 const { StudyGuide: StudyGuideSchema } = await import("../../schemas/analyze.js");
 
-const SAMPLE_SYLLABUS = `
-Course Syllabus – Introduction to Computer Science (CS 101)
-Instructor: Dr. Jane Smith
-Office Hours: Monday 2-4 PM, Room 301
+const SAMPLE_LECTURE = `
+Lecture Notes – Introduction to Computer Science (CS 101)
+Week 1: Introduction and Setup
 
-Grading:
-  Homework: 30%
-  Midterm Exam: 30%
-  Final Exam: 40%
-
-Course Policies:
-  Late submissions will receive a 10% penalty per day.
-  Academic integrity violations will be reported.
-
-Learning Outcomes:
+Learning Objectives:
   1. Understand fundamental programming concepts.
   2. Apply problem-solving techniques using Python.
 
-Schedule:
-  Week 1: Introduction and Setup
-  Week 2: Variables and Data Types
-  Week 3: Control Flow
+Key Concepts:
+  Variables store data values in memory.
+  Data types define the kind of data a variable can hold.
+  Control flow determines the order in which statements are executed.
+
+Module Summary:
+  This lecture covers the basics of programming including variables,
+  data types, and control flow structures such as if-else and loops.
 `;
 
-test("analyzeDocument returns a valid StudyGuide for a syllabus", async () => {
+test("analyzeDocument returns a valid StudyGuide for a lecture", async () => {
   let result;
   try {
-    result = await analyzeDocument(SAMPLE_SYLLABUS.trim(), "SYLLABUS", {
+    result = await analyzeDocument(SAMPLE_LECTURE.trim(), "LECTURE", {
       fileType: "PDF",
       pageCount: 1,
       paragraphCount: null,
@@ -71,7 +65,7 @@ test("analyzeDocument returns a valid StudyGuide for a syllabus", async () => {
   assert.equal(parsed.success, true, "Result must match StudyGuide schema");
 
   // Overview sanity checks
-  assert.equal(result.overview.document_type, "SYLLABUS");
+  assert.equal(result.overview.document_type, "LECTURE");
   assert.ok(result.overview.title.length > 0, "Title should be non-empty");
   assert.ok(result.overview.summary.length > 0, "Summary should be non-empty");
 

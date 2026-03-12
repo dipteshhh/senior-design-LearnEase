@@ -61,8 +61,8 @@ test("analyzeDocument passes attempt-scaled timeout to OpenAI request options", 
             const payload = {
               overview: {
                 title: "Course Policies",
-                document_type: "SYLLABUS",
-                summary: "Syllabus summary.",
+                document_type: "HOMEWORK",
+                summary: "Homework summary.",
               },
               key_actions: [
                 {
@@ -83,7 +83,7 @@ test("analyzeDocument passes attempt-scaled timeout to OpenAI request options", 
                 {
                   id: "s1",
                   title: "Deadlines",
-                  content: "Review assignment deadlines from the syllabus.",
+                  content: "Review assignment deadlines from the homework.",
                   citations: [{ source_type: "pdf", page: 1, excerpt: "Assignment 1 is due on Friday." }],
                 },
               ],
@@ -99,7 +99,7 @@ test("analyzeDocument passes attempt-scaled timeout to OpenAI request options", 
 
     const result = await analyzeDocument(
       "Assignment 1 is due on Friday.",
-      "SYLLABUS",
+      "HOMEWORK",
       {
         fileType: "PDF",
         pageCount: 1,
@@ -108,7 +108,7 @@ test("analyzeDocument passes attempt-scaled timeout to OpenAI request options", 
       fakeClient as any
     );
 
-    assert.equal(result.overview.document_type, "SYLLABUS");
+    assert.equal(result.overview.document_type, "HOMEWORK");
     assert.equal(calls, 3);
     assert.deepEqual(capturedTimeouts, [30000, 45000, 60000]);
     assert.deepEqual(responseFormatTypes, ["json_schema", "json_schema", "json_schema"]);

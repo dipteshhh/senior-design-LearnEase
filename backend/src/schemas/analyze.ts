@@ -4,7 +4,6 @@ import { z } from "zod";
 export const DocumentType = z.enum([
   "HOMEWORK",
   "LECTURE",
-  "SYLLABUS",
   "UNSUPPORTED",
 ]);
 export type DocumentType = z.infer<typeof DocumentType>;
@@ -41,7 +40,7 @@ export type ExtractionItem = z.infer<typeof ExtractionItem>;
 
 export const StudyGuideOverview = z.object({
   title: z.string().min(1),
-  document_type: z.enum(["HOMEWORK", "LECTURE", "SYLLABUS"]),
+  document_type: z.enum(["HOMEWORK", "LECTURE"]),
   summary: z.string().min(1),
   topic: z.string().nullable().optional(),
   due_date: z.string().nullable().optional(),

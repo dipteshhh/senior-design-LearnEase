@@ -242,7 +242,7 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
     const normalizedText = normalizeDocumentText(extracted.text, extracted.fileType);
     const detected = detectDocumentType(normalizedText);
 
-    if (detected.documentType === "UNSUPPORTED" || detected.documentType === "SYLLABUS") {
+    if (detected.documentType === "UNSUPPORTED") {
       sendApiError(
         res,
         422,

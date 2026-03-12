@@ -154,7 +154,7 @@ export function initializeDatabase(): void {
       file_type TEXT NOT NULL CHECK (file_type IN ('PDF', 'DOCX')),
       page_count INTEGER,
       paragraph_count INTEGER,
-      document_type TEXT NOT NULL CHECK (document_type IN ('HOMEWORK', 'LECTURE', 'SYLLABUS', 'UNSUPPORTED')),
+      document_type TEXT NOT NULL CHECK (document_type IN ('HOMEWORK', 'LECTURE', 'UNSUPPORTED')),
       status TEXT NOT NULL CHECK (status IN ('uploaded', 'processing', 'ready', 'failed')),
       uploaded_at TEXT NOT NULL,
       processed_at TEXT,

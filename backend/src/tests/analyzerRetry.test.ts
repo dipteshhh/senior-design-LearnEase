@@ -36,10 +36,10 @@ test("normalizeModelOutput preserves citation arrays", () => {
 });
 
 test("normalizeModelOutput uppercases known document_type values", () => {
-  const input = { overview: { document_type: "syllabus", title: "T", summary: "S" } };
+  const input = { overview: { document_type: "lecture", title: "T", summary: "S" } };
   const result = normalizeModelOutput(input) as Record<string, unknown>;
   const overview = result.overview as Record<string, unknown>;
-  assert.equal(overview.document_type, "SYLLABUS");
+  assert.equal(overview.document_type, "LECTURE");
 });
 
 test("normalizeModelOutput leaves unknown document_type values unchanged", () => {

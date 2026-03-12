@@ -12,11 +12,11 @@ import {
 test("DocumentType accepts valid types", () => {
   assert.equal(DocumentType.safeParse("HOMEWORK").success, true);
   assert.equal(DocumentType.safeParse("LECTURE").success, true);
-  assert.equal(DocumentType.safeParse("SYLLABUS").success, true);
   assert.equal(DocumentType.safeParse("UNSUPPORTED").success, true);
 });
 
 test("DocumentType rejects invalid types", () => {
+  assert.equal(DocumentType.safeParse("SYLLABUS").success, false);
   assert.equal(DocumentType.safeParse("ESSAY").success, false);
   assert.equal(DocumentType.safeParse("").success, false);
   assert.equal(DocumentType.safeParse(123).success, false);
@@ -148,7 +148,7 @@ test("StudyGuide schema accepts overview with optional metadata fields", () => {
   const withPartialMetadata = {
     overview: {
       title: "Title",
-      document_type: "SYLLABUS",
+      document_type: "LECTURE",
       summary: "Summary",
       topic: "Biology",
     },

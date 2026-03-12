@@ -29,9 +29,8 @@ const CLASSIFIER_PROMPT = `You are a document type classifier for an educational
 
 Classify the document into exactly ONE of these categories:
 - HOMEWORK: A graded assignment, problem set, or homework that students must complete and submit.
-- LECTURE: Lecture notes, slides, or instructional material for a class session.
-- SYLLABUS: A course syllabus containing policies, schedules, grading breakdowns, and office hours.
-- UNSUPPORTED: Any document that does not fit the above categories, including but not limited to: project reports, research papers, lab reports, case studies, theses, dissertations, personal essays, technical reports, journal articles, or any non-academic document.
+- LECTURE: Lecture notes, slides, class notes, or instructional material for a class session.
+- UNSUPPORTED: Any document that does not fit the above categories, including but not limited to: syllabi, course schedules, project reports, research papers, lab reports, case studies, theses, dissertations, personal essays, technical reports, journal articles, resumes, portfolios, cover letters, letters of recommendation, invoices, academic transcripts, or any non-academic document.
 
 IMPORTANT: Classify based on the document's PRIMARY PURPOSE, not incidental keywords.
 For example:
@@ -87,7 +86,7 @@ export async function classifyWithLlm(
   const raw = (response.choices[0]?.message?.content ?? "").trim().toUpperCase();
 
   let llmDocumentType: DocumentType;
-  if (raw === "HOMEWORK" || raw === "LECTURE" || raw === "SYLLABUS" || raw === "UNSUPPORTED") {
+  if (raw === "HOMEWORK" || raw === "LECTURE" || raw === "UNSUPPORTED") {
     llmDocumentType = raw;
   } else {
     logger.error("LLM classifier returned unexpected value, failing closed", {

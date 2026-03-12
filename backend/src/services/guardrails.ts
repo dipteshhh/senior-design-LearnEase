@@ -22,11 +22,6 @@ const policies: Record<DocumentType, DocumentPolicy> = {
     guidanceMode: false,
     restrictions: [],
   },
-  SYLLABUS: {
-    allowedOutputs: ["overview", "tasks", "checklist", "requirements"],
-    guidanceMode: false,
-    restrictions: [],
-  },
   UNSUPPORTED: {
     allowedOutputs: ["overview"],
     guidanceMode: true,

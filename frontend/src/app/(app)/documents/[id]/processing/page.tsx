@@ -27,8 +27,6 @@ function formatDocumentType(type: DocumentType): string {
       return "Homework";
     case "LECTURE":
       return "Lecture";
-    case "SYLLABUS":
-      return "Syllabus";
     default:
       return "Document";
   }

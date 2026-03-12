@@ -60,9 +60,9 @@ const ACADEMIC_INTEGRITY_PATTERNS: IntegrityPattern[] = [
   { pattern: /\bcorrect answer\b/i, reason: 'contains "correct answer"' },
   { pattern: /\bcorrect option\b/i, reason: 'contains "correct option"' },
   { pattern: /\bchoose option [a-d]\b/i, reason: "selects a specific option as correct" },
-  { pattern: /\bstep[- ]by[- ]step\b/i, reason: 'contains "step-by-step" guidance' },
+  { pattern: /\b(?:here(?:'s| is) (?:a |the )?|follow (?:this|these) )step[- ]by[- ]step\b/i, reason: 'contains "step-by-step" solving guidance' },
   { pattern: /\bhere(?:'s| is) how to solve\b/i, reason: 'contains "how to solve" guidance' },
-  { pattern: /\bsolution:\b/i, reason: 'contains explicit "solution:" output' },
+  { pattern: /\bsolution:\s*(?!\s*$)/i, reason: 'contains explicit "solution:" output' },
 ];
 
 export interface ValidationInput {

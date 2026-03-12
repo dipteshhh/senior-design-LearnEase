@@ -1,4 +1,4 @@
-export type DocumentType = "HOMEWORK" | "LECTURE" | "SYLLABUS" | "UNSUPPORTED";
+export type DocumentType = "HOMEWORK" | "LECTURE" | "UNSUPPORTED";
 export type DocumentStatus = "uploaded" | "processing" | "ready" | "failed";
 export type GenerationStatus = "idle" | "processing" | "ready" | "failed";
 
