@@ -46,6 +46,12 @@ test("normalizeDocumentText applies quote/whitespace/pdf hyphenation normalizati
   assert.equal(normalized, 'Review "the" weekly example schedule.');
 });
 
+test("normalizeDocumentText normalizes bullets and dash variants", () => {
+  const raw = "Note: • Work must be original — no copied AI output.";
+  const normalized = normalizeDocumentText(raw, "PDF");
+  assert.equal(normalized, "Note: Work must be original - no copied AI output.");
+});
+
 test("validateStudyGuideAgainstDocument passes for grounded quotes and citations", () => {
   const text = "Review the weekly schedule before class.";
   assert.doesNotThrow(() =>
@@ -82,6 +88,102 @@ test("validateStudyGuideAgainstDocument rejects missing supporting quote", () =>
       assert.equal(error.code, "QUOTE_NOT_FOUND");
       return true;
     }
+  );
+});
+
+test("validateStudyGuideAgainstDocument accepts grounded quotes with punctuation variants", () => {
+  const text = "Note: • Work must be written in your own words — copied AI output will not be accepted.";
+  const variantQuote =
+    "Note - Work must be written in your own words - copied AI output will not be accepted";
+
+  const variantGuide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        supporting_quote: variantQuote,
+        citations: [{ source_type: "pdf", page: 1, excerpt: variantQuote }],
+      },
+    ],
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        citations: [{ source_type: "pdf", page: 1, excerpt: variantQuote }],
+      },
+    ],
+  };
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(variantGuide, {
+      text,
+      fileType: "PDF",
+      pageCount: 1,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument accepts short grounded quotes with symbol variants", () => {
+  const text = "Q = Query matrix. K = Key matrix. V = Value matrix.";
+  const variantQuote = "Q Query matrix";
+
+  const variantGuide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        supporting_quote: variantQuote,
+        citations: [{ source_type: "pdf", page: 1, excerpt: variantQuote }],
+      },
+    ],
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        citations: [{ source_type: "pdf", page: 1, excerpt: variantQuote }],
+      },
+    ],
+  };
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(variantGuide, {
+      text,
+      fileType: "PDF",
+      pageCount: 1,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument accepts quote when strongly aligned with grounded citation", () => {
+  const text = "Work must be written entirely in your own words and include your own reflections.";
+  const citationExcerpt = "written entirely in your own words and include your own reflections";
+  const paraphrasedQuote =
+    "Submission must be in your own words and include your own reflections";
+
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        supporting_quote: paraphrasedQuote,
+        citations: [{ source_type: "pdf", page: 1, excerpt: citationExcerpt }],
+      },
+    ],
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        citations: [{ source_type: "pdf", page: 1, excerpt: citationExcerpt }],
+      },
+    ],
+  };
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 1,
+      paragraphCount: null,
+    })
   );
 });
 
@@ -187,7 +289,12 @@ test("validateStudyGuideAgainstDocument requires at least three sections for str
     ],
   };
 
-  const text = `${"Reading notes and lecture context. ".repeat(120)} Review the weekly schedule before class.`;
+  const text = [
+    "Question 1: Reading notes and lecture context.",
+    "Question 2: Reading notes and lecture context.",
+    "Question 3: Reading notes and lecture context.",
+    `${"Reading notes and lecture context. ".repeat(120)} Review the weekly schedule before class.`,
+  ].join(" ");
 
   assert.throws(
     () =>

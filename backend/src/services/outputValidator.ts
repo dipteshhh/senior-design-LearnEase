@@ -32,12 +32,14 @@ interface ValidationContext {
   pageCount: number;
   paragraphCount: number | null;
   normalizedText: string;
+  groundingTextLoose: string;
 }
 
 const MIN_SECTION_COUNT_FOR_STRUCTURED_DOC = 3;
-const MIN_STRUCTURED_TEXT_CHARS = 2500;
+const MIN_STRUCTURED_TEXT_CHARS = 6000;
 const MIN_STRUCTURED_PDF_PAGES = 3;
 const MIN_STRUCTURED_DOCX_PARAGRAPHS = 8;
+const MIN_HEADING_MARKERS_FOR_SECTION_REQUIREMENT = 3;
 
 const GENERIC_SECTION_TITLE_PATTERNS: RegExp[] = [
   /^section\s+\d+$/i,
@@ -78,6 +80,13 @@ function normalizeQuotes(text: string): string {
   return text.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
 }
 
+function normalizeUnicodeVariants(text: string): string {
+  return text
+    .normalize("NFKC")
+    .replace(/[‐‑‒–—−]/g, "-")
+    .replace(/[•●◦▪▸►]/g, " ");
+}
+
 function removeHiddenCharacters(text: string): string {
   return text.replace(/[\u00AD\u200B\u200C\u200D\uFEFF]/g, "");
 }
@@ -89,6 +98,7 @@ function normalizePdfHyphenation(text: string): string {
 export function normalizeDocumentText(text: string, fileType: FileType): string {
   let normalized = normalizeLineEndings(text);
   normalized = normalizeQuotes(normalized);
+  normalized = normalizeUnicodeVariants(normalized);
   normalized = removeHiddenCharacters(normalized);
   if (fileType === "PDF") {
     normalized = normalizePdfHyphenation(normalized);
@@ -97,12 +107,74 @@ export function normalizeDocumentText(text: string, fileType: FileType): string 
   return normalized.trim();
 }
 
+function normalizeForLooseGroundingMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function shouldAllowLooseGroundingMatch(normalizedFragment: string): boolean {
+  const tokens = normalizedFragment.split(" ").filter(Boolean);
+  return tokens.length >= 3 || normalizedFragment.length >= 16;
+}
+
+function toLooseTokenSet(text: string): Set<string> {
+  const normalized = normalizeForLooseGroundingMatch(text);
+  if (!normalized) return new Set();
+  return new Set(normalized.split(" ").filter(Boolean));
+}
+
+function hasStrongCitationOverlap(quote: string, citationExcerpts: string[]): boolean {
+  const quoteTokens = toLooseTokenSet(quote);
+  if (quoteTokens.size < 3) {
+    return false;
+  }
+
+  for (const excerpt of citationExcerpts) {
+    const excerptTokens = toLooseTokenSet(excerpt);
+    if (excerptTokens.size < 3) {
+      continue;
+    }
+
+    let overlap = 0;
+    for (const token of quoteTokens) {
+      if (excerptTokens.has(token)) {
+        overlap += 1;
+      }
+    }
+
+    const required = Math.max(3, Math.ceil(Math.min(quoteTokens.size, excerptTokens.size) * 0.6));
+    if (overlap >= required) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function countHeadingMarkers(normalizedText: string): number {
+  const patterns = [
+    /\bquestion\s+\d+\b/gi,
+    /\bproblem\s+\d+\b/gi,
+    /\bpart\s+[a-z0-9]+\b/gi,
+    /\bsection\s+\d+\b/gi,
+    /\bmodule\s+\d+\b/gi,
+    /\bchapter\s+\d+\b/gi,
+  ];
+
+  return patterns.reduce((sum, pattern) => sum + (normalizedText.match(pattern)?.length ?? 0), 0);
+}
+
 function createValidationContext(input: ValidationInput): ValidationContext {
+  const normalizedText = normalizeDocumentText(input.text, input.fileType);
   return {
     fileType: input.fileType,
     pageCount: input.pageCount,
     paragraphCount: input.paragraphCount,
-    normalizedText: normalizeDocumentText(input.text, input.fileType),
+    normalizedText,
+    groundingTextLoose: normalizeForLooseGroundingMatch(normalizedText),
   };
 }
 
@@ -114,25 +186,67 @@ function normalizeCitationText(citation: Citation): string {
 function validateQuoteExists(
   quote: string,
   context: ValidationContext,
-  details: Record<string, unknown>
+  details: Record<string, unknown>,
+  citationExcerpts: string[]
 ): void {
   const normalizedQuote = normalizeDocumentText(quote, context.fileType);
-  if (!normalizedQuote || !context.normalizedText.includes(normalizedQuote)) {
-    throw new ContractValidationError(
-      "QUOTE_NOT_FOUND",
-      "Supporting quote was not found in extracted text.",
-      details
-    );
+  if (!normalizedQuote) {
+    throw new ContractValidationError("QUOTE_NOT_FOUND", "Supporting quote was not found in extracted text.", {
+      ...details,
+      quote_preview: quote.slice(0, 180),
+    });
   }
+
+  if (context.normalizedText.includes(normalizedQuote)) {
+    return;
+  }
+
+  if (shouldAllowLooseGroundingMatch(normalizedQuote)) {
+    const looseQuote = normalizeForLooseGroundingMatch(normalizedQuote);
+    if (looseQuote && context.groundingTextLoose.includes(looseQuote)) {
+      return;
+    }
+  }
+
+  if (hasStrongCitationOverlap(normalizedQuote, citationExcerpts)) {
+    return;
+  }
+
+  throw new ContractValidationError(
+    "QUOTE_NOT_FOUND",
+    "Supporting quote was not found in extracted text.",
+    {
+      ...details,
+      quote_preview: normalizedQuote.slice(0, 180),
+    }
+  );
 }
 
 function validateCitation(citation: Citation, context: ValidationContext, path: string): void {
   const normalizedExcerpt = normalizeCitationText(citation);
-  if (!normalizedExcerpt || !context.normalizedText.includes(normalizedExcerpt)) {
+  if (!normalizedExcerpt) {
+    throw new ContractValidationError("CITATION_EXCERPT_NOT_FOUND", "Citation excerpt was not found in extracted text.", {
+      path,
+      excerpt_preview: citation.excerpt.slice(0, 180),
+    });
+  }
+
+  if (context.normalizedText.includes(normalizedExcerpt)) {
+    // Exact grounded match.
+  } else if (shouldAllowLooseGroundingMatch(normalizedExcerpt)) {
+    const looseExcerpt = normalizeForLooseGroundingMatch(normalizedExcerpt);
+    if (!looseExcerpt || !context.groundingTextLoose.includes(looseExcerpt)) {
+      throw new ContractValidationError(
+        "CITATION_EXCERPT_NOT_FOUND",
+        "Citation excerpt was not found in extracted text.",
+        { path, excerpt_preview: normalizedExcerpt.slice(0, 180) }
+      );
+    }
+  } else {
     throw new ContractValidationError(
       "CITATION_EXCERPT_NOT_FOUND",
       "Citation excerpt was not found in extracted text.",
-      { path }
+      { path, excerpt_preview: normalizedExcerpt.slice(0, 180) }
     );
   }
 
@@ -179,13 +293,19 @@ function validateExtractionItems(
 ): void {
   items.forEach((item, index) => {
     const itemPath = `${path}[${index}]`;
-    validateQuoteExists(item.supporting_quote, context, {
-      path: itemPath,
-      item_id: item.id,
-    });
+    const citationExcerpts = item.citations.map((citation) => normalizeCitationText(citation));
     item.citations.forEach((citation, citationIndex) => {
       validateCitation(citation, context, `${itemPath}.citations[${citationIndex}]`);
     });
+    validateQuoteExists(
+      item.supporting_quote,
+      context,
+      {
+        path: itemPath,
+        item_id: item.id,
+      },
+      citationExcerpts
+    );
   });
 }
 
@@ -236,11 +356,19 @@ function validateNoAnswerLeakage(studyGuide: StudyGuide): void {
 }
 
 function shouldRequireMinimumSections(context: ValidationContext): boolean {
-  if (context.fileType === "PDF" && context.pageCount >= MIN_STRUCTURED_PDF_PAGES) {
+  const headingMarkerCount = countHeadingMarkers(context.normalizedText);
+  const hasExplicitStructure = headingMarkerCount >= MIN_HEADING_MARKERS_FOR_SECTION_REQUIREMENT;
+
+  if (
+    hasExplicitStructure &&
+    context.fileType === "PDF" &&
+    context.pageCount >= MIN_STRUCTURED_PDF_PAGES
+  ) {
     return true;
   }
 
   if (
+    hasExplicitStructure &&
     context.fileType === "DOCX" &&
     (context.paragraphCount ?? 0) >= MIN_STRUCTURED_DOCX_PARAGRAPHS
   ) {
@@ -355,12 +483,18 @@ export function validateQuizAgainstDocument(
 
   quiz.questions.forEach((question, questionIndex) => {
     const questionPath = `questions[${questionIndex}]`;
-    validateQuoteExists(question.supporting_quote, context, {
-      path: questionPath,
-      question_id: question.id,
-    });
+    const citationExcerpts = question.citations.map((citation) => normalizeCitationText(citation));
     question.citations.forEach((citation, citationIndex) => {
       validateCitation(citation, context, `${questionPath}.citations[${citationIndex}]`);
     });
+    validateQuoteExists(
+      question.supporting_quote,
+      context,
+      {
+        path: questionPath,
+        question_id: question.id,
+      },
+      citationExcerpts
+    );
   });
 }
