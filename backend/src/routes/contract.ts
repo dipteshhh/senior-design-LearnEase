@@ -156,6 +156,8 @@ function toPublicErrorMessage(errorCode: string | null): string | null {
       return "Generated output violated academic integrity guardrails. Retry generation.";
     case "DOCUMENT_UNSUPPORTED":
       return "Document type is not supported for generation.";
+    case "DOCUMENT_TOO_LARGE_FOR_GENERATION":
+      return "Document is too large to generate study materials. Upload a shorter document.";
     case "DOCUMENT_NOT_LECTURE":
       return "Quiz generation is only available for lecture documents.";
     case "ALREADY_PROCESSING":
@@ -239,6 +241,16 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
     );
     const normalizedText = normalizeDocumentText(extracted.text, extracted.fileType);
     const detected = detectDocumentType(normalizedText);
+
+    if (detected.documentType === "UNSUPPORTED" || detected.documentType === "SYLLABUS") {
+      sendApiError(
+        res,
+        422,
+        "DOCUMENT_UNSUPPORTED_UPLOAD",
+        "This document type is not supported. Only lecture notes, homework files, and class notes are accepted."
+      );
+      return;
+    }
 
     const documentId = randomUUID();
     saveDocument({

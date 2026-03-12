@@ -15,7 +15,7 @@ import {
 } from "@/lib/polling";
 import { usePageVisible } from "@/lib/usePageVisible";
 
-type QuizState = "loading" | "ready" | "failed" | "blocked";
+type QuizState = "idle" | "loading" | "ready" | "failed" | "blocked";
 
 function isAbortError(error: unknown): boolean {
   return (
@@ -42,8 +42,8 @@ export default function QuizPage() {
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [checked, setChecked] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
-  const [pollTrigger, setPollTrigger] = useState(0);
   const isPageVisible = usePageVisible();
   const isMountedRef = useRef(true);
   const hasLoadedQuizRef = useRef(false);
@@ -63,8 +63,106 @@ export default function QuizPage() {
     hasLoadedQuizRef.current = quiz != null;
   }, [quiz]);
 
+  const refreshDocument = useMemo(
+    () => async (signal?: AbortSignal): Promise<DocumentListItem | null> => {
+      const next = await getDocumentStatus(id, { signal });
+      if (isMountedRef.current) {
+        setDoc(next);
+      }
+      return next;
+    },
+    [id]
+  );
+
+  const fetchQuiz = useMemo(
+    () => async (signal?: AbortSignal): Promise<boolean> => {
+      try {
+        const response = await api<Quiz>(`/api/quiz/${id}`, signal ? { signal } : {});
+        if (isMountedRef.current) {
+          hasLoadedQuizRef.current = true;
+          setQuiz(response);
+          setState("ready");
+        }
+        return true;
+      } catch (err) {
+        if (err instanceof ApiClientError && err.status === 404) {
+          return false;
+        }
+        throw err;
+      }
+    },
+    [id]
+  );
+
   useEffect(() => {
-    if (!shouldRunPolling(id, isPageVisible)) return;
+    if (!id) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const load = async () => {
+      try {
+        const nextDoc = await refreshDocument(controller.signal);
+        if (cancelled || !isMountedRef.current) {
+          return;
+        }
+
+        if (!nextDoc) {
+          setState("failed");
+          setError("Document not found.");
+          return;
+        }
+
+        if (nextDoc.document_type !== "LECTURE") {
+          setState("blocked");
+          setError("Quiz is available only for lecture documents.");
+          return;
+        }
+
+        if (nextDoc.quiz_status === "ready") {
+          const fetched = await fetchQuiz(controller.signal);
+          if (cancelled || !isMountedRef.current) {
+            return;
+          }
+
+          if (fetched) {
+            setError(null);
+            return;
+          }
+
+          setState("idle");
+          setError(null);
+          return;
+        }
+
+        if (nextDoc.quiz_status === "failed") {
+          setState("failed");
+          setError(nextDoc.error_message ?? "Quiz generation failed.");
+          return;
+        }
+
+        setState(nextDoc.quiz_status === "processing" ? "loading" : "idle");
+        setError(null);
+      } catch (err) {
+        if (cancelled || !isMountedRef.current || isAbortError(err)) {
+          return;
+        }
+
+        setState("failed");
+        setError(getErrorMessage(err, "Unable to load quiz right now."));
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [fetchQuiz, id, refreshDocument]);
+
+  useEffect(() => {
+    if (!shouldRunPolling(id, isPageVisible, doc?.quiz_status === "processing")) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -81,31 +179,6 @@ export default function QuizPage() {
       timer = setTimeout(() => {
         void pollOnce();
       }, delayMs);
-    };
-
-    const refreshDocument = async (signal?: AbortSignal): Promise<DocumentListItem | null> => {
-      const next = await getDocumentStatus(id, { signal });
-      if (!cancelled) {
-        setDoc(next);
-      }
-      return next;
-    };
-
-    const fetchQuiz = async (signal?: AbortSignal): Promise<boolean> => {
-      try {
-        const response = await api<Quiz>(`/api/quiz/${id}`, signal ? { signal } : {});
-        if (!cancelled) {
-          hasLoadedQuizRef.current = true;
-          setQuiz(response);
-          setState("ready");
-        }
-        return true;
-      } catch (err) {
-        if (err instanceof ApiClientError && err.status === 404) {
-          return false;
-        }
-        throw err;
-      }
     };
 
     const pollOnce = async () => {
@@ -139,6 +212,7 @@ export default function QuizPage() {
         }
 
         if (!cancelled) {
+          setState("loading");
           setError(null);
         }
       } catch (err) {
@@ -165,102 +239,7 @@ export default function QuizPage() {
       schedulePoll(nextDelayMs);
     };
 
-    const startFlow = async () => {
-      if (hasLoadedQuizRef.current) {
-        return;
-      }
-
-      if (!cancelled && shouldResetQuizStateOnFlowStart(hasLoadedQuizRef.current)) {
-        setState("loading");
-        setError(null);
-        setQuiz(null);
-        setIndex(0);
-        setSelected(null);
-        setChecked(false);
-      }
-
-      try {
-        const nextDoc = await refreshDocument(nextSignal());
-        if (!nextDoc) {
-          if (!cancelled) {
-            setState("failed");
-            setError("Document not found.");
-          }
-          return;
-        }
-
-        if (nextDoc.document_type !== "LECTURE") {
-          if (!cancelled) {
-            setState("blocked");
-            setError("Quiz is available only for lecture documents.");
-          }
-          return;
-        }
-
-        let initialDelayMs = DEFAULT_POLL_DELAY_MS;
-        try {
-          const createResponse = await api<{ status: string; cached?: boolean }>(
-            "/api/quiz/create",
-            {
-              method: "POST",
-              body: JSON.stringify({ document_id: id }),
-              signal: nextSignal(),
-            }
-          );
-
-          if (createResponse.status === "ready") {
-            const fetched = await fetchQuiz(nextSignal());
-            if (fetched) {
-              if (!cancelled) {
-                setError(null);
-              }
-              return;
-            }
-          }
-        } catch (err) {
-          if (isAbortError(err)) {
-            return;
-          }
-          if (err instanceof ApiClientError) {
-            if (err.code === "ALREADY_PROCESSING") {
-              if (!cancelled) {
-                setError(getErrorMessage(err, "Quiz generation is already in progress."));
-              }
-              initialDelayMs = toPollDelayMs(err.retryAfterSeconds);
-            } else if (err.code === "RATE_LIMITED") {
-              if (!cancelled) {
-                setError(getErrorMessage(err, "Too many requests right now."));
-              }
-              initialDelayMs = toPollDelayMs(err.retryAfterSeconds);
-            } else if (err.code === "ILLEGAL_RETRY_STATE") {
-              // Poll current status below.
-            } else if (err.code === "DOCUMENT_NOT_LECTURE") {
-              if (!cancelled) {
-                setState("blocked");
-                setError("Quiz is available only for lecture documents.");
-              }
-              return;
-            } else {
-              throw err;
-            }
-          } else {
-            throw err;
-          }
-        }
-
-        schedulePoll(initialDelayMs);
-      } catch (err) {
-        if (isAbortError(err)) {
-          return;
-        }
-        if (!cancelled) {
-          setState("failed");
-          setError(getErrorMessage(err, "Unable to load quiz right now."));
-        }
-      }
-    };
-
-    void startFlow();
+    schedulePoll(DEFAULT_POLL_DELAY_MS);
 
     return () => {
       cancelled = true;
@@ -269,7 +248,94 @@ export default function QuizPage() {
       }
       requestController?.abort();
     };
-  }, [id, isPageVisible, pollTrigger]);
+  }, [doc?.quiz_status, fetchQuiz, id, isPageVisible, refreshDocument]);
+
+  async function handleStart() {
+    if (!id || isStarting) return;
+
+    if (isMountedRef.current) {
+      setIsStarting(true);
+    }
+
+    if (shouldResetQuizStateOnFlowStart(hasLoadedQuizRef.current)) {
+      setState("loading");
+      setError(null);
+      setQuiz(null);
+      setIndex(0);
+      setSelected(null);
+      setChecked(false);
+    }
+
+    try {
+      const response = await api<{ status: string; cached?: boolean }>(
+        "/api/quiz/create",
+        {
+          method: "POST",
+          body: JSON.stringify({ document_id: id }),
+        }
+      );
+
+      if (response.status === "ready") {
+        const fetched = await fetchQuiz();
+        if (fetched && isMountedRef.current) {
+          setError(null);
+        }
+        return;
+      }
+
+      const nextDoc = await refreshDocument();
+      if (!nextDoc) {
+        if (isMountedRef.current) {
+          setState("failed");
+          setError("Document not found.");
+        }
+        return;
+      }
+
+      if (isMountedRef.current) {
+        setState(nextDoc.quiz_status === "processing" ? "loading" : "idle");
+        setError(null);
+      }
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === "DOCUMENT_NOT_LECTURE") {
+        if (isMountedRef.current) {
+          setState("blocked");
+          setError("Quiz is available only for lecture documents.");
+        }
+      } else if (isMountedRef.current) {
+        if (
+          err instanceof ApiClientError &&
+          (err.code === "ALREADY_PROCESSING" || err.code === "ILLEGAL_RETRY_STATE")
+        ) {
+          void refreshDocument().then((nextDoc) => {
+            if (!isMountedRef.current || !nextDoc) {
+              return;
+            }
+            setState(nextDoc.quiz_status === "processing" ? "loading" : "idle");
+            if (nextDoc.quiz_status === "failed") {
+              setState("failed");
+              setError(nextDoc.error_message ?? "Quiz generation failed.");
+            }
+          });
+        }
+
+        const fallback =
+          err instanceof ApiClientError && err.code === "ALREADY_PROCESSING"
+            ? "Quiz generation is already in progress."
+            : "Unable to start quiz generation.";
+        setError(getErrorMessage(err, fallback));
+        if (doc?.quiz_status === "processing") {
+          setState("loading");
+        } else {
+          setState("idle");
+        }
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsStarting(false);
+      }
+    }
+  }
 
   async function handleRetry() {
     if (!id || isRetrying) return;
@@ -285,9 +351,11 @@ export default function QuizPage() {
           body: JSON.stringify({ document_id: id }),
         }
       );
+
+      const nextDoc = await refreshDocument();
       if (isMountedRef.current) {
         setError(null);
-        setPollTrigger((value) => value + 1);
+        setState(nextDoc?.quiz_status === "processing" ? "loading" : "idle");
       }
     } catch (err) {
       if (
@@ -295,8 +363,16 @@ export default function QuizPage() {
         (err.code === "ALREADY_PROCESSING" || err.code === "RATE_LIMITED")
       ) {
         if (isMountedRef.current) {
+          if (err.code === "ALREADY_PROCESSING") {
+            void refreshDocument().then((nextDoc) => {
+              if (!isMountedRef.current || !nextDoc) {
+                return;
+              }
+              setState(nextDoc.quiz_status === "processing" ? "loading" : "failed");
+            });
+          }
           setError(getErrorMessage(err, "Quiz generation is already in progress."));
-          setPollTrigger((value) => value + 1);
+          setState(doc?.quiz_status === "processing" ? "loading" : "failed");
         }
       } else {
         if (isMountedRef.current) {
@@ -321,6 +397,40 @@ export default function QuizPage() {
 
   if (!id) {
     return <p className="text-sm text-gray-600">Missing document id.</p>;
+  }
+
+  if (state === "idle") {
+    return (
+      <div className="space-y-4 p-8">
+        <div className="space-y-2">
+          <p className="text-sm text-gray-500">{doc?.filename ?? "Lecture Quiz"}</p>
+          <h1 className="text-2xl font-semibold text-gray-900">Generate quiz</h1>
+        </div>
+        <p className="max-w-2xl text-sm text-gray-600">
+          Quiz generation is lecture-only and starts only when you trigger it.
+        </p>
+        {error ? (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {error}
+          </div>
+        ) : null}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              void handleStart();
+            }}
+            disabled={isStarting}
+            className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isStarting ? "Starting..." : "Generate quiz"}
+          </button>
+          <Link href={`/documents/${id}`} className="rounded-xl border px-4 py-2 text-sm font-semibold">
+            Back to Document
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (state === "loading") {

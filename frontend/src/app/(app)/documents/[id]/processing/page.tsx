@@ -11,7 +11,6 @@ import {
   DEFAULT_POLL_DELAY_MS,
   getTransientDelayMs,
   shouldRunPolling,
-  toPollDelayMs,
 } from "@/lib/polling";
 import { usePageVisible } from "@/lib/usePageVisible";
 
@@ -83,7 +82,7 @@ function getStatusHeading(status: GenerationStatus | undefined): string {
       return "Creating your study guide";
     case "idle":
     default:
-      return "Preparing your document";
+      return "Ready to create your study guide";
   }
 }
 
@@ -97,8 +96,20 @@ function getStatusDescription(status: GenerationStatus | undefined): string {
       return "We’re analyzing your document and organizing it into structured study materials. This may take a little longer for larger files.";
     case "idle":
     default:
-      return "Your document is queued and generation will begin shortly.";
+      return "Your document is uploaded and ready. Study guide generation starts only after you click Create Study Guide.";
   }
+}
+
+function getStudyGuideFailureMessage(document: DocumentListItem | null): string | null {
+  if (!document || document.study_guide_status !== "failed") {
+    return null;
+  }
+
+  if (document.error_code === "DOCUMENT_UNSUPPORTED") {
+    return "This document type is not supported for study guide generation.";
+  }
+
+  return document.error_message ?? "Study guide generation failed.";
 }
 
 type StepState = "complete" | "active" | "pending" | "halted";
@@ -258,8 +269,8 @@ export default function ProcessingPage() {
 
   const [document, setDocument] = useState<DocumentListItem | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
-  const [pollTrigger, setPollTrigger] = useState(0);
   const [processingStartedAt, setProcessingStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -275,7 +286,11 @@ export default function ProcessingPage() {
 
   const isFailed = document?.study_guide_status === "failed";
   const isReady = document?.study_guide_status === "ready";
-  const isUnsupported = document?.error_code === "DOCUMENT_UNSUPPORTED";
+  const isUnsupported =
+    document?.document_type === "UNSUPPORTED" ||
+    document?.error_code === "DOCUMENT_UNSUPPORTED";
+  const isProcessing = document?.study_guide_status === "processing";
+  const isIdle = document?.study_guide_status === "idle" || document?.study_guide_status == null;
 
   const refreshDocument = useCallback(
     async (signal?: AbortSignal) => {
@@ -288,57 +303,107 @@ export default function ProcessingPage() {
     [id]
   );
 
+  useEffect(() => {
+    if (!id) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const load = async () => {
+      try {
+        const next = await refreshDocument(controller.signal);
+        if (cancelled || !isMountedRef.current) {
+          return;
+        }
+
+        if (!next) {
+          setError("Document not found.");
+          return;
+        }
+
+        if (next.study_guide_status === "ready") {
+          router.replace(`/documents/${id}`);
+          return;
+        }
+
+        setError(getStudyGuideFailureMessage(next));
+      } catch (err) {
+        if (cancelled || !isMountedRef.current || isAbortError(err)) {
+          return;
+        }
+
+        setError(getErrorMessage(err, "Unable to load document status."));
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [id, refreshDocument, router]);
+
   const startGeneration = useCallback(
-    async (signal?: AbortSignal): Promise<number> => {
-      if (!id) return DEFAULT_POLL_DELAY_MS;
+    async () => {
+      if (!id || isStarting) return;
+
+      if (isMountedRef.current) {
+        setIsStarting(true);
+        setError(null);
+      }
 
       try {
         await api<{ status: string; cached?: boolean }>("/api/study-guide/create", {
           method: "POST",
           body: JSON.stringify({ document_id: id }),
-          signal,
         });
 
-        if (isMountedRef.current) {
-          setError(null);
+        if (!isMountedRef.current) {
+          return;
         }
 
-        return DEFAULT_POLL_DELAY_MS;
+        setProcessingStartedAt(Date.now());
+        setElapsedMs(0);
+
+        const next = await refreshDocument();
+        if (!isMountedRef.current) {
+          return;
+        }
+
+        if (next?.study_guide_status === "ready") {
+          router.replace(`/documents/${id}`);
+          return;
+        }
+
+        setError(getStudyGuideFailureMessage(next ?? null));
       } catch (err) {
-        if (isAbortError(err)) {
-          throw err;
-        }
-
-        if (err instanceof ApiClientError) {
-          if (err.code === "ALREADY_PROCESSING") {
-            if (isMountedRef.current) {
-              setError(getErrorMessage(err, "Study guide generation is already in progress."));
-            }
-            return toPollDelayMs(err.retryAfterSeconds);
-          }
-
-          if (err.code === "RATE_LIMITED") {
-            if (isMountedRef.current) {
-              setError(getErrorMessage(err, "Too many requests right now."));
-            }
-            return toPollDelayMs(err.retryAfterSeconds);
-          }
-
-          if (err.code === "ILLEGAL_RETRY_STATE") {
-            if (isMountedRef.current) {
-              setError(null);
-            }
-            return DEFAULT_POLL_DELAY_MS;
-          }
-        }
         if (isMountedRef.current) {
-          setError(getErrorMessage(err, "Unable to start study guide generation."));
-        }
+          if (
+            err instanceof ApiClientError &&
+            (err.code === "ALREADY_PROCESSING" || err.code === "ILLEGAL_RETRY_STATE")
+          ) {
+            void refreshDocument().then((next) => {
+              if (!isMountedRef.current) {
+                return;
+              }
+              setError(getStudyGuideFailureMessage(next ?? null));
+            });
+          }
 
-        return DEFAULT_POLL_DELAY_MS;
+          const fallback =
+            err instanceof ApiClientError && err.code === "ALREADY_PROCESSING"
+              ? "Study guide generation is already in progress."
+              : "Unable to start study guide generation.";
+          setError(getErrorMessage(err, fallback));
+        }
+      } finally {
+        if (isMountedRef.current) {
+          setIsStarting(false);
+        }
       }
     },
-    [id]
+    [id, isStarting, refreshDocument, router]
   );
 
   const retryGeneration = useCallback(async () => {
@@ -361,12 +426,20 @@ export default function ProcessingPage() {
       }
 
       await refreshDocument();
-
-      if (isMountedRef.current) {
-        setPollTrigger((current) => current + 1);
-      }
     } catch (err) {
       if (isMountedRef.current) {
+        if (
+          err instanceof ApiClientError &&
+          (err.code === "ALREADY_PROCESSING" || err.code === "ILLEGAL_RETRY_STATE")
+        ) {
+          void refreshDocument().then((next) => {
+            if (!isMountedRef.current) {
+              return;
+            }
+            setError(getStudyGuideFailureMessage(next ?? null));
+          });
+        }
+
         setError(getErrorMessage(err, "Retry failed. Please try again."));
       }
     } finally {
@@ -399,7 +472,7 @@ export default function ProcessingPage() {
   }, [document?.study_guide_status, processingStartedAt]);
 
   useEffect(() => {
-    if (!shouldRunPolling(id, isPageVisible)) return;
+    if (!shouldRunPolling(id, isPageVisible, isProcessing)) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -471,27 +544,16 @@ export default function ProcessingPage() {
       }
     };
 
-    void startGeneration(nextSignal())
-      .then((initialDelayMs) => {
-        if (!cancelled && initialDelayMs >= 0) {
-          timer = setTimeout(() => {
-            void poll();
-          }, initialDelayMs ?? DEFAULT_POLL_DELAY_MS);
-        }
-      })
-      .catch((err) => {
-        if (isAbortError(err) || cancelled || !isMountedRef.current) {
-          return;
-        }
-        setError(getErrorMessage(err, "Unable to start study guide generation."));
-      });
+    timer = setTimeout(() => {
+      void poll();
+    }, DEFAULT_POLL_DELAY_MS);
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
       requestController?.abort();
     };
-  }, [id, isPageVisible, pollTrigger, processingStartedAt, refreshDocument, router, startGeneration]);
+  }, [id, isPageVisible, isProcessing, refreshDocument, router]);
 
   const statusLine = useMemo(() => {
     if (isUnsupported) return "This document type is not supported.";
@@ -507,7 +569,7 @@ export default function ProcessingPage() {
     if (document?.error_code === "DOCUMENT_UNSUPPORTED") return "Unsupported document";
     if (isFailed) return "Generation interrupted";
     if (!document) return "Preparing…";
-    if (document.study_guide_status === "idle") return "Queued";
+    if (document.study_guide_status === "idle") return "Waiting for your action";
     return "Usually takes around 30–60 seconds";
   }, [document, isFailed, isReady]);
 
@@ -583,7 +645,7 @@ export default function ProcessingPage() {
     if (isUnsupported) return { label: "Unsupported", tone: "danger" as const };
     if (isFailed) return { label: "Failed", tone: "danger" as const };
     if (isReady) return { label: "Ready", tone: "success" as const };
-    if (document?.study_guide_status === "idle") return { label: "Queued", tone: "neutral" as const };
+    if (document?.study_guide_status === "idle") return { label: "Not started", tone: "neutral" as const };
     return { label: "Processing", tone: "neutral" as const };
   }, [document?.study_guide_status, isFailed, isReady, isUnsupported]);
 
@@ -700,7 +762,7 @@ export default function ProcessingPage() {
                 Processing can take longer when the document is large or when the response must match a strict structured format.
               </p>
               <p className="mt-3 max-w-[30ch] text-sm leading-7 text-gray-500">
-                You can leave this page and return from the dashboard at any time. You’ll be redirected automatically once generation is complete.
+                Generation begins only when you trigger it. Once it is processing, you can leave this page and return from the dashboard at any time.
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">
@@ -711,6 +773,17 @@ export default function ProcessingPage() {
                   >
                     Upload a different document
                   </Link>
+                ) : isIdle ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void startGeneration();
+                    }}
+                    disabled={isStarting}
+                    className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isStarting ? "Starting..." : "Create Study Guide"}
+                  </button>
                 ) : isFailed ? (
                   <button
                     type="button"

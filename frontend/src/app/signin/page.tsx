@@ -165,7 +165,7 @@ function SignInPageContent() {
         </div>
 
         <div className="mx-auto w-full max-w-lg">
-          <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_25px_70px_rgba(15,23,42,0.10)]sm:p-8">
+          <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_25px_70px_rgba(15,23,42,0.10)] sm:p-8">
             <div className="text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-950 text-white shadow-sm">
                 <BookOpen className="h-7 w-7" />

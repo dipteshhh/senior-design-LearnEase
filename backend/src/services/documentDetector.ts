@@ -5,15 +5,32 @@ export interface DetectionResult {
   isAssignment: boolean;
 }
 
-// ── Positive signals (first-match-wins per CLASSIFICATION.md) ───────
+// ── Negative signals: documents that should be rejected at upload ────
 
-const SYLLABUS_TRIGGERS = [
+const UNSUPPORTED_TRIGGERS = [
   "syllabus",
-  "course policies",
-  "grading",
-  "office hours",
-  "learning outcomes",
+  "syllabi",
+  "resume",
+  "curriculum vitae",
+  "portfolio",
+  "cover letter",
+  "letter of recommendation",
+  "academic transcript",
+  "official transcript",
+  "unofficial transcript",
+  "transcript key",
+  "cumulative gpa",
+  "grade points",
+  "invoice",
+  "invoice number",
+  "billing statement",
+  "amount due",
+  "class schedule",
+  "course schedule",
+  "semester schedule",
 ];
+
+// ── Positive signals ─────────────────────────────────────────────────
 
 const HOMEWORK_TRIGGERS = [
   "homework",
@@ -31,6 +48,9 @@ const LECTURE_TRIGGERS = [
   "week",
   "module",
   "chapter",
+  "class notes",
+  "course notes",
+  "notes:",
 ];
 
 function hasAnyTrigger(text: string, triggers: string[]): boolean {
@@ -44,9 +64,9 @@ export function detectDocumentType(text: string): DetectionResult {
     return { documentType: "UNSUPPORTED", isAssignment: false };
   }
 
-  // First-match-wins order from docs/CLASSIFICATION.md
-  if (hasAnyTrigger(normalized, SYLLABUS_TRIGGERS)) {
-    return { documentType: "SYLLABUS", isAssignment: false };
+  // Check negative signals first — reject obvious unsupported content
+  if (hasAnyTrigger(normalized, UNSUPPORTED_TRIGGERS)) {
+    return { documentType: "UNSUPPORTED", isAssignment: false };
   }
 
   if (hasAnyTrigger(normalized, HOMEWORK_TRIGGERS)) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import type { Citation, DocumentDetail } from "@/lib/contracts";
 import { getDocument } from "@/lib/data/documents";
@@ -100,33 +100,33 @@ export default function FocusModePage() {
     setFocusIndex((prev) => Math.max(0, Math.min(prev, sections.length - 1)));
   }, [sections]);
 
-  function scrollToTop() {
+  const scrollToTop = useCallback(() => {
     window.scrollTo({
       top: 0,
       behavior: "smooth",
     });
-  }
+  }, []);
 
   function goToSection(index: number) {
     setFocusIndex(index);
     scrollToTop();
   }
 
-  function goToPreviousSection() {
+  const goToPreviousSection = useCallback(() => {
     setFocusIndex((prev) => {
       const next = Math.max(0, prev - 1);
       if (next !== prev) scrollToTop();
       return next;
     });
-  }
+  }, [scrollToTop]);
 
-  function goToNextSection() {
+  const goToNextSection = useCallback(() => {
     setFocusIndex((prev) => {
       const next = Math.min(sections.length - 1, prev + 1);
       if (next !== prev) scrollToTop();
       return next;
     });
-  }
+  }, [scrollToTop, sections.length]);
 
   function openCitationDrawer(title: string, citations: Citation[]) {
     setCitationTitle(title);
@@ -155,7 +155,7 @@ export default function FocusModePage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [citationDrawerOpen, id, router, sections.length]);
+  }, [citationDrawerOpen, goToNextSection, goToPreviousSection, id, router]);
 
   if (!id) {
     return <p className="p-6 text-sm text-gray-600">Missing document id.</p>;

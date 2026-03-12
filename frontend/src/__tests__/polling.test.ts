@@ -8,15 +8,19 @@ import {
 } from "../lib/polling.ts";
 
 test("shouldRunPolling pauses polling when the page is hidden", () => {
-  assert.equal(shouldRunPolling("doc-123", false), false);
+  assert.equal(shouldRunPolling("doc-123", false, true), false);
 });
 
 test("shouldRunPolling does not start polling without a document id", () => {
-  assert.equal(shouldRunPolling("", true), false);
+  assert.equal(shouldRunPolling("", true, true), false);
 });
 
 test("shouldRunPolling resumes polling when id exists and page is visible", () => {
-  assert.equal(shouldRunPolling("doc-123", true), true);
+  assert.equal(shouldRunPolling("doc-123", true, true), true);
+});
+
+test("shouldRunPolling stays paused until generation is actively processing", () => {
+  assert.equal(shouldRunPolling("doc-123", true, false), false);
 });
 
 test("shouldResetQuizStateOnFlowStart keeps in-progress quiz state after visibility changes", () => {

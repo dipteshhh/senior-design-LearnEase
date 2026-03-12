@@ -27,6 +27,7 @@ sqlite.initializeDatabase();
 import {
   saveDocument,
   getDocument,
+  listDocumentsByUser,
   updateChecklistItem as updateChecklistItemStore,
   updateDocument,
 } from "../store/memoryStore.js";
@@ -36,6 +37,11 @@ type MockReq = {
   body?: Record<string, unknown>;
   params?: Record<string, string | undefined>;
   auth?: { userId: string; email: string };
+  file?: {
+    buffer: Buffer;
+    mimetype: string;
+    originalname: string;
+  };
 };
 
 type MockRes = {
@@ -73,6 +79,66 @@ function makeAuthReq(body: Record<string, unknown>): MockReq {
   };
 }
 
+function makeUploadReq(
+  text: string,
+  {
+    filename = "upload.pdf",
+    userId = randomUUID(),
+    email = "upload@example.com",
+  }: {
+    filename?: string;
+    userId?: string;
+    email?: string;
+  } = {}
+): MockReq {
+  return {
+    auth: { userId, email },
+    file: {
+      buffer: buildPdfBuffer(text),
+      mimetype: "application/pdf",
+      originalname: filename,
+    },
+  };
+}
+
+function buildPdfBuffer(text: string): Buffer {
+  const escapedText = text.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
+  const stream = `BT /F1 18 Tf 50 100 Td (${escapedText}) Tj ET`;
+  const objects = [
+    "1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj",
+    "2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj",
+    "3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>endobj",
+    `4 0 obj<< /Length ${Buffer.byteLength(stream, "utf8")} >>stream\n${stream}\nendstream endobj`,
+    "5 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj",
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const object of objects) {
+    offsets.push(Buffer.byteLength(pdf, "utf8"));
+    pdf += `${object}\n`;
+  }
+
+  const xrefOffset = Buffer.byteLength(pdf, "utf8");
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let index = 1; index < offsets.length; index += 1) {
+    pdf += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer<< /Root 1 0 R /Size ${objects.length + 1} >>\n`;
+  pdf += `startxref\n${xrefOffset}\n%%EOF`;
+
+  return Buffer.from(pdf, "utf8");
+}
+
+function countArtifactDirectories(): number {
+  const artifactsDir = process.env.ARTIFACTS_DIR!;
+  if (!fs.existsSync(artifactsDir)) return 0;
+  return fs
+    .readdirSync(artifactsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory()).length;
+}
+
 function seedDocument(overrides: Partial<DocumentRecord> = {}): DocumentRecord {
   const doc: DocumentRecord = {
     id: randomUUID(),
@@ -106,6 +172,33 @@ async function loadHandlers() {
   return import("../routes/contract.js");
 }
 
+async function assertUnsupportedUploadRejected(options: {
+  filename: string;
+  text: string;
+  userId?: string;
+}) {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = options.userId ?? randomUUID();
+  const req = makeUploadReq(options.text, { filename: options.filename, userId });
+  const res = makeRes();
+  const beforeArtifacts = countArtifactDirectories();
+
+  await uploadDocumentHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 422);
+  const body = res.body as {
+    error?: { code?: string; message?: string; details?: Record<string, unknown> };
+  };
+  assert.equal(body.error?.code, "DOCUMENT_UNSUPPORTED_UPLOAD");
+  assert.equal(
+    body.error?.message,
+    "This document type is not supported. Only lecture notes, homework files, and class notes are accepted."
+  );
+  assert.deepEqual(body.error?.details ?? {}, {});
+  assert.equal(listDocumentsByUser(userId).length, 0);
+  assert.equal(countArtifactDirectories(), beforeArtifacts);
+}
+
 test("createStudyGuideHandler returns 202 and sets status to processing", async () => {
   const { createStudyGuideHandler } = await loadHandlers();
   const doc = seedDocument();
@@ -121,6 +214,72 @@ test("createStudyGuideHandler returns 202 and sets status to processing", async 
   const updated = getDocument(doc.id);
   assert.ok(updated);
   assert.equal(updated.studyGuideStatus, "processing");
+});
+
+test("uploadDocumentHandler rejects syllabus before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "syllabus.pdf",
+    text: "Course syllabus with grading and office hours for the semester.",
+  });
+});
+
+test("uploadDocumentHandler rejects academic transcript before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "transcript.pdf",
+    text: "Academic Transcript. Official transcript with cumulative GPA and grade points.",
+  });
+});
+
+test("uploadDocumentHandler rejects resume before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "resume.pdf",
+    text: "Resume for Jane Doe. Experience and technical skills summary.",
+  });
+});
+
+test("uploadDocumentHandler rejects invoice before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "invoice.pdf",
+    text: "Invoice number 1042. Billing statement with amount due by May 15.",
+  });
+});
+
+test("uploadDocumentHandler stores supported homework upload", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const req = makeUploadReq("Homework 3 assignment. Submit by due date.", {
+    filename: "homework.pdf",
+    userId,
+  });
+  const res = makeRes();
+  const beforeArtifacts = countArtifactDirectories();
+
+  await uploadDocumentHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 201);
+  const docs = listDocumentsByUser(userId);
+  assert.equal(docs.length, 1);
+  assert.equal(docs[0]?.documentType, "HOMEWORK");
+  assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+});
+
+test("uploadDocumentHandler stores supported lecture upload", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const req = makeUploadReq("Lecture slides for week 5 module on sorting.", {
+    filename: "lecture.pdf",
+    userId,
+  });
+  const res = makeRes();
+  const beforeArtifacts = countArtifactDirectories();
+
+  await uploadDocumentHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 201);
+  const docs = listDocumentsByUser(userId);
+  assert.equal(docs.length, 1);
+  assert.equal(docs[0]?.documentType, "LECTURE");
+  assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
 });
 
 test("createStudyGuideHandler returns 202 for UNSUPPORTED document (LLM gates async)", async () => {
@@ -229,7 +388,7 @@ test("retryStudyGuideHandler returns 202 for UNSUPPORTED document (LLM gates asy
   // Handler returns 202 immediately; the LLM pre-classifier will gate
   // generation asynchronously inside the background task.
   assert.equal(res.statusCode, 202);
-  assert.deepEqual(res.body, { status: "processing" });
+  assert.deepEqual(res.body, { status: "processing", retry: true });
 });
 
 test("listDocumentsHandler returns per-flow statuses for each document", async () => {

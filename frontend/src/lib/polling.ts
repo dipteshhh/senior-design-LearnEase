@@ -15,8 +15,12 @@ export function getTransientDelayMs(error: unknown): number | null {
   return null;
 }
 
-export function shouldRunPolling(documentId: string, isPageVisible: boolean): boolean {
-  return documentId.length > 0 && isPageVisible;
+export function shouldRunPolling(
+  documentId: string,
+  isPageVisible: boolean,
+  isProcessing: boolean = true
+): boolean {
+  return documentId.length > 0 && isPageVisible && isProcessing;
 }
 
 export function shouldResetQuizStateOnFlowStart(hasLoadedQuiz: boolean): boolean {

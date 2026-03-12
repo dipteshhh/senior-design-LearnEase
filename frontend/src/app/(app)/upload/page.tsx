@@ -104,6 +104,13 @@ export default function UploadPage() {
         return;
       }
 
+      // Fire study guide generation immediately (best-effort).
+      // The processing page will auto-start if this doesn't land.
+      api("/api/study-guide/create", {
+        method: "POST",
+        body: JSON.stringify({ document_id: documentId }),
+      }).catch(() => { /* processing page will handle retry */ });
+
       router.push(`/documents/${documentId}/processing`);
     } catch (uploadError) {
       setError(getErrorMessage(uploadError, "Unable to upload right now. Please try again."));
@@ -243,7 +250,7 @@ export default function UploadPage() {
                 : "cursor-not-allowed bg-slate-200 text-slate-400",
             ].join(" ")}
           >
-            {isSubmitting ? "Uploading..." : "Create study session"}
+            {isSubmitting ? "Creating..." : "Create Study Guide"}
           </button>
         </div>
 

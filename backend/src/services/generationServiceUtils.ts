@@ -4,6 +4,7 @@ import {
   APIError,
   RateLimitError,
 } from "openai/error";
+import { readEnvInt } from "../lib/env.js";
 import type { FileType } from "../store/memoryStore.js";
 import { ContractValidationError } from "./outputValidator.js";
 
@@ -16,6 +17,8 @@ export interface CitationRequirementsMetadata {
 interface BuildCitationRequirementsOptions {
   useMustLanguage?: boolean;
 }
+
+const DEFAULT_OPENAI_MAX_INPUT_CHARS = 120000;
 
 export function buildCitationRequirements(
   metadata: CitationRequirementsMetadata,
@@ -53,6 +56,30 @@ Error message: ${error.message}
 Validation details: ${details}
 
 Regenerate the entire JSON and fix these issues exactly.`;
+}
+
+export function getGenerationMaxInputChars(): number {
+  return readEnvInt(
+    "OPENAI_MAX_INPUT_CHARS",
+    DEFAULT_OPENAI_MAX_INPUT_CHARS,
+    1000
+  );
+}
+
+export function assertGenerationInputWithinLimit(text: string): void {
+  const maxChars = getGenerationMaxInputChars();
+  if (text.length <= maxChars) {
+    return;
+  }
+
+  throw new ContractValidationError(
+    "DOCUMENT_TOO_LARGE_FOR_GENERATION",
+    "Document is too large to generate study materials. Upload a shorter document.",
+    {
+      max_chars: maxChars,
+      actual_chars: text.length,
+    }
+  );
 }
 
 export function normalizeUpstreamError(error: unknown): unknown {

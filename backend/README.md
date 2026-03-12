@@ -64,6 +64,7 @@ Default local URL: `http://localhost:3001`
 - `OPENAI_FALLBACK_MODEL` (optional fallback model used on later attempts after retryable failures)
 - `OPENAI_FALLBACK_START_ATTEMPT` (attempt number at which fallback model becomes eligible; default `2`)
 - `OPENAI_GENERATION_MAX_ATTEMPTS` (max study-guide/quiz generation attempts per request; default `5`)
+- `OPENAI_MAX_INPUT_CHARS` (max extracted text characters allowed for a single generation request; default `120000`)
 - `OPENAI_TRANSIENT_BACKOFF_BASE_MS` (transient retry base backoff in ms; default `500`)
 - `OPENAI_TRANSIENT_BACKOFF_MAX_MS` (transient retry max backoff cap in ms; default `8000`)
 - `OPENAI_CIRCUIT_BREAKER_FAILURE_THRESHOLD` (consecutive transient failures required to open the in-memory circuit breaker; set `0` to disable; default `3`)

@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  assertGenerationInputWithinLimit,
   buildCitationRequirements,
   buildRepairHint,
+  getGenerationMaxInputChars,
   normalizeUpstreamError,
 } from "../services/generationServiceUtils.js";
 import { ContractValidationError } from "../services/outputValidator.js";
@@ -46,6 +48,35 @@ test("buildRepairHint includes validation details for contract errors", () => {
 
 test("buildRepairHint returns empty string for non-contract errors", () => {
   assert.equal(buildRepairHint(new Error("boom")), "");
+});
+
+test("assertGenerationInputWithinLimit allows text within limit", () => {
+  process.env.OPENAI_MAX_INPUT_CHARS = "20";
+  assert.doesNotThrow(() => {
+    assertGenerationInputWithinLimit("short document");
+  });
+});
+
+test("assertGenerationInputWithinLimit rejects oversized text", () => {
+  process.env.OPENAI_MAX_INPUT_CHARS = "1000";
+  const oversizedText = "a".repeat(1001);
+
+  assert.throws(
+    () => {
+      assertGenerationInputWithinLimit(oversizedText);
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "DOCUMENT_TOO_LARGE_FOR_GENERATION");
+      assert.equal(error.details?.max_chars, 1000);
+      return true;
+    }
+  );
+});
+
+test("getGenerationMaxInputChars falls back for invalid env values", () => {
+  process.env.OPENAI_MAX_INPUT_CHARS = "0";
+  assert.equal(getGenerationMaxInputChars(), 120000);
 });
 
 test("normalizeUpstreamError preserves contract validation errors", () => {

@@ -21,6 +21,7 @@ import {
   sleepMs,
 } from "./generationReliability.js";
 import {
+  assertGenerationInputWithinLimit,
   buildCitationRequirements,
   buildRepairHint,
   normalizeUpstreamError,
@@ -116,6 +117,8 @@ export async function generateQuiz(
   metadata: QuizGenerationMetadata,
   openAiClient: OpenAI = client
 ): Promise<Quiz> {
+  assertGenerationInputWithinLimit(text);
+
   if (documentType !== "LECTURE") {
     throw new ContractValidationError(
       "DOCUMENT_NOT_LECTURE",

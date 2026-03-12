@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -92,6 +95,7 @@ const learningPoints = [
 
 export default function Home() {
   const year = new Date().getFullYear();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -149,13 +153,51 @@ export default function Home() {
 
             <button
               type="button"
+              onClick={() => setMobileNavOpen((current) => !current)}
               className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 lg:hidden"
               aria-label="Open navigation menu"
+              aria-expanded={mobileNavOpen}
+              aria-controls="mobile-nav"
             >
               <Menu className="h-5 w-5" />
             </button>
           </div>
         </div>
+
+        {mobileNavOpen ? (
+          <div id="mobile-nav" className="border-t border-slate-200 px-4 py-4 lg:hidden">
+            <nav className="flex flex-col gap-2">
+              <a
+                href="#how-it-works"
+                onClick={() => setMobileNavOpen(false)}
+                className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                How it works
+              </a>
+              <a
+                href="#features"
+                onClick={() => setMobileNavOpen(false)}
+                className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                Features
+              </a>
+              <a
+                href="#security"
+                onClick={() => setMobileNavOpen(false)}
+                className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                Security
+              </a>
+              <Link
+                href="/signin"
+                onClick={() => setMobileNavOpen(false)}
+                className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                Log in
+              </Link>
+            </nav>
+          </div>
+        ) : null}
       </header>
 
       <main>
@@ -198,7 +240,7 @@ export default function Home() {
 
               <div className="mt-8 grid gap-3 sm:mt-10">
                 {learningPoints.map((point) => (
-                  <div key={point} className="flex items-Get Started gap-3">
+                  <div key={point} className="flex items-center gap-3">
                     <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
                     <p className="text-sm leading-6 text-slate-700 sm:text-base">{point}</p>
                   </div>

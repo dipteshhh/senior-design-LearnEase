@@ -23,6 +23,10 @@ export function getErrorMessage(error: unknown, fallback: string): string {
     return "Quiz is available only for lecture documents.";
   }
 
+  if (error.code === "DOCUMENT_UNSUPPORTED_UPLOAD") {
+    return "This app currently supports only lecture notes, homework files, and class notes. Your file was not saved.";
+  }
+
   if (error.code === "DOCUMENT_UNSUPPORTED" || error.code === "UNSUPPORTED_MEDIA_TYPE") {
     return "Only supported document types can be processed.";
   }

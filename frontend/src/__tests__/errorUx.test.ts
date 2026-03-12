@@ -62,6 +62,14 @@ test("DOCUMENT_NOT_LECTURE", () => {
   assert.equal(getErrorMessage(err, FALLBACK), "Quiz is available only for lecture documents.");
 });
 
+test("DOCUMENT_UNSUPPORTED_UPLOAD", () => {
+  const err = makeError("DOCUMENT_UNSUPPORTED_UPLOAD", { status: 422 });
+  assert.equal(
+    getErrorMessage(err, FALLBACK),
+    "This app currently supports only lecture notes, homework files, and class notes. Your file was not saved."
+  );
+});
+
 test("DOCUMENT_UNSUPPORTED", () => {
   const err = makeError("DOCUMENT_UNSUPPORTED");
   assert.equal(

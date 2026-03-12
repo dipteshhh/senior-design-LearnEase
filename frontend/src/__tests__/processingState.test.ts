@@ -1,8 +1,8 @@
 /**
  * Tests for the state-derivation logic used by the processing page.
  *
- * The processing page derives `isUnsupported` from `document.error_code`
- * rather than keeping a separate boolean. These tests verify that the
+ * The processing page derives `isUnsupported` from either the stored
+ * document type or the async failure code. These tests verify that the
  * derivation contract is correct for all relevant document states.
  */
 import test from "node:test";
@@ -31,7 +31,10 @@ function makeDoc(overrides: Partial<DocumentListItem> = {}): DocumentListItem {
 
 /** Mirrors the derivation in ProcessingPage */
 function deriveIsUnsupported(doc: DocumentListItem | null): boolean {
-  return doc?.error_code === "DOCUMENT_UNSUPPORTED";
+  return (
+    doc?.document_type === "UNSUPPORTED" ||
+    doc?.error_code === "DOCUMENT_UNSUPPORTED"
+  );
 }
 
 function deriveIsFailed(doc: DocumentListItem | null): boolean {
@@ -79,6 +82,16 @@ test("isUnsupported is false for ready documents", () => {
     has_study_guide: true,
   });
   assert.equal(deriveIsUnsupported(doc), false);
+});
+
+test("isUnsupported is true for unsupported uploads before generation starts", () => {
+  const doc = makeDoc({
+    document_type: "UNSUPPORTED",
+    study_guide_status: "idle",
+    status: "uploaded",
+    error_code: null,
+  });
+  assert.equal(deriveIsUnsupported(doc), true);
 });
 
 // ── isFailed + isUnsupported interaction ────────────────────────────

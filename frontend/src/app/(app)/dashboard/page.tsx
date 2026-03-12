@@ -1,124 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { DocumentListItem } from "@/lib/contracts";
 import { listDocuments } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
+import { DocumentCard } from "@/components/DocumentCard";
 
-function generationStatusLabel(
-  status: DocumentListItem["study_guide_status"]
-): "Ready" | "Processing" | "Failed" | "Idle" {
-  if (status === "ready") return "Ready";
-  if (status === "processing") return "Processing";
-  if (status === "failed") return "Failed";
-  return "Idle";
-}
-
-function FlowStatusBadge({
-  flow,
-  status,
-}: {
-  flow: "Study guide" | "Quiz";
-  status: DocumentListItem["study_guide_status"];
-}) {
-  const label = generationStatusLabel(status);
-
-  if (label === "Ready") {
-    return (
-      <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-        <span className="h-2 w-2 rounded-full bg-emerald-500" />
-        {flow}: {label}
-      </span>
-    );
-  }
-
-  if (label === "Processing" || label === "Idle") {
-    return (
-      <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-        <span className="h-2 w-2 rounded-full bg-amber-500" />
-        {flow}: {label}
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700">
-      <span className="h-2 w-2 rounded-full bg-rose-500" />
-      {flow}: {label}
-    </span>
-  );
-}
-
-function formatUploadedLabel(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown upload time";
-
-  const diffMs = Date.now() - date.getTime();
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function documentHref(doc: DocumentListItem): string {
-  if (doc.study_guide_status === "ready" && doc.has_study_guide) {
-    return `/documents/${doc.id}`;
-  }
-  return `/documents/${doc.id}/processing`;
-}
-
-function DocumentCard({ doc }: { doc: DocumentListItem }) {
-  const isStudyGuideProcessing = doc.study_guide_status === "processing";
-  const isQuizProcessing = doc.quiz_status === "processing";
-  const hasFlowFailure =
-    doc.study_guide_status === "failed" || doc.quiz_status === "failed";
-
-  return (
-    <Link
-      href={documentHref(doc)}
-      className="group block rounded-2xl border bg-white p-5 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-black/20"
-      aria-label={`Open ${doc.filename}`}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-gray-900">{doc.filename}</p>
-          <p className="mt-2 text-xs text-gray-500">
-            {doc.page_count} pages <span className="px-1">•</span> {formatUploadedLabel(doc.uploaded_at)}
-          </p>
-        </div>
-        <div className="shrink-0">
-          <div className="flex flex-col items-end gap-2">
-            <FlowStatusBadge flow="Study guide" status={doc.study_guide_status} />
-            {doc.document_type === "LECTURE" ? (
-              <FlowStatusBadge flow="Quiz" status={doc.quiz_status} />
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {isStudyGuideProcessing ? (
-        <p className="mt-4 text-xs text-gray-500">Study guide generation in progress...</p>
-      ) : null}
-      {doc.document_type === "LECTURE" && isQuizProcessing ? (
-        <p className="mt-4 text-xs text-gray-500">Quiz generation in progress...</p>
-      ) : null}
-      {hasFlowFailure && doc.error_message ? (
-        <p className="mt-4 text-xs text-rose-700">{doc.error_message}</p>
-      ) : null}
-    </Link>
-  );
-}
+const DASHBOARD_RECENT_LIMIT = 4;
 
 function DashboardPageContent() {
   const searchParams = useSearchParams();
@@ -126,6 +16,11 @@ function DashboardPageContent() {
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fetchKey, setFetchKey] = useState(0);
+
+  const refetch = useCallback(() => {
+    setFetchKey((k) => k + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,7 +49,7 @@ function DashboardPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [q]);
+  }, [q, fetchKey]);
 
   const readyCount = useMemo(
     () => docs.filter((doc) => doc.study_guide_status === "ready").length,
@@ -162,6 +57,11 @@ function DashboardPageContent() {
   );
   const processingCount = useMemo(
     () => docs.filter((doc) => doc.study_guide_status === "processing").length,
+    [docs]
+  );
+
+  const recentDocs = useMemo(
+    () => docs.slice(0, DASHBOARD_RECENT_LIMIT),
     [docs]
   );
 
@@ -194,7 +94,17 @@ function DashboardPageContent() {
       <div className="mt-10">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold text-gray-900">Recent uploads</h3>
-          <p className="text-sm text-gray-500">{docs.length} documents</p>
+          <div className="flex items-center gap-4">
+            <p className="text-sm text-gray-500">{docs.length} documents</p>
+            {docs.length > DASHBOARD_RECENT_LIMIT ? (
+              <Link
+                href="/documents"
+                className="text-sm font-medium text-gray-700 hover:text-gray-900 transition"
+              >
+                View all →
+              </Link>
+            ) : null}
+          </div>
         </div>
 
         {isLoading ? (
@@ -229,17 +139,11 @@ function DashboardPageContent() {
           </div>
         ) : null}
 
-        {!isLoading && !error && docs.length > 0 ? (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            {docs.slice(0, 3).map((doc) => (
-              <DocumentCard key={doc.id} doc={doc} />
+        {!isLoading && !error && recentDocs.length > 0 ? (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {recentDocs.map((doc) => (
+              <DocumentCard key={doc.id} doc={doc} onDeleted={refetch} />
             ))}
-
-            {docs[3] ? (
-              <div className="md:col-span-2">
-                <DocumentCard doc={docs[3]} />
-              </div>
-            ) : null}
           </div>
         ) : null}
       </div>

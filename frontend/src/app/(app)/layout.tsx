@@ -141,6 +141,7 @@ function ProtectedShell({ children }: { children: ReactNode }) {
           <nav className="mt-6 space-y-1 px-1">
             <NavItem href="/dashboard" label="Dashboard" />
             <NavItem href="/upload" label="Upload" />
+            <NavItem href="/documents" label="Documents" />
             <NavItem href="/settings" label="Settings" />
           </nav>
 

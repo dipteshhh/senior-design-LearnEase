@@ -46,7 +46,10 @@ test("LLM classifier returns SYLLABUS when LLM says SYLLABUS", async () => {
   const client = mockOpenAiClient("SYLLABUS");
   const result = await classifyWithLlm("Course syllabus with grading and office hours.", client);
   assert.equal(result.llmDocumentType, "SYLLABUS");
-  assert.equal(result.disagreement, false);
+  // Local classifier now maps syllabus triggers to UNSUPPORTED (upload-time rejection),
+  // so the local and LLM results disagree on the specific type but both reject.
+  assert.equal(result.localDetection.documentType, "UNSUPPORTED");
+  assert.equal(result.disagreement, true);
 });
 
 // ── LLM rejects out-of-scope documents that local classifier misses ─
