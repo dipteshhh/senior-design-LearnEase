@@ -14,6 +14,7 @@ import {
   retryQuizHandler,
   retryStudyGuideHandler,
   updateChecklistHandler,
+  updateDueTimeHandler,
   uploadDocumentHandler,
 } from "./routes/contract.js";
 import { googleAuthHandler, logoutHandler, meHandler } from "./routes/auth.js";
@@ -30,9 +31,11 @@ import { closeDatabase, initializeDatabase } from "./db/sqlite.js";
 import {
   purgeExpiredDocuments,
   recoverInterruptedProcessingDocuments,
+  recoverStuckReminders,
 } from "./store/memoryStore.js";
 import { logger } from "./lib/logger.js";
 import { sendApiError } from "./lib/apiError.js";
+import { checkAndSendReminders } from "./services/reminderScheduler.js";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -93,6 +96,16 @@ setInterval(
   24 * 60 * 60 * 1000
 ).unref();
 
+// Recover reminders stuck in 'sending' state from a previous crash
+const recoveredReminders = recoverStuckReminders();
+if (recoveredReminders > 0) {
+  logger.warn("Recovered stuck reminder sends on startup", { recoveredReminders });
+}
+
+// Reminder scheduler: check every 15 minutes for assignments due within 24 hours
+checkAndSendReminders();
+setInterval(() => checkAndSendReminders(), 15 * 60 * 1000).unref();
+
 if (isProduction) {
   const trustProxy = process.env.TRUST_PROXY?.trim();
   if (trustProxy) {
@@ -141,6 +154,7 @@ app.post("/api/quiz/create", createQuizHandler);
 app.post("/api/quiz/retry", retryQuizHandler);
 app.get("/api/quiz/:documentId", getQuizHandler);
 app.patch("/api/checklist/:documentId", updateChecklistHandler);
+app.patch("/api/documents/:documentId/due-time", updateDueTimeHandler);
 app.delete("/api/user/data", deleteUserDataHandler);
 
 app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {

@@ -59,6 +59,43 @@ function ensureDocumentFlowColumns(db: SqliteDatabase): void {
   }
 }
 
+function ensureHomeworkDeadlineColumns(db: SqliteDatabase): void {
+  const columnDefinitions: Array<{ name: string; sql: string }> = [
+    { name: "assignment_due_date", sql: "TEXT" },
+    { name: "assignment_due_time", sql: "TEXT" },
+    // Legacy column kept for migration compatibility; new code uses reminder_status + reminder_deadline_key.
+    { name: "reminder_sent", sql: "INTEGER NOT NULL DEFAULT 0" },
+    { name: "reminder_status", sql: "TEXT NOT NULL DEFAULT 'pending'" },
+    { name: "reminder_deadline_key", sql: "TEXT" },
+    { name: "reminder_last_error", sql: "TEXT" },
+    { name: "reminder_attempted_at", sql: "TEXT" },
+  ];
+
+  for (const column of columnDefinitions) {
+    if (!hasColumn(db, "documents", column.name)) {
+      db.exec(`ALTER TABLE documents ADD COLUMN ${column.name} ${column.sql};`);
+    }
+  }
+
+  // Migrate legacy reminder_sent=1 rows to the new status model.
+  // Only run once: rows that have reminder_sent=1 but still have the default 'pending' status.
+  db.exec(`
+    UPDATE documents
+    SET reminder_status = 'sent',
+        reminder_deadline_key = assignment_due_date || 'T' || assignment_due_time
+    WHERE reminder_sent = 1
+      AND reminder_status = 'pending'
+      AND assignment_due_date IS NOT NULL
+      AND assignment_due_time IS NOT NULL
+  `);
+}
+
+function ensureDocumentContentHashColumn(db: SqliteDatabase): void {
+  if (!hasColumn(db, "documents", "content_hash")) {
+    db.exec("ALTER TABLE documents ADD COLUMN content_hash TEXT;");
+  }
+}
+
 function backfillDocumentFlowState(db: SqliteDatabase): void {
   db.exec(`
     UPDATE documents
@@ -152,6 +189,7 @@ export function initializeDatabase(): void {
       user_id TEXT NOT NULL,
       original_filename TEXT NOT NULL,
       file_type TEXT NOT NULL CHECK (file_type IN ('PDF', 'DOCX')),
+      content_hash TEXT,
       page_count INTEGER,
       paragraph_count INTEGER,
       document_type TEXT NOT NULL CHECK (document_type IN ('HOMEWORK', 'LECTURE', 'UNSUPPORTED')),
@@ -212,6 +250,14 @@ export function initializeDatabase(): void {
   `);
 
   ensureDocumentFlowColumns(db);
+  ensureHomeworkDeadlineColumns(db);
+  ensureDocumentContentHashColumn(db);
+  db.exec("DROP INDEX IF EXISTS idx_documents_user_content_hash;");
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_user_content_hash
+      ON documents(user_id, content_hash)
+      WHERE content_hash IS NOT NULL;`
+  );
   backfillDocumentFlowState(db);
 }
 

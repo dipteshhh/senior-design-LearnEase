@@ -14,6 +14,7 @@ import {
   deleteDocument,
   getDocument,
   updateChecklistItem,
+  updateDueTime,
 } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
 
@@ -373,6 +374,9 @@ export default function DocumentPage() {
   const [citationDrawerOpen, setCitationDrawerOpen] = useState(false);
   const [citationDrawerTitle, setCitationDrawerTitle] = useState("Source Citations");
   const [activeCitations, setActiveCitations] = useState<Citation[]>([]);
+  const [dueTimeInput, setDueTimeInput] = useState("");
+  const [dueTimeSaving, setDueTimeSaving] = useState(false);
+  const [savedDueTime, setSavedDueTime] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -413,6 +417,13 @@ export default function DocumentPage() {
   useEffect(() => {
     if (!detail) return;
     setChecklistCompleted(detail.checklistCompletion);
+    if (detail.document.assignment_due_time) {
+      setSavedDueTime(detail.document.assignment_due_time);
+      setDueTimeInput(detail.document.assignment_due_time);
+    } else {
+      setSavedDueTime(null);
+      setDueTimeInput("");
+    }
   }, [detail]);
 
   useEffect(() => {
@@ -603,6 +614,32 @@ export default function DocumentPage() {
     } catch (err) {
       setChecklistCompleted((current) => ({ ...current, [itemId]: previous }));
       setError(getErrorMessage(err, "Unable to update checklist item."));
+    }
+  }
+
+  async function handleSaveDueTime() {
+    if (!document || dueTimeSaving || !dueTimeInput.trim()) return;
+
+    setDueTimeSaving(true);
+    setError(null);
+
+    try {
+      const result = await updateDueTime(document.id, dueTimeInput.trim());
+      setSavedDueTime(result.assignment_due_time);
+      if (detail) {
+        setDetail({
+          ...detail,
+          document: {
+            ...detail.document,
+            assignment_due_time: result.assignment_due_time,
+            reminder_status: result.reminder_status as DocumentListItem["reminder_status"],
+          },
+        });
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, "Unable to save due time."));
+    } finally {
+      setDueTimeSaving(false);
     }
   }
 
@@ -857,6 +894,69 @@ export default function DocumentPage() {
                     value={studyGuide.overview.estimated_time}
                   />
                 ) : null}
+              </div>
+            ) : null}
+
+            {document.document_type === "HOMEWORK" ? (
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 space-y-4">
+                <h3 className="text-base font-semibold text-gray-950">Assignment Deadline</h3>
+
+                {document.assignment_due_date ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-gray-500">Due Date:</span>
+                      <span className="text-sm font-semibold text-gray-900">
+                        {formatDate(document.assignment_due_date)}
+                      </span>
+                    </div>
+
+                    {savedDueTime ? (
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-gray-500">Due Time:</span>
+                        <span className="text-sm font-semibold text-gray-900">{savedDueTime}</span>
+                        {document.reminder_status === "sent" ? (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                            Reminder sent
+                          </span>
+                        ) : document.reminder_status === "sending" || document.reminder_status === "pending" ? (
+                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                            Reminder pending
+                          </span>
+                        ) : document.reminder_status === "failed" ? (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                            Reminder pending retry
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm text-amber-700">
+                          Exact due time not found. Set the time below to receive a reminder 24 hours before the deadline.
+                        </p>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="time"
+                            value={dueTimeInput}
+                            onChange={(e) => setDueTimeInput(e.target.value)}
+                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { void handleSaveDueTime(); }}
+                            disabled={dueTimeSaving || !dueTimeInput.trim()}
+                            className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {dueTimeSaving ? "Saving..." : "Set Due Time"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    No due date was detected from this document.
+                  </p>
+                )}
               </div>
             ) : null}
           </Card>

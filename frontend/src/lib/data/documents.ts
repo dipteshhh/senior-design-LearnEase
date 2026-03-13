@@ -85,6 +85,19 @@ export async function deleteDocument(documentId: string): Promise<void> {
   });
 }
 
+export async function updateDueTime(
+  documentId: string,
+  dueTime: string
+): Promise<{ assignment_due_date: string | null; assignment_due_time: string; reminder_status: string }> {
+  return api<{ assignment_due_date: string | null; assignment_due_time: string; reminder_status: string }>(
+    `/api/documents/${documentId}/due-time`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ due_time: dueTime }),
+    }
+  );
+}
+
 export async function deleteAllUserData(): Promise<void> {
   await api<{ success: boolean }>("/api/user/data", {
     method: "DELETE",

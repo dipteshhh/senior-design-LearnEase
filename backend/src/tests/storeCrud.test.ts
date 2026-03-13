@@ -42,6 +42,12 @@ function makeDoc(id: string, userId: string, overrides: Partial<DocumentRecord> 
     quizErrorMessage: null,
     errorCode: null,
     errorMessage: null,
+    assignmentDueDate: null,
+    assignmentDueTime: null,
+    reminderStatus: "pending",
+    reminderDeadlineKey: null,
+    reminderLastError: null,
+    reminderAttemptedAt: null,
     ...overrides,
   };
 }

@@ -162,6 +162,12 @@ function seedDocument(overrides: Partial<DocumentRecord> = {}): DocumentRecord {
     quizErrorMessage: null,
     errorCode: null,
     errorMessage: null,
+    assignmentDueDate: null,
+    assignmentDueTime: null,
+    reminderStatus: "pending",
+    reminderDeadlineKey: null,
+    reminderLastError: null,
+    reminderAttemptedAt: null,
     ...overrides,
   };
   saveDocument(doc);
@@ -280,6 +286,231 @@ test("uploadDocumentHandler stores supported lecture upload", async () => {
   assert.equal(docs.length, 1);
   assert.equal(docs[0]?.documentType, "LECTURE");
   assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+});
+
+test("uploadDocumentHandler reuses existing document for exact duplicate by same user", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const text = "Homework 8 assignment. Submit by due date.";
+  const beforeArtifacts = countArtifactDirectories();
+
+  const firstReq = makeUploadReq(text, {
+    filename: "duplicate-homework.pdf",
+    userId,
+  });
+  const firstRes = makeRes();
+  await uploadDocumentHandler(firstReq as any, firstRes as any);
+
+  assert.equal(firstRes.statusCode, 201);
+  const firstBody = firstRes.body as { document_id: string };
+  const firstDocumentId = firstBody.document_id;
+  assert.ok(firstDocumentId);
+
+  const secondReq = makeUploadReq(text, {
+    filename: "duplicate-homework.pdf",
+    userId,
+  });
+  const secondRes = makeRes();
+  await uploadDocumentHandler(secondReq as any, secondRes as any);
+
+  assert.equal(secondRes.statusCode, 200);
+  const secondBody = secondRes.body as {
+    document_id: string;
+    reused_existing: boolean;
+  };
+  assert.equal(secondBody.reused_existing, true);
+  assert.equal(secondBody.document_id, firstDocumentId);
+
+  const docs = listDocumentsByUser(userId);
+  assert.equal(docs.length, 1);
+  assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+});
+
+test("concurrent identical uploads by same user create only one document and artifact set", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const text = "Homework 12 assignment. Submit by due date.";
+  const beforeArtifacts = countArtifactDirectories();
+
+  const reqA = makeUploadReq(text, { filename: "concurrent-duplicate.pdf", userId });
+  const reqB = makeUploadReq(text, { filename: "concurrent-duplicate.pdf", userId });
+  const resA = makeRes();
+  const resB = makeRes();
+
+  await Promise.all([
+    uploadDocumentHandler(reqA as any, resA as any),
+    uploadDocumentHandler(reqB as any, resB as any),
+  ]);
+
+  const statuses = [resA.statusCode, resB.statusCode].sort();
+  assert.deepEqual(statuses, [200, 201]);
+
+  const bodyA = resA.body as { document_id?: string };
+  const bodyB = resB.body as { document_id?: string };
+  assert.ok(bodyA.document_id);
+  assert.ok(bodyB.document_id);
+  assert.equal(bodyA.document_id, bodyB.document_id);
+
+  const docs = listDocumentsByUser(userId);
+  assert.equal(docs.length, 1);
+  assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+});
+
+test("legacy document row with null content_hash is backfilled and reused", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const text = "Homework 13 assignment. Submit by due date.";
+
+  const firstReq = makeUploadReq(text, { filename: "legacy-null-hash.pdf", userId });
+  const firstRes = makeRes();
+  await uploadDocumentHandler(firstReq as any, firstRes as any);
+  const firstId = (firstRes.body as { document_id: string }).document_id;
+  assert.ok(firstId);
+
+  updateDocument(firstId, (current) => ({
+    ...current,
+    contentHash: null,
+  }));
+  assert.equal(getDocument(firstId)?.contentHash ?? null, null);
+
+  const secondReq = makeUploadReq(text, { filename: "legacy-null-hash.pdf", userId });
+  const secondRes = makeRes();
+  await uploadDocumentHandler(secondReq as any, secondRes as any);
+
+  const secondBody = secondRes.body as {
+    document_id: string;
+    reused_existing: boolean;
+  };
+  assert.equal(secondRes.statusCode, 200);
+  assert.equal(secondBody.reused_existing, true);
+  assert.equal(secondBody.document_id, firstId);
+  assert.ok(getDocument(firstId)?.contentHash);
+});
+
+test("uploadDocumentHandler allows different users to upload identical files", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const text = "Lecture slides for week 6 module and chapter overview.";
+  const userA = randomUUID();
+  const userB = randomUUID();
+  const beforeArtifacts = countArtifactDirectories();
+
+  const reqA = makeUploadReq(text, { filename: "same-content.pdf", userId: userA });
+  const resA = makeRes();
+  await uploadDocumentHandler(reqA as any, resA as any);
+
+  const reqB = makeUploadReq(text, { filename: "same-content.pdf", userId: userB });
+  const resB = makeRes();
+  await uploadDocumentHandler(reqB as any, resB as any);
+
+  assert.equal(resA.statusCode, 201);
+  assert.equal(resB.statusCode, 201);
+  assert.equal(listDocumentsByUser(userA).length, 1);
+  assert.equal(listDocumentsByUser(userB).length, 1);
+  assert.equal(countArtifactDirectories(), beforeArtifacts + 2);
+});
+
+test("duplicate upload reuses existing ready document", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const text = "Homework 9 assignment. Submit by due date.";
+
+  const firstReq = makeUploadReq(text, { filename: "ready-duplicate.pdf", userId });
+  const firstRes = makeRes();
+  await uploadDocumentHandler(firstReq as any, firstRes as any);
+  const firstId = (firstRes.body as { document_id: string }).document_id;
+  assert.ok(firstId);
+
+  updateDocument(firstId, (current) => ({
+    ...current,
+    studyGuideStatus: "ready",
+    studyGuideErrorCode: null,
+    studyGuideErrorMessage: null,
+    status: "ready",
+  }));
+
+  const secondReq = makeUploadReq(text, { filename: "ready-duplicate.pdf", userId });
+  const secondRes = makeRes();
+  await uploadDocumentHandler(secondReq as any, secondRes as any);
+
+  const body = secondRes.body as {
+    document_id: string;
+    reused_existing: boolean;
+    status: string;
+  };
+  assert.equal(secondRes.statusCode, 200);
+  assert.equal(body.document_id, firstId);
+  assert.equal(body.reused_existing, true);
+  assert.equal(body.status, "ready");
+});
+
+test("duplicate upload reuses existing processing document", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const text = "Homework 10 assignment. Submit by due date.";
+
+  const firstReq = makeUploadReq(text, { filename: "processing-duplicate.pdf", userId });
+  const firstRes = makeRes();
+  await uploadDocumentHandler(firstReq as any, firstRes as any);
+  const firstId = (firstRes.body as { document_id: string }).document_id;
+  assert.ok(firstId);
+
+  updateDocument(firstId, (current) => ({
+    ...current,
+    studyGuideStatus: "processing",
+    studyGuideErrorCode: "STUDY_GUIDE_PROCESSING",
+    studyGuideErrorMessage: null,
+    status: "processing",
+  }));
+
+  const secondReq = makeUploadReq(text, { filename: "processing-duplicate.pdf", userId });
+  const secondRes = makeRes();
+  await uploadDocumentHandler(secondReq as any, secondRes as any);
+
+  const body = secondRes.body as {
+    document_id: string;
+    reused_existing: boolean;
+    status: string;
+  };
+  assert.equal(secondRes.statusCode, 200);
+  assert.equal(body.document_id, firstId);
+  assert.equal(body.reused_existing, true);
+  assert.equal(body.status, "processing");
+});
+
+test("duplicate upload reuses existing failed document", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const text = "Homework 11 assignment. Submit by due date.";
+
+  const firstReq = makeUploadReq(text, { filename: "failed-duplicate.pdf", userId });
+  const firstRes = makeRes();
+  await uploadDocumentHandler(firstReq as any, firstRes as any);
+  const firstId = (firstRes.body as { document_id: string }).document_id;
+  assert.ok(firstId);
+
+  updateDocument(firstId, (current) => ({
+    ...current,
+    studyGuideStatus: "failed",
+    studyGuideErrorCode: "STUDY_GUIDE:GENERATION_FAILED",
+    studyGuideErrorMessage: "Generation failed",
+    status: "failed",
+    errorCode: "STUDY_GUIDE:GENERATION_FAILED",
+    errorMessage: "Generation failed",
+  }));
+
+  const secondReq = makeUploadReq(text, { filename: "failed-duplicate.pdf", userId });
+  const secondRes = makeRes();
+  await uploadDocumentHandler(secondReq as any, secondRes as any);
+
+  const body = secondRes.body as {
+    document_id: string;
+    reused_existing: boolean;
+    status: string;
+  };
+  assert.equal(secondRes.statusCode, 200);
+  assert.equal(body.document_id, firstId);
+  assert.equal(body.reused_existing, true);
+  assert.equal(body.status, "failed");
 });
 
 test("createStudyGuideHandler returns 202 for UNSUPPORTED document (LLM gates async)", async () => {
@@ -515,4 +746,85 @@ test("deleteDocumentHandler deletes an owned document", async () => {
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.body, { success: true });
   assert.equal(getDocument(doc.id), undefined);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// updateDueTimeHandler route tests
+// ══════════════════════════════════════════════════════════════════════
+
+test("updateDueTimeHandler rejects when due date is missing (DUE_DATE_REQUIRED_FOR_TIME)", async () => {
+  const { updateDueTimeHandler } = await loadHandlers();
+  const doc = seedDocument({ documentType: "HOMEWORK", assignmentDueDate: null });
+  const req: MockReq = {
+    params: { documentId: doc.id },
+    body: { due_time: "14:00" },
+    auth: { userId: "test-user", email: "test@example.com" },
+  };
+  const res = makeRes();
+
+  await updateDueTimeHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 422);
+  const body = res.body as { error: { code: string } };
+  assert.equal(body.error.code, "DUE_DATE_REQUIRED_FOR_TIME");
+});
+
+test("updateDueTimeHandler rejects invalid HH:MM format", async () => {
+  const { updateDueTimeHandler } = await loadHandlers();
+  const doc = seedDocument({ documentType: "HOMEWORK", assignmentDueDate: "2099-06-15" });
+  const req: MockReq = {
+    params: { documentId: doc.id },
+    body: { due_time: "25:99" },
+    auth: { userId: "test-user", email: "test@example.com" },
+  };
+  const res = makeRes();
+
+  await updateDueTimeHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 400);
+  const body = res.body as { error: { code: string } };
+  assert.equal(body.error.code, "INVALID_DUE_TIME");
+});
+
+test("updateDueTimeHandler rejects non-HOMEWORK documents", async () => {
+  const { updateDueTimeHandler } = await loadHandlers();
+  const doc = seedDocument({ documentType: "LECTURE", assignmentDueDate: "2099-06-15" });
+  const req: MockReq = {
+    params: { documentId: doc.id },
+    body: { due_time: "14:00" },
+    auth: { userId: "test-user", email: "test@example.com" },
+  };
+  const res = makeRes();
+
+  await updateDueTimeHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 422);
+  const body = res.body as { error: { code: string } };
+  assert.equal(body.error.code, "NOT_HOMEWORK");
+});
+
+test("updateDueTimeHandler accepts valid due-time when due date exists", async () => {
+  const { updateDueTimeHandler } = await loadHandlers();
+  const doc = seedDocument({ documentType: "HOMEWORK", assignmentDueDate: "2099-06-15" });
+  const req: MockReq = {
+    params: { documentId: doc.id },
+    body: { due_time: "14:30" },
+    auth: { userId: "test-user", email: "test@example.com" },
+  };
+  const res = makeRes();
+
+  await updateDueTimeHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 200);
+  const body = res.body as Record<string, unknown>;
+  assert.equal(body.success, true);
+  assert.equal(body.assignment_due_time, "14:30");
+  assert.equal(body.assignment_due_date, "2099-06-15");
+  assert.equal(body.reminder_status, "pending");
+
+  // Verify persisted
+  const updated = getDocument(doc.id);
+  assert.ok(updated);
+  assert.equal(updated.assignmentDueTime, "14:30");
+  assert.equal(updated.reminderStatus, "pending");
 });

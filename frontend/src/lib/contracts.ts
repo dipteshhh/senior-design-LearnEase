@@ -15,6 +15,9 @@ export interface DocumentListItem {
   error_message: string | null;
   has_study_guide: boolean;
   has_quiz: boolean;
+  assignment_due_date: string | null;
+  assignment_due_time: string | null;
+  reminder_status: "pending" | "sending" | "sent" | "failed" | "skipped" | null;
 }
 
 export interface CitationPdf {

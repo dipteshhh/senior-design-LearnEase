@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errorUx";
 import {
+  getDuplicateReuseMessage,
+  getUploadRedirectPath,
+  shouldTriggerStudyGuideCreate,
+} from "@/lib/uploadResponse";
+import {
   CheckCircle2,
   FileText,
   Focus,
@@ -20,6 +25,9 @@ const SUPPORTED_MIME_TYPES = new Set([
 
 interface UploadResponse {
   document_id?: string;
+  status?: "uploaded" | "processing" | "ready" | "failed";
+  reused_existing?: boolean;
+  message?: string;
 }
 
 export default function UploadPage() {
@@ -29,6 +37,7 @@ export default function UploadPage() {
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const accept = ".pdf,.docx";
@@ -87,6 +96,7 @@ export default function UploadPage() {
     }
 
     setError(null);
+    setInfo(null);
     setIsSubmitting(true);
 
     try {
@@ -104,14 +114,25 @@ export default function UploadPage() {
         return;
       }
 
-      // Fire study guide generation immediately (best-effort).
-      // The processing page will auto-start if this doesn't land.
-      api("/api/study-guide/create", {
-        method: "POST",
-        body: JSON.stringify({ document_id: documentId }),
-      }).catch(() => { /* processing page will handle retry */ });
+      const duplicateReuseMessage = getDuplicateReuseMessage(payload);
+      if (duplicateReuseMessage) {
+        setInfo(duplicateReuseMessage);
+      }
 
-      router.push(`/documents/${documentId}/processing`);
+      if (shouldTriggerStudyGuideCreate(payload)) {
+        // Fire study guide generation immediately (best-effort).
+        // The processing page will auto-start if this doesn't land.
+        api("/api/study-guide/create", {
+          method: "POST",
+          body: JSON.stringify({ document_id: documentId }),
+        }).catch(() => { /* processing page will handle retry */ });
+      }
+
+      if (duplicateReuseMessage) {
+        await new Promise((resolve) => setTimeout(resolve, 900));
+      }
+
+      router.push(getUploadRedirectPath(documentId, payload));
     } catch (uploadError) {
       setError(getErrorMessage(uploadError, "Unable to upload right now. Please try again."));
     } finally {
@@ -233,6 +254,12 @@ export default function UploadPage() {
             {error ? (
               <div className="mt-4 w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-left text-sm text-red-700">
                 {error}
+              </div>
+            ) : null}
+
+            {info ? (
+              <div className="mt-4 w-full rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm text-emerald-800">
+                {info}
               </div>
             ) : null}
           </div>

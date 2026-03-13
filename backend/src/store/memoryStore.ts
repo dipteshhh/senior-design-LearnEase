@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "crypto";
 import type { DocumentType, Quiz, StudyGuide } from "../schemas/analyze.js";
 import { getDb } from "../db/sqlite.js";
 import {
+  readEncryptedBuffer,
   readEncryptedText,
   writeEncryptedBuffer,
   writeEncryptedText,
@@ -12,6 +13,7 @@ import {
 export type DocumentStatus = "uploaded" | "processing" | "ready" | "failed";
 export type GenerationStatus = "idle" | "processing" | "ready" | "failed";
 export type FileType = "PDF" | "DOCX";
+export type ReminderStatus = "pending" | "sending" | "sent" | "failed" | "skipped";
 
 const FLOW_PROCESSING_CODE = {
   STUDY_GUIDE: "STUDY_GUIDE_PROCESSING",
@@ -34,6 +36,7 @@ export interface DocumentRecord {
   userEmail?: string;
   filename: string;
   fileType: FileType;
+  contentHash?: string | null;
   documentType: DocumentType;
   status: DocumentStatus;
   uploadedAt: string;
@@ -51,6 +54,12 @@ export interface DocumentRecord {
   quizErrorMessage: string | null;
   errorCode: string | null;
   errorMessage: string | null;
+  assignmentDueDate: string | null;
+  assignmentDueTime: string | null;
+  reminderStatus: ReminderStatus;
+  reminderDeadlineKey: string | null;
+  reminderLastError: string | null;
+  reminderAttemptedAt: string | null;
 }
 
 interface DocumentRow {
@@ -58,6 +67,7 @@ interface DocumentRow {
   user_id: string;
   original_filename: string;
   file_type: FileType;
+  content_hash?: string | null;
   page_count: number | null;
   paragraph_count: number | null;
   document_type: DocumentType;
@@ -74,6 +84,13 @@ interface DocumentRow {
   study_guide_json: string | null;
   quiz_json: string | null;
   extracted_text_path: string | null;
+  assignment_due_date: string | null;
+  assignment_due_time: string | null;
+  reminder_sent: number | null;
+  reminder_status: string | null;
+  reminder_deadline_key: string | null;
+  reminder_last_error: string | null;
+  reminder_attempted_at: string | null;
 }
 
 interface HydrationOptions {
@@ -379,6 +396,7 @@ function upsertDocument(doc: DocumentRecord): void {
         user_id,
         original_filename,
         file_type,
+        content_hash,
         page_count,
         paragraph_count,
         document_type,
@@ -392,13 +410,21 @@ function upsertDocument(doc: DocumentRecord): void {
         study_guide_error_message,
         quiz_status,
         quiz_error_code,
-        quiz_error_message
+        quiz_error_message,
+        assignment_due_date,
+        assignment_due_time,
+        reminder_sent,
+        reminder_status,
+        reminder_deadline_key,
+        reminder_last_error,
+        reminder_attempted_at
       )
       VALUES (
         @id,
         @user_id,
         @original_filename,
         @file_type,
+        @content_hash,
         @page_count,
         @paragraph_count,
         @document_type,
@@ -412,12 +438,20 @@ function upsertDocument(doc: DocumentRecord): void {
         @study_guide_error_message,
         @quiz_status,
         @quiz_error_code,
-        @quiz_error_message
+        @quiz_error_message,
+        @assignment_due_date,
+        @assignment_due_time,
+        @reminder_sent,
+        @reminder_status,
+        @reminder_deadline_key,
+        @reminder_last_error,
+        @reminder_attempted_at
       )
       ON CONFLICT(id) DO UPDATE SET
         user_id = excluded.user_id,
         original_filename = excluded.original_filename,
         file_type = excluded.file_type,
+        content_hash = excluded.content_hash,
         page_count = excluded.page_count,
         paragraph_count = excluded.paragraph_count,
         document_type = excluded.document_type,
@@ -431,13 +465,21 @@ function upsertDocument(doc: DocumentRecord): void {
         study_guide_error_message = excluded.study_guide_error_message,
         quiz_status = excluded.quiz_status,
         quiz_error_code = excluded.quiz_error_code,
-        quiz_error_message = excluded.quiz_error_message
+        quiz_error_message = excluded.quiz_error_message,
+        assignment_due_date = excluded.assignment_due_date,
+        assignment_due_time = excluded.assignment_due_time,
+        reminder_sent = excluded.reminder_sent,
+        reminder_status = excluded.reminder_status,
+        reminder_deadline_key = excluded.reminder_deadline_key,
+        reminder_last_error = excluded.reminder_last_error,
+        reminder_attempted_at = excluded.reminder_attempted_at
     `
   ).run({
     id: doc.id,
     user_id: doc.userId,
     original_filename: doc.filename,
     file_type: doc.fileType,
+    content_hash: doc.contentHash ?? null,
     page_count: doc.pageCount,
     paragraph_count: doc.paragraphCount,
     document_type: doc.documentType,
@@ -452,6 +494,13 @@ function upsertDocument(doc: DocumentRecord): void {
     quiz_status: doc.quizStatus,
     quiz_error_code: doc.quizErrorCode,
     quiz_error_message: doc.quizErrorMessage,
+    assignment_due_date: doc.assignmentDueDate,
+    assignment_due_time: doc.assignmentDueTime,
+    reminder_sent: doc.reminderStatus === "sent" ? 1 : 0,
+    reminder_status: doc.reminderStatus,
+    reminder_deadline_key: doc.reminderDeadlineKey,
+    reminder_last_error: doc.reminderLastError,
+    reminder_attempted_at: doc.reminderAttemptedAt,
   });
 
   if (doc.studyGuide) {
@@ -511,6 +560,7 @@ function readDocumentRowById(id: string): DocumentRow | undefined {
           d.user_id,
           d.original_filename,
           d.file_type,
+          d.content_hash,
           d.page_count,
           d.paragraph_count,
           d.document_type,
@@ -526,7 +576,14 @@ function readDocumentRowById(id: string): DocumentRow | undefined {
           d.quiz_error_message,
           sg.study_guide_json,
           q.quiz_json,
-          da.encrypted_path AS extracted_text_path
+          da.encrypted_path AS extracted_text_path,
+          d.assignment_due_date,
+          d.assignment_due_time,
+          d.reminder_sent,
+          d.reminder_status,
+          d.reminder_deadline_key,
+          d.reminder_last_error,
+          d.reminder_attempted_at
         FROM documents d
         LEFT JOIN study_guides sg ON sg.document_id = d.id
         LEFT JOIN quizzes q ON q.document_id = d.id
@@ -578,6 +635,7 @@ function hydrateDocument(row: DocumentRow, options: HydrationOptions): DocumentR
     userId: row.user_id,
     filename: row.original_filename,
     fileType: row.file_type,
+    contentHash: row.content_hash ?? null,
     documentType: row.document_type,
     status: row.status,
     uploadedAt: row.uploaded_at,
@@ -594,6 +652,12 @@ function hydrateDocument(row: DocumentRow, options: HydrationOptions): DocumentR
     quizErrorMessage,
     errorCode: row.error_code,
     errorMessage: row.error_message,
+    assignmentDueDate: row.assignment_due_date ?? null,
+    assignmentDueTime: row.assignment_due_time ?? null,
+    reminderStatus: (row.reminder_status as ReminderStatus) ?? "pending",
+    reminderDeadlineKey: row.reminder_deadline_key ?? null,
+    reminderLastError: row.reminder_last_error ?? null,
+    reminderAttemptedAt: row.reminder_attempted_at ?? null,
   };
 
   return withDerivedOverallState(base);
@@ -634,6 +698,7 @@ export function listDocuments(): DocumentRecord[] {
           d.user_id,
           d.original_filename,
           d.file_type,
+          d.content_hash,
           d.page_count,
           d.paragraph_count,
           d.document_type,
@@ -649,7 +714,14 @@ export function listDocuments(): DocumentRecord[] {
           d.quiz_error_message,
           sg.study_guide_json,
           q.quiz_json,
-          NULL AS extracted_text_path
+          NULL AS extracted_text_path,
+          d.assignment_due_date,
+          d.assignment_due_time,
+          d.reminder_sent,
+          d.reminder_status,
+          d.reminder_deadline_key,
+          d.reminder_last_error,
+          d.reminder_attempted_at
         FROM documents d
         LEFT JOIN study_guides sg ON sg.document_id = d.id
         LEFT JOIN quizzes q ON q.document_id = d.id
@@ -670,6 +742,7 @@ export function listDocumentsByUser(userId: string): DocumentRecord[] {
           d.user_id,
           d.original_filename,
           d.file_type,
+          d.content_hash,
           d.page_count,
           d.paragraph_count,
           d.document_type,
@@ -685,7 +758,14 @@ export function listDocumentsByUser(userId: string): DocumentRecord[] {
           d.quiz_error_message,
           sg.study_guide_json,
           q.quiz_json,
-          NULL AS extracted_text_path
+          NULL AS extracted_text_path,
+          d.assignment_due_date,
+          d.assignment_due_time,
+          d.reminder_sent,
+          d.reminder_status,
+          d.reminder_deadline_key,
+          d.reminder_last_error,
+          d.reminder_attempted_at
         FROM documents d
         LEFT JOIN study_guides sg ON sg.document_id = d.id
         LEFT JOIN quizzes q ON q.document_id = d.id
@@ -718,6 +798,9 @@ export interface DocumentSummary {
   errorMessage: string | null;
   hasStudyGuide: boolean;
   hasQuiz: boolean;
+  assignmentDueDate: string | null;
+  assignmentDueTime: string | null;
+  reminderStatus: ReminderStatus;
 }
 
 interface DocumentSummaryRow {
@@ -735,6 +818,9 @@ interface DocumentSummaryRow {
   quiz_status: string | null;
   has_study_guide: number;
   has_quiz: number;
+  assignment_due_date: string | null;
+  assignment_due_time: string | null;
+  reminder_status: string | null;
 }
 
 export function listDocumentSummariesByUser(userId: string): DocumentSummary[] {
@@ -755,7 +841,10 @@ export function listDocumentSummariesByUser(userId: string): DocumentSummary[] {
           d.study_guide_status,
           d.quiz_status,
           EXISTS (SELECT 1 FROM study_guides sg WHERE sg.document_id = d.id) AS has_study_guide,
-          EXISTS (SELECT 1 FROM quizzes q WHERE q.document_id = d.id) AS has_quiz
+          EXISTS (SELECT 1 FROM quizzes q WHERE q.document_id = d.id) AS has_quiz,
+          d.assignment_due_date,
+          d.assignment_due_time,
+          d.reminder_status
         FROM documents d
         WHERE d.user_id = ?
         ORDER BY d.uploaded_at DESC
@@ -784,7 +873,75 @@ export function listDocumentSummariesByUser(userId: string): DocumentSummary[] {
     errorMessage: row.error_message,
     hasStudyGuide: row.has_study_guide === 1,
     hasQuiz: row.has_quiz === 1,
+    assignmentDueDate: row.assignment_due_date ?? null,
+    assignmentDueTime: row.assignment_due_time ?? null,
+    reminderStatus: (row.reminder_status as ReminderStatus) ?? "pending",
   }));
+}
+
+export function findDocumentIdByUserAndContentHash(
+  userId: string,
+  contentHash: string
+): string | undefined {
+  const row = db
+    .prepare(
+      `
+        SELECT id
+        FROM documents
+        WHERE user_id = ? AND content_hash = ?
+        ORDER BY uploaded_at DESC
+        LIMIT 1
+      `
+    )
+    .get(userId, contentHash) as { id: string } | undefined;
+  return row?.id;
+}
+
+export function backfillMissingContentHashesForUser(userId: string): number {
+  const rows = db
+    .prepare(
+      `
+        SELECT
+          d.id AS document_id,
+          da.encrypted_path AS original_file_path
+        FROM documents d
+        LEFT JOIN document_artifacts da
+          ON da.document_id = d.id
+          AND da.artifact_type = 'ORIGINAL_FILE'
+        WHERE d.user_id = ?
+          AND d.content_hash IS NULL
+          AND da.encrypted_path IS NOT NULL
+      `
+    )
+    .all(userId) as Array<{ document_id: string; original_file_path: string }>;
+
+  if (rows.length === 0) {
+    return 0;
+  }
+
+  const updateHash = db.prepare(
+    `
+      UPDATE documents
+      SET content_hash = ?
+      WHERE id = ?
+        AND user_id = ?
+        AND content_hash IS NULL
+    `
+  );
+
+  let backfilled = 0;
+  for (const row of rows) {
+    try {
+      const originalBuffer = readEncryptedBuffer(row.original_file_path);
+      const contentHash = createHash("sha256").update(originalBuffer).digest("hex");
+      const result = updateHash.run(contentHash, row.document_id, userId);
+      backfilled += result.changes;
+    } catch {
+      // Ignore unreadable legacy artifacts; they remain null and can be handled later.
+    }
+  }
+
+  return backfilled;
 }
 
 export function updateDocument(
@@ -910,6 +1067,237 @@ export function updateDocumentStatus(
     .prepare(`UPDATE documents SET ${setClauses.join(", ")} WHERE id = @id`)
     .run(params);
   return result.changes > 0;
+}
+
+export function buildDeadlineKey(dueDate: string, dueTime: string): string {
+  return `${dueDate}T${dueTime}`;
+}
+
+export function updateAssignmentDueDate(
+  id: string,
+  dueDate: string | null
+): boolean {
+  // Reset reminder state when deadline changes so a new reminder can be sent.
+  const result = db
+    .prepare(
+      `UPDATE documents
+       SET assignment_due_date = ?,
+           reminder_status = 'pending',
+           reminder_deadline_key = NULL,
+           reminder_last_error = NULL,
+           reminder_attempted_at = NULL,
+           reminder_sent = 0
+       WHERE id = ?`
+    )
+    .run(dueDate, id);
+  return result.changes > 0;
+}
+
+export function updateAssignmentDueTime(
+  id: string,
+  dueTime: string | null
+): boolean {
+  // Reset reminder state when deadline changes so a new reminder can be sent.
+  const result = db
+    .prepare(
+      `UPDATE documents
+       SET assignment_due_time = ?,
+           reminder_status = 'pending',
+           reminder_deadline_key = NULL,
+           reminder_last_error = NULL,
+           reminder_attempted_at = NULL,
+           reminder_sent = 0
+       WHERE id = ?`
+    )
+    .run(dueTime, id);
+  return result.changes > 0;
+}
+
+export interface ReminderCandidate {
+  documentId: string;
+  userId: string;
+  userEmail: string | null;
+  filename: string;
+  assignmentDueDate: string;
+  assignmentDueTime: string;
+}
+
+/**
+ * Lists HOMEWORK documents eligible for a reminder:
+ * - has both due date and due time
+ * - reminder_status is 'pending' (includes transient-retry rows reset to pending)
+ *
+ * Rows in 'sending', 'sent', 'failed', or 'skipped' are excluded.
+ * Transient failures are set back to 'pending' by markReminderPendingRetry,
+ * so they re-enter here automatically. Terminal failures ('failed', 'skipped')
+ * only become eligible again when the deadline changes (which resets to 'pending').
+ */
+export function listPendingReminders(): ReminderCandidate[] {
+  const rows = db
+    .prepare(
+      `
+        SELECT
+          d.id AS document_id,
+          d.user_id,
+          u.email AS user_email,
+          d.original_filename,
+          d.assignment_due_date,
+          d.assignment_due_time
+        FROM documents d
+        LEFT JOIN users u ON u.id = d.user_id
+        WHERE d.document_type = 'HOMEWORK'
+          AND d.assignment_due_date IS NOT NULL
+          AND d.assignment_due_time IS NOT NULL
+          AND d.reminder_status = 'pending'
+      `
+    )
+    .all() as Array<{
+      document_id: string;
+      user_id: string;
+      user_email: string | null;
+      original_filename: string;
+      assignment_due_date: string;
+      assignment_due_time: string;
+    }>;
+
+  return rows.map((row) => ({
+    documentId: row.document_id,
+    userId: row.user_id,
+    userEmail: row.user_email,
+    filename: row.original_filename,
+    assignmentDueDate: row.assignment_due_date,
+    assignmentDueTime: row.assignment_due_time,
+  }));
+}
+
+/**
+ * Atomically claim a reminder for sending. Returns true if this call
+ * successfully transitioned the row from pending → sending.
+ * Returns false if another scheduler tick already claimed it, or if the
+ * stored deadline has changed since the scheduler snapshot was taken.
+ */
+export function claimReminderForSending(
+  documentId: string,
+  deadlineKey: string
+): boolean {
+  const now = new Date().toISOString();
+  const result = db
+    .prepare(
+      `UPDATE documents
+       SET reminder_status = 'sending',
+           reminder_deadline_key = ?,
+           reminder_attempted_at = ?,
+           reminder_last_error = NULL
+       WHERE id = ?
+         AND reminder_status = 'pending'
+         AND (assignment_due_date || 'T' || assignment_due_time) = ?`
+    )
+    .run(deadlineKey, now, documentId, deadlineKey);
+  return result.changes > 0;
+}
+
+/**
+ * Mark a reminder as successfully sent. Also sets legacy reminder_sent=1.
+ */
+export function markReminderSent(documentId: string, deadlineKey: string): boolean {
+  const result = db
+    .prepare(
+      `UPDATE documents
+       SET reminder_status = 'sent',
+           reminder_sent = 1,
+           reminder_last_error = NULL
+       WHERE id = ?
+         AND reminder_deadline_key = ?`
+    )
+    .run(documentId, deadlineKey);
+  return result.changes > 0;
+}
+
+/**
+ * Transition a reminder back to 'pending' after a transient send failure.
+ * This allows it to be re-selected and re-claimed on the next scheduler tick.
+ * Preserves the deadline key and records the error + attempt timestamp.
+ */
+export function markReminderPendingRetry(
+  documentId: string,
+  deadlineKey: string,
+  errorMessage: string
+): boolean {
+  const now = new Date().toISOString();
+  const result = db
+    .prepare(
+      `UPDATE documents
+       SET reminder_status = 'pending',
+           reminder_last_error = ?,
+           reminder_attempted_at = ?
+       WHERE id = ?
+         AND reminder_deadline_key = ?`
+    )
+    .run(errorMessage, now, documentId, deadlineKey);
+  return result.changes > 0;
+}
+
+/**
+ * Mark a reminder as failed (terminal for this deadline). Failed reminders
+ * are NOT automatically retried for the same deadline. They only become
+ * eligible again if the deadline changes (which resets status to 'pending').
+ */
+export function markReminderFailed(
+  documentId: string,
+  deadlineKey: string,
+  errorMessage: string
+): boolean {
+  const result = db
+    .prepare(
+      `UPDATE documents
+       SET reminder_status = 'failed',
+           reminder_last_error = ?
+       WHERE id = ?
+         AND reminder_deadline_key = ?`
+    )
+    .run(errorMessage, documentId, deadlineKey);
+  return result.changes > 0;
+}
+
+/**
+ * Mark a reminder as permanently skipped (terminal). Skipped reminders are
+ * NOT retried unless the deadline changes, which resets status to 'pending'.
+ * Use this for cases that can never succeed (e.g. no email address).
+ */
+export function markReminderSkipped(
+  documentId: string,
+  deadlineKey: string,
+  reason: string
+): boolean {
+  const now = new Date().toISOString();
+  const result = db
+    .prepare(
+      `UPDATE documents
+       SET reminder_status = 'skipped',
+           reminder_deadline_key = ?,
+           reminder_attempted_at = ?,
+           reminder_last_error = ?
+       WHERE id = ?`
+    )
+    .run(deadlineKey, now, reason, documentId);
+  return result.changes > 0;
+}
+
+/**
+ * Recover any reminders stuck in 'sending' state (e.g. after a crash).
+ * Transitions them back to 'pending' so they are retried on the next tick.
+ * Called on startup.
+ */
+export function recoverStuckReminders(): number {
+  const result = db
+    .prepare(
+      `UPDATE documents
+       SET reminder_status = 'pending',
+           reminder_last_error = 'Interrupted by server restart'
+       WHERE reminder_status = 'sending'`
+    )
+    .run();
+  return result.changes;
 }
 
 function listArtifactPathsByDocumentIds(documentIds: string[]): string[] {

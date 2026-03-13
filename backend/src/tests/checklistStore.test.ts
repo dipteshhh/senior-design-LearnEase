@@ -61,6 +61,12 @@ function makeDocument(id: string, userId: string, checklistLabel: string): Docum
     quizErrorMessage: null,
     errorCode: null,
     errorMessage: null,
+    assignmentDueDate: null,
+    assignmentDueTime: null,
+    reminderStatus: "pending",
+    reminderDeadlineKey: null,
+    reminderLastError: null,
+    reminderAttemptedAt: null,
   };
 }
 

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { sendApiError } from "../lib/apiError.js";
 import { logger } from "../lib/logger.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
@@ -11,6 +11,7 @@ import {
   makeFlowFailureCode,
 } from "../services/generationState.js";
 import { generateQuiz } from "../services/quizGenerator.js";
+import { extractDueDate } from "../services/dueDateExtractor.js";
 import { extractTextFromBuffer } from "../services/textExtractor.js";
 import {
   ContractValidationError,
@@ -23,10 +24,14 @@ import {
   getDocument,
   getDocumentMetadata,
   getDocumentOwnerId,
+  backfillMissingContentHashesForUser,
+  findDocumentIdByUserAndContentHash,
   listDocumentsByUser,
   listDocumentSummariesByUser,
   saveDocument,
   updateChecklistItem,
+  updateAssignmentDueDate,
+  updateAssignmentDueTime,
   updateDocument,
   updateDocumentStatus,
 } from "../store/memoryStore.js";
@@ -50,6 +55,20 @@ const ALREADY_PROCESSING_RETRY_AFTER_SECONDS = "5";
 
 function isUuid(value: string): boolean {
   return UUID_V4_OR_V1_REGEX.test(value);
+}
+
+function isContentHashUniqueConstraintError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const maybeCode = (error as { code?: unknown }).code;
+  const message = error.message ?? "";
+  return (
+    maybeCode === "SQLITE_CONSTRAINT_UNIQUE" ||
+    maybeCode === "SQLITE_CONSTRAINT" ||
+    message.includes("UNIQUE constraint failed: documents.user_id, documents.content_hash")
+  );
 }
 
 function readDocumentId(req: Request, res: Response): string | null {
@@ -274,36 +293,84 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
       return;
     }
 
+    const contentHash = createHash("sha256").update(file.buffer).digest("hex");
+    let existingDocumentId = findDocumentIdByUserAndContentHash(userId, contentHash);
+    if (!existingDocumentId) {
+      const backfilled = backfillMissingContentHashesForUser(userId);
+      if (backfilled > 0) {
+        existingDocumentId = findDocumentIdByUserAndContentHash(userId, contentHash);
+      }
+    }
+    if (existingDocumentId) {
+      const existing = getDocumentMetadata(existingDocumentId);
+      res.status(200).json({
+        document_id: existingDocumentId,
+        document_type: existing?.documentType ?? detected.documentType,
+        status: existing?.status ?? "uploaded",
+        reused_existing: true,
+        message:
+          "This document was already uploaded. We reused the existing study guide and document data.",
+      });
+      return;
+    }
+
     const documentId = randomUUID();
-    saveDocument({
-      id: documentId,
-      userId,
-      userEmail: getUserEmail(req),
-      filename: file.originalname,
-      fileType: extracted.fileType,
-      documentType: detected.documentType,
-      status: "uploaded",
-      uploadedAt: new Date().toISOString(),
-      pageCount: extracted.fileType === "PDF" ? Math.max(extracted.pageCount ?? 1, 1) : extracted.pageCount ?? 0,
-      paragraphCount: extracted.paragraphCount,
-      extractedText: normalizedText,
-      originalFileBuffer: file.buffer,
-      studyGuide: null,
-      studyGuideStatus: "idle",
-      studyGuideErrorCode: null,
-      studyGuideErrorMessage: null,
-      quiz: null,
-      quizStatus: "idle",
-      quizErrorCode: null,
-      quizErrorMessage: null,
-      errorCode: null,
-      errorMessage: null,
-    });
+    try {
+      saveDocument({
+        id: documentId,
+        userId,
+        userEmail: getUserEmail(req),
+        filename: file.originalname,
+        fileType: extracted.fileType,
+        contentHash,
+        documentType: detected.documentType,
+        status: "uploaded",
+        uploadedAt: new Date().toISOString(),
+        pageCount: extracted.fileType === "PDF" ? Math.max(extracted.pageCount ?? 1, 1) : extracted.pageCount ?? 0,
+        paragraphCount: extracted.paragraphCount,
+        extractedText: normalizedText,
+        originalFileBuffer: file.buffer,
+        studyGuide: null,
+        studyGuideStatus: "idle",
+        studyGuideErrorCode: null,
+        studyGuideErrorMessage: null,
+        quiz: null,
+        quizStatus: "idle",
+        quizErrorCode: null,
+        quizErrorMessage: null,
+        errorCode: null,
+        errorMessage: null,
+        assignmentDueDate: null,
+        assignmentDueTime: null,
+        reminderStatus: "pending",
+        reminderDeadlineKey: null,
+        reminderLastError: null,
+        reminderAttemptedAt: null,
+      });
+    } catch (persistError) {
+      if (isContentHashUniqueConstraintError(persistError)) {
+        const existingOnConflict = findDocumentIdByUserAndContentHash(userId, contentHash);
+        if (existingOnConflict) {
+          const existing = getDocumentMetadata(existingOnConflict);
+          res.status(200).json({
+            document_id: existingOnConflict,
+            document_type: existing?.documentType ?? detected.documentType,
+            status: existing?.status ?? "uploaded",
+            reused_existing: true,
+            message:
+              "This document was already uploaded. We reused the existing study guide and document data.",
+          });
+          return;
+        }
+      }
+      throw persistError;
+    }
 
     res.status(201).json({
       document_id: documentId,
       document_type: detected.documentType,
       status: "uploaded",
+      reused_existing: false,
     });
   } catch (error) {
     logger.error("Upload extraction failed", {
@@ -332,6 +399,9 @@ export async function listDocumentsHandler(_req: Request, res: Response): Promis
       error_message: toPublicErrorMessage(publicErrorCode),
       has_study_guide: doc.hasStudyGuide,
       has_quiz: doc.hasQuiz,
+      assignment_due_date: doc.assignmentDueDate,
+      assignment_due_time: doc.assignmentDueTime,
+      reminder_status: doc.reminderStatus,
     };
   });
   res.status(200).json(items);
@@ -366,6 +436,9 @@ export async function getDocumentHandler(req: Request, res: Response): Promise<v
     error_message: toPublicErrorMessage(publicErrorCode),
     has_study_guide: doc.studyGuide !== null,
     has_quiz: doc.quiz !== null,
+    assignment_due_date: doc.assignmentDueDate,
+    assignment_due_time: doc.assignmentDueTime,
+    reminder_status: doc.reminderStatus,
   });
 }
 
@@ -412,6 +485,18 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
           studyGuideErrorMessage: "This document type is not supported for study guide generation.",
         });
         return;
+      }
+
+      // Extract due date for HOMEWORK documents (best-effort, never blocks generation)
+      if (classification.llmDocumentType === "HOMEWORK") {
+        try {
+          const dueDate = extractDueDate(doc.extractedText);
+          if (dueDate) {
+            updateAssignmentDueDate(documentId, dueDate);
+          }
+        } catch (dueDateError) {
+          logger.warn("Due date extraction failed (non-blocking)", { documentId, error: dueDateError });
+        }
       }
 
       const generated = await analyzeDocument(doc.extractedText, classification.llmDocumentType, {
@@ -769,6 +854,53 @@ export async function updateChecklistHandler(req: Request, res: Response): Promi
   }
 
   res.status(200).json({ success: true });
+}
+
+interface DueTimeBody {
+  due_time?: string;
+}
+
+const HH_MM_REGEX = /^\d{2}:\d{2}$/;
+
+export async function updateDueTimeHandler(req: Request, res: Response): Promise<void> {
+  const documentId = readDocumentIdParam(req, res);
+  if (!documentId) return;
+
+  const doc = ensureOwnership(req, res, documentId);
+  if (!doc) return;
+
+  if (doc.documentType !== "HOMEWORK") {
+    sendApiError(res, 422, "NOT_HOMEWORK", "Due time is only applicable to HOMEWORK documents.");
+    return;
+  }
+
+  if (!doc.assignmentDueDate) {
+    sendApiError(res, 422, "DUE_DATE_REQUIRED_FOR_TIME", "Cannot set due time without an existing due date.");
+    return;
+  }
+
+  const body = req.body as DueTimeBody | undefined;
+  const dueTime = body?.due_time;
+
+  if (typeof dueTime !== "string" || !HH_MM_REGEX.test(dueTime.trim())) {
+    sendApiError(res, 400, "INVALID_DUE_TIME", "due_time must be in HH:MM format.");
+    return;
+  }
+
+  const normalized = dueTime.trim();
+  const [hours, minutes] = normalized.split(":").map(Number);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    sendApiError(res, 400, "INVALID_DUE_TIME", "due_time must be a valid time (00:00–23:59).");
+    return;
+  }
+
+  updateAssignmentDueTime(documentId, normalized);
+  res.status(200).json({
+    success: true,
+    assignment_due_date: doc.assignmentDueDate,
+    assignment_due_time: normalized,
+    reminder_status: "pending",
+  });
 }
 
 export async function deleteUserDataHandler(_req: Request, res: Response): Promise<void> {
