@@ -41,6 +41,30 @@ function deriveIsFailed(doc: DocumentListItem | null): boolean {
   return doc?.study_guide_status === "failed";
 }
 
+const STEP_SEQUENCE_THRESHOLDS_MS = [900, 1_800, 2_800, 3_900] as const;
+const STEP_SEQUENCE_MIN_MS = 5_200;
+
+function deriveVisualReady(
+  doc: DocumentListItem | null,
+  elapsedMs: number,
+): boolean {
+  return doc?.study_guide_status === "ready" && elapsedMs >= STEP_SEQUENCE_MIN_MS;
+}
+
+function deriveVisualStepIndex(
+  doc: DocumentListItem | null,
+  elapsedMs: number,
+): number {
+  if (deriveVisualReady(doc, elapsedMs)) return 5;
+  if (deriveIsFailed(doc)) return 3;
+  if (!doc || doc.study_guide_status === "idle") return 0;
+  if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[0]) return 1;
+  if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[1]) return 2;
+  if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[2]) return 3;
+  if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[3]) return 4;
+  return 5;
+}
+
 // ── Unsupported derivation ──────────────────────────────────────────
 
 test("isUnsupported is true when error_code is DOCUMENT_UNSUPPORTED", () => {
@@ -171,4 +195,26 @@ test("polling failed branch: null error_message falls back to generic string", (
   }
 
   assert.equal(errorMessage, "Study guide generation failed.");
+});
+
+test("ready documents stay in visual processing mode until the local sequence finishes", () => {
+  const doc = makeDoc({
+    study_guide_status: "ready",
+    status: "ready",
+    has_study_guide: true,
+  });
+
+  assert.equal(deriveVisualReady(doc, 2_000), false);
+  assert.equal(deriveVisualStepIndex(doc, 2_000), 3);
+});
+
+test("ready documents become visually complete after the full five-step sequence", () => {
+  const doc = makeDoc({
+    study_guide_status: "ready",
+    status: "ready",
+    has_study_guide: true,
+  });
+
+  assert.equal(deriveVisualReady(doc, STEP_SEQUENCE_MIN_MS), true);
+  assert.equal(deriveVisualStepIndex(doc, STEP_SEQUENCE_MIN_MS), 5);
 });

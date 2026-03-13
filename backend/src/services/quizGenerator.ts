@@ -19,6 +19,7 @@ import {
   recordGenerationOutcome,
   selectModelForAttempt,
   sleepMs,
+  withOpenAiConcurrency,
 } from "./generationReliability.js";
 import {
   assertGenerationInputWithinLimit,
@@ -28,7 +29,7 @@ import {
 } from "./generationServiceUtils.js";
 
 const DEFAULT_OPENAI_TIMEOUT_MS = 30000;
-const DEFAULT_OPENAI_MAX_RETRIES = 2;
+const DEFAULT_OPENAI_MAX_RETRIES = 0;
 const OPENAI_RETRY_TIMEOUT_MULTIPLIER = 1.5;
 const OPENAI_RETRY_TIMEOUT_CAP_MS = 60000;
 
@@ -37,6 +38,7 @@ function getOpenAiTimeoutMs(): number {
 }
 
 function getOpenAiMaxRetries(): number {
+  // Default 0: app-level retry loop handles retries; SDK retries would multiply tail latency.
   return readEnvInt("OPENAI_MAX_RETRIES", DEFAULT_OPENAI_MAX_RETRIES, 0);
 }
 
@@ -146,25 +148,27 @@ export async function generateQuiz(
     try {
       assertCircuitBreakerAllowsGeneration();
 
-      const response = await openAiClient.chat.completions.create({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: [quizPrompt, citationRequirements, repairHint].filter(Boolean).join("\n\n"),
-          },
-          {
-            role: "user",
-            content:
-              `Document ID: ${documentId}\n` +
-              `Document file type: ${metadata.fileType}\n\n` +
-              `Lecture text:\n${text}`,
-          },
-        ],
-        response_format: QUIZ_RESPONSE_FORMAT,
-        max_tokens: 4096,
-        temperature: 0,
-      }, { timeout: requestTimeoutMs });
+      const response = await withOpenAiConcurrency(() =>
+        openAiClient.chat.completions.create({
+          model,
+          messages: [
+            {
+              role: "system",
+              content: [quizPrompt, citationRequirements, repairHint].filter(Boolean).join("\n\n"),
+            },
+            {
+              role: "user",
+              content:
+                `Document ID: ${documentId}\n` +
+                `Document file type: ${metadata.fileType}\n\n` +
+                `Lecture text:\n${text}`,
+            },
+          ],
+          response_format: QUIZ_RESPONSE_FORMAT,
+          max_tokens: 4096,
+          temperature: 0,
+        }, { timeout: requestTimeoutMs })
+      );
 
       const content = response.choices[0]?.message?.content ?? "{}";
       let parsed: unknown;

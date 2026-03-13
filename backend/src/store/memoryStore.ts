@@ -613,6 +613,18 @@ export function getDocument(id: string): DocumentRecord | undefined {
   return row ? hydrateDocument(row, { includeExtractedText: true }) : undefined;
 }
 
+/**
+ * Lightweight ownership check — returns only user_id without full hydration,
+ * decryption, or JSON parsing. Use for auth gates that only need to verify
+ * the document exists and is owned by the requesting user.
+ */
+export function getDocumentOwnerId(id: string): string | undefined {
+  const row = db
+    .prepare("SELECT user_id FROM documents WHERE id = ?")
+    .get(id) as { user_id: string } | undefined;
+  return row?.user_id;
+}
+
 export function listDocuments(): DocumentRecord[] {
   const rows = db
     .prepare(
@@ -686,6 +698,95 @@ export function listDocumentsByUser(userId: string): DocumentRecord[] {
   return rows.map((row) => hydrateDocument(row, { includeExtractedText: false }));
 }
 
+/**
+ * Lightweight list query for dashboard/list views that avoids loading and
+ * parsing full study_guide/quiz JSON blobs. Uses EXISTS subqueries instead
+ * of JOINs to determine has_study_guide/has_quiz as boolean flags.
+ */
+export interface DocumentSummary {
+  id: string;
+  userId: string;
+  filename: string;
+  fileType: FileType;
+  documentType: DocumentType;
+  status: DocumentStatus;
+  uploadedAt: string;
+  pageCount: number;
+  studyGuideStatus: GenerationStatus;
+  quizStatus: GenerationStatus;
+  errorCode: string | null;
+  errorMessage: string | null;
+  hasStudyGuide: boolean;
+  hasQuiz: boolean;
+}
+
+interface DocumentSummaryRow {
+  id: string;
+  user_id: string;
+  original_filename: string;
+  file_type: FileType;
+  page_count: number | null;
+  document_type: DocumentType;
+  status: DocumentStatus;
+  uploaded_at: string;
+  error_code: string | null;
+  error_message: string | null;
+  study_guide_status: string | null;
+  quiz_status: string | null;
+  has_study_guide: number;
+  has_quiz: number;
+}
+
+export function listDocumentSummariesByUser(userId: string): DocumentSummary[] {
+  const rows = db
+    .prepare(
+      `
+        SELECT
+          d.id,
+          d.user_id,
+          d.original_filename,
+          d.file_type,
+          d.page_count,
+          d.document_type,
+          d.status,
+          d.uploaded_at,
+          d.error_code,
+          d.error_message,
+          d.study_guide_status,
+          d.quiz_status,
+          EXISTS (SELECT 1 FROM study_guides sg WHERE sg.document_id = d.id) AS has_study_guide,
+          EXISTS (SELECT 1 FROM quizzes q WHERE q.document_id = d.id) AS has_quiz
+        FROM documents d
+        WHERE d.user_id = ?
+        ORDER BY d.uploaded_at DESC
+      `
+    )
+    .all(userId) as DocumentSummaryRow[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    filename: row.original_filename,
+    fileType: row.file_type,
+    documentType: row.document_type,
+    status: row.status,
+    uploadedAt: row.uploaded_at,
+    pageCount: row.page_count ?? 0,
+    studyGuideStatus: normalizeFlowStatus(
+      row.study_guide_status,
+      row.has_study_guide ? "ready" : "idle"
+    ),
+    quizStatus: normalizeFlowStatus(
+      row.quiz_status,
+      row.has_quiz ? "ready" : "idle"
+    ),
+    errorCode: row.error_code,
+    errorMessage: row.error_message,
+    hasStudyGuide: row.has_study_guide === 1,
+    hasQuiz: row.has_quiz === 1,
+  }));
+}
+
 export function updateDocument(
   id: string,
   mutator: (current: DocumentRecord) => DocumentRecord
@@ -700,6 +801,115 @@ export function updateDocument(
   });
   tx();
   return next;
+}
+
+/**
+ * Lightweight status-only update that writes directly to the documents table
+ * without full hydration, decryption, or artifact rewrites.
+ * Use this for status/error transitions where no study guide, quiz, or
+ * extracted-text content changes.
+ */
+export interface StatusFields {
+  documentType?: DocumentType;
+  studyGuideStatus?: GenerationStatus;
+  studyGuideErrorCode?: string | null;
+  studyGuideErrorMessage?: string | null;
+  quizStatus?: GenerationStatus;
+  quizErrorCode?: string | null;
+  quizErrorMessage?: string | null;
+}
+
+export function updateDocumentStatus(
+  id: string,
+  fields: StatusFields
+): boolean {
+  const setClauses: string[] = [];
+  const params: Record<string, unknown> = { id };
+
+  if (fields.documentType !== undefined) {
+    setClauses.push("document_type = @document_type");
+    params.document_type = fields.documentType;
+  }
+  if (fields.studyGuideStatus !== undefined) {
+    setClauses.push("study_guide_status = @study_guide_status");
+    params.study_guide_status = fields.studyGuideStatus;
+  }
+  if (fields.studyGuideErrorCode !== undefined) {
+    setClauses.push("study_guide_error_code = @study_guide_error_code");
+    params.study_guide_error_code = fields.studyGuideErrorCode;
+  }
+  if (fields.studyGuideErrorMessage !== undefined) {
+    setClauses.push("study_guide_error_message = @study_guide_error_message");
+    params.study_guide_error_message = fields.studyGuideErrorMessage;
+  }
+  if (fields.quizStatus !== undefined) {
+    setClauses.push("quiz_status = @quiz_status");
+    params.quiz_status = fields.quizStatus;
+  }
+  if (fields.quizErrorCode !== undefined) {
+    setClauses.push("quiz_error_code = @quiz_error_code");
+    params.quiz_error_code = fields.quizErrorCode;
+  }
+  if (fields.quizErrorMessage !== undefined) {
+    setClauses.push("quiz_error_message = @quiz_error_message");
+    params.quiz_error_message = fields.quizErrorMessage;
+  }
+
+  if (setClauses.length === 0) return false;
+
+  // Derive overall status/error from the merged state
+  // We need to read the current flow statuses to derive properly
+  const row = db
+    .prepare("SELECT study_guide_status, quiz_status FROM documents WHERE id = @id")
+    .get({ id }) as { study_guide_status: string; quiz_status: string } | undefined;
+  if (!row) return false;
+
+  const effectiveSgStatus = fields.studyGuideStatus ?? row.study_guide_status;
+  const effectiveQzStatus = fields.quizStatus ?? row.quiz_status;
+
+  let overallStatus: DocumentStatus;
+  let overallErrorCode: string | null = null;
+  let overallErrorMessage: string | null = null;
+
+  if (effectiveSgStatus === "processing" || effectiveQzStatus === "processing") {
+    overallStatus = "processing";
+    overallErrorCode =
+      effectiveSgStatus === "processing"
+        ? FLOW_PROCESSING_CODE.STUDY_GUIDE
+        : FLOW_PROCESSING_CODE.QUIZ;
+  } else if (effectiveSgStatus === "failed") {
+    overallStatus = "failed";
+    overallErrorCode = (fields.studyGuideErrorCode !== undefined
+      ? fields.studyGuideErrorCode
+      : null) as string | null;
+    overallErrorMessage = (fields.studyGuideErrorMessage !== undefined
+      ? fields.studyGuideErrorMessage
+      : null) as string | null;
+  } else if (effectiveQzStatus === "failed") {
+    overallStatus = "failed";
+    overallErrorCode = (fields.quizErrorCode !== undefined
+      ? fields.quizErrorCode
+      : null) as string | null;
+    overallErrorMessage = (fields.quizErrorMessage !== undefined
+      ? fields.quizErrorMessage
+      : null) as string | null;
+  } else if (effectiveSgStatus === "ready" || effectiveQzStatus === "ready") {
+    overallStatus = "ready";
+  } else {
+    overallStatus = "uploaded";
+  }
+
+  setClauses.push("status = @status");
+  params.status = overallStatus;
+  setClauses.push("error_code = @error_code");
+  params.error_code = overallErrorCode;
+  setClauses.push("error_message = @error_message");
+  params.error_message = overallErrorMessage;
+
+  const result = db
+    .prepare(`UPDATE documents SET ${setClauses.join(", ")} WHERE id = @id`)
+    .run(params);
+  return result.changes > 0;
 }
 
 function listArtifactPathsByDocumentIds(documentIds: string[]): string[] {

@@ -1,6 +1,22 @@
 import mammoth from "mammoth";
 import { PDFParse } from "pdf-parse";
 
+const DEFAULT_EXTRACTION_TIMEOUT_MS = 30_000;
+const DOCX_EXTRACTION_TIMEOUT_MS = 45_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
 export interface ExtractionResult {
   text: string;
   wordCount: number;
@@ -24,7 +40,11 @@ export async function extractTextFromBuffer(
     fileType = "PDF";
     const parser = new PDFParse({ data: buffer });
     try {
-      const data = await parser.getText();
+      const data = await withTimeout(
+        parser.getText(),
+        DEFAULT_EXTRACTION_TIMEOUT_MS,
+        "PDF extraction"
+      );
       text = data.text;
       pageCount = typeof data.total === "number" ? data.total : null;
     } finally {
@@ -35,7 +55,11 @@ export async function extractTextFromBuffer(
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ) {
     fileType = "DOCX";
-    const result = await mammoth.extractRawText({ buffer });
+    const result = await withTimeout(
+      mammoth.extractRawText({ buffer }),
+      DOCX_EXTRACTION_TIMEOUT_MS,
+      "DOCX extraction"
+    );
     text = result.value;
     paragraphCount = result.value
       .split(/\n+/)

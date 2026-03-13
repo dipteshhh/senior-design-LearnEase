@@ -22,10 +22,13 @@ import {
   getChecklistCompletion,
   getDocument,
   getDocumentMetadata,
+  getDocumentOwnerId,
   listDocumentsByUser,
+  listDocumentSummariesByUser,
   saveDocument,
   updateChecklistItem,
   updateDocument,
+  updateDocumentStatus,
 } from "../store/memoryStore.js";
 
 const PDF_SIGNATURE = "%PDF-";
@@ -106,6 +109,25 @@ function ensureOwnership(req: Request, res: Response, documentId: string) {
     return null;
   }
   return doc;
+}
+
+/**
+ * Lightweight ownership check — verifies existence and ownership without
+ * full document hydration, decryption, or JSON parsing.
+ * Returns true if ownership is confirmed, false if an error response was sent.
+ */
+function ensureOwnershipOnly(req: Request, res: Response, documentId: string): boolean {
+  const userId = getUserId(req);
+  const ownerId = getDocumentOwnerId(documentId);
+  if (!ownerId) {
+    sendApiError(res, 404, "NOT_FOUND", "Document not found.");
+    return false;
+  }
+  if (ownerId !== userId) {
+    sendApiError(res, 403, "FORBIDDEN", "You do not own this document.");
+    return false;
+  }
+  return true;
 }
 
 function toFailureCode(error: unknown): { code: string; message: string; details?: Record<string, unknown> } {
@@ -295,25 +317,23 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
 
 export async function listDocumentsHandler(_req: Request, res: Response): Promise<void> {
   const userId = getUserId(_req);
-  const items = listDocumentsByUser(userId).map((doc) => ({
-    ...(() => {
-      const publicErrorCode = normalizePublicErrorCode(doc.status, doc.errorCode);
-      return {
-        error_code: publicErrorCode,
-        error_message: toPublicErrorMessage(publicErrorCode),
-      };
-    })(),
-    id: doc.id,
-    filename: doc.filename,
-    document_type: doc.documentType,
-    status: doc.status,
-    study_guide_status: doc.studyGuideStatus,
-    quiz_status: doc.quizStatus,
-    page_count: doc.pageCount,
-    uploaded_at: doc.uploadedAt,
-    has_study_guide: doc.studyGuide !== null,
-    has_quiz: doc.quiz !== null,
-  }));
+  const items = listDocumentSummariesByUser(userId).map((doc) => {
+    const publicErrorCode = normalizePublicErrorCode(doc.status, doc.errorCode);
+    return {
+      id: doc.id,
+      filename: doc.filename,
+      document_type: doc.documentType,
+      status: doc.status,
+      study_guide_status: doc.studyGuideStatus,
+      quiz_status: doc.quizStatus,
+      page_count: doc.pageCount,
+      uploaded_at: doc.uploadedAt,
+      error_code: publicErrorCode,
+      error_message: toPublicErrorMessage(publicErrorCode),
+      has_study_guide: doc.hasStudyGuide,
+      has_quiz: doc.hasQuiz,
+    };
+  });
   res.status(200).json(items);
 }
 
@@ -368,12 +388,11 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
     return;
   }
 
-  updateDocument(documentId, (current) => ({
-    ...current,
+  updateDocumentStatus(documentId, {
     studyGuideStatus: "processing",
     studyGuideErrorCode: FLOW_PROCESSING_CODE.STUDY_GUIDE,
     studyGuideErrorMessage: null,
-  }));
+  });
 
   void (async () => {
     try {
@@ -382,18 +401,16 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
 
       // Persist the LLM-determined type so all downstream flows
       // (list, detail, quiz, checklist) use the authoritative type.
-      updateDocument(documentId, (current) => ({
-        ...current,
+      updateDocumentStatus(documentId, {
         documentType: classification.llmDocumentType,
-      }));
+      });
 
       if (classification.llmDocumentType === "UNSUPPORTED") {
-        updateDocument(documentId, (current) => ({
-          ...current,
+        updateDocumentStatus(documentId, {
           studyGuideStatus: "failed",
           studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", "DOCUMENT_UNSUPPORTED"),
           studyGuideErrorMessage: "This document type is not supported for study guide generation.",
-        }));
+        });
         return;
       }
 
@@ -402,6 +419,7 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
         pageCount: doc.pageCount,
         paragraphCount: doc.paragraphCount,
       });
+      // Full updateDocument needed here: writes study guide content + syncs checklist
       updateDocument(documentId, (current) => ({
         ...current,
         studyGuide: generated,
@@ -411,23 +429,21 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
       }));
     } catch (error) {
       const failure = toFailureCode(error);
-      updateDocument(documentId, (current) => ({
-        ...current,
+      updateDocumentStatus(documentId, {
         studyGuideStatus: "failed",
         studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
         studyGuideErrorMessage: failure.message,
-      }));
+      });
     }
   })().catch((error) => {
     logger.error("Unhandled study guide generation task failure", { documentId, error });
     const failure = toFailureCode(error);
     try {
-      updateDocument(documentId, (current) => ({
-        ...current,
+      updateDocumentStatus(documentId, {
         studyGuideStatus: "failed",
         studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
         studyGuideErrorMessage: failure.message,
-      }));
+      });
     } catch (updateError) {
       logger.error("Failed to persist study guide task failure", {
         documentId,
@@ -454,40 +470,49 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
     return;
   }
 
-  updateDocument(documentId, (current) => ({
-    ...current,
+  updateDocumentStatus(documentId, {
     studyGuideStatus: "processing",
     studyGuideErrorCode: FLOW_PROCESSING_CODE.STUDY_GUIDE,
     studyGuideErrorMessage: null,
-  }));
+  });
+
+  // Reuse existing LLM classification if already set (avoids redundant OpenAI call on retry)
+  const cachedType = doc.documentType;
+  const hasLlmType = cachedType === "HOMEWORK" || cachedType === "LECTURE";
 
   void (async () => {
     try {
-      // LLM pre-classification: gate generation on semantic document type check
-      const classification = await classifyWithLlm(doc.extractedText);
+      let llmDocumentType = cachedType;
 
-      // Persist the LLM-determined type so all downstream flows
-      // (list, detail, quiz, checklist) use the authoritative type.
-      updateDocument(documentId, (current) => ({
-        ...current,
-        documentType: classification.llmDocumentType,
-      }));
+      if (hasLlmType) {
+        logger.info("Retry reusing cached LLM document type", {
+          documentId,
+          documentType: llmDocumentType,
+        });
+      } else {
+        const classification = await classifyWithLlm(doc.extractedText);
+        llmDocumentType = classification.llmDocumentType;
 
-      if (classification.llmDocumentType === "UNSUPPORTED") {
-        updateDocument(documentId, (current) => ({
-          ...current,
+        updateDocumentStatus(documentId, {
+          documentType: llmDocumentType,
+        });
+      }
+
+      if (llmDocumentType === "UNSUPPORTED") {
+        updateDocumentStatus(documentId, {
           studyGuideStatus: "failed",
           studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", "DOCUMENT_UNSUPPORTED"),
           studyGuideErrorMessage: "This document type is not supported for study guide generation.",
-        }));
+        });
         return;
       }
 
-      const generated = await analyzeDocument(doc.extractedText, classification.llmDocumentType, {
+      const generated = await analyzeDocument(doc.extractedText, llmDocumentType, {
         fileType: doc.fileType,
         pageCount: doc.pageCount,
         paragraphCount: doc.paragraphCount,
       });
+      // Full updateDocument needed here: writes study guide content + syncs checklist
       updateDocument(documentId, (current) => ({
         ...current,
         studyGuide: generated,
@@ -497,23 +522,21 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
       }));
     } catch (error) {
       const failure = toFailureCode(error);
-      updateDocument(documentId, (current) => ({
-        ...current,
+      updateDocumentStatus(documentId, {
         studyGuideStatus: "failed",
         studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
         studyGuideErrorMessage: failure.message,
-      }));
+      });
     }
   })().catch((error) => {
     logger.error("Unhandled study guide retry task failure", { documentId, error });
     const failure = toFailureCode(error);
     try {
-      updateDocument(documentId, (current) => ({
-        ...current,
+      updateDocumentStatus(documentId, {
         studyGuideStatus: "failed",
         studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
         studyGuideErrorMessage: failure.message,
-      }));
+      });
     } catch (updateError) {
       logger.error("Failed to persist study guide retry task failure", {
         documentId,
@@ -570,12 +593,11 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
     sendApiError(res, 409, "ILLEGAL_RETRY_STATE", "Use retry endpoint for failed documents.");
     return;
   }
-  updateDocument(documentId, (current) => ({
-    ...current,
+  updateDocumentStatus(documentId, {
     quizStatus: "processing",
     quizErrorCode: FLOW_PROCESSING_CODE.QUIZ,
     quizErrorMessage: null,
-  }));
+  });
 
   void (async () => {
     try {
@@ -589,6 +611,7 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
           paragraphCount: doc.paragraphCount,
         }
       );
+      // Full updateDocument needed here: writes quiz content
       updateDocument(documentId, (current) => ({
         ...current,
         quiz: generatedQuiz,
@@ -598,23 +621,21 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
       }));
     } catch (error) {
       const failure = toFailureCode(error);
-      updateDocument(documentId, (current) => ({
-        ...current,
+      updateDocumentStatus(documentId, {
         quizStatus: "failed",
         quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
         quizErrorMessage: failure.message,
-      }));
+      });
     }
   })().catch((error) => {
     logger.error("Unhandled quiz generation task failure", { documentId, error });
     const failure = toFailureCode(error);
     try {
-      updateDocument(documentId, (current) => ({
-        ...current,
+      updateDocumentStatus(documentId, {
         quizStatus: "failed",
         quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
         quizErrorMessage: failure.message,
-      }));
+      });
     } catch (updateError) {
       logger.error("Failed to persist quiz task failure", {
         documentId,
@@ -645,12 +666,11 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
     return;
   }
 
-  updateDocument(documentId, (current) => ({
-    ...current,
+  updateDocumentStatus(documentId, {
     quizStatus: "processing",
     quizErrorCode: FLOW_PROCESSING_CODE.QUIZ,
     quizErrorMessage: null,
-  }));
+  });
 
   void (async () => {
     try {
@@ -664,6 +684,7 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
           paragraphCount: doc.paragraphCount,
         }
       );
+      // Full updateDocument needed here: writes quiz content
       updateDocument(documentId, (current) => ({
         ...current,
         quiz: generatedQuiz,
@@ -673,23 +694,21 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
       }));
     } catch (error) {
       const failure = toFailureCode(error);
-      updateDocument(documentId, (current) => ({
-        ...current,
+      updateDocumentStatus(documentId, {
         quizStatus: "failed",
         quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
         quizErrorMessage: failure.message,
-      }));
+      });
     }
   })().catch((error) => {
     logger.error("Unhandled quiz retry task failure", { documentId, error });
     const failure = toFailureCode(error);
     try {
-      updateDocument(documentId, (current) => ({
-        ...current,
+      updateDocumentStatus(documentId, {
         quizStatus: "failed",
         quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
         quizErrorMessage: failure.message,
-      }));
+      });
     } catch (updateError) {
       logger.error("Failed to persist quiz retry task failure", {
         documentId,
@@ -762,8 +781,7 @@ export async function deleteDocumentHandler(req: Request, res: Response): Promis
   const documentId = readDocumentIdParam(req, res);
   if (!documentId) return;
 
-  const doc = ensureOwnership(req, res, documentId);
-  if (!doc) return;
+  if (!ensureOwnershipOnly(req, res, documentId)) return;
 
   deleteDocumentById(documentId);
   res.status(200).json({ success: true });

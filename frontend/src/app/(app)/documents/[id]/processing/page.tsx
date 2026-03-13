@@ -118,6 +118,10 @@ type StepItem = {
   state: StepState;
 };
 
+const STEP_SEQUENCE_THRESHOLDS_MS = [900, 1_800, 2_800, 3_900] as const;
+const STEP_SEQUENCE_MIN_MS = 5_200;
+const READY_REDIRECT_DELAY_MS = 450;
+
 function ProcessingGlyph({ failed = false }: { failed?: boolean }) {
   return (
     <div
@@ -271,6 +275,7 @@ export default function ProcessingPage() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [processingStartedAt, setProcessingStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [isHoldingReadyTransition, setIsHoldingReadyTransition] = useState(false);
 
   const isPageVisible = usePageVisible();
   const isMountedRef = useRef(true);
@@ -282,13 +287,37 @@ export default function ProcessingPage() {
     };
   }, []);
 
-  const isFailed = document?.study_guide_status === "failed";
+  // Optimistic flag: show processing UI immediately after clicking Create/Retry
+  // without waiting for the API round-trip + poll cycle to confirm status.
+  const [optimisticProcessing, setOptimisticProcessing] = useState(false);
+
+  const beginVisualSequence = useCallback(() => {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setProcessingStartedAt(Date.now());
+    setElapsedMs(0);
+    setIsHoldingReadyTransition(false);
+  }, []);
+
+  const holdReadyTransition = useCallback(() => {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setIsHoldingReadyTransition(true);
+    setProcessingStartedAt((current) => current ?? Date.now());
+  }, []);
+
+  const isFailed = !optimisticProcessing && document?.study_guide_status === "failed";
   const isReady = document?.study_guide_status === "ready";
   const isUnsupported =
-    document?.document_type === "UNSUPPORTED" ||
-    document?.error_code === "DOCUMENT_UNSUPPORTED";
-  const isProcessing = document?.study_guide_status === "processing";
-  const isIdle = document?.study_guide_status === "idle" || document?.study_guide_status == null;
+    !optimisticProcessing &&
+    (document?.document_type === "UNSUPPORTED" ||
+      document?.error_code === "DOCUMENT_UNSUPPORTED");
+  const isProcessing = optimisticProcessing || document?.study_guide_status === "processing";
+  const isIdle = !optimisticProcessing && (document?.study_guide_status === "idle" || document?.study_guide_status == null);
 
   const refreshDocument = useCallback(
     async (signal?: AbortSignal) => {
@@ -320,7 +349,8 @@ export default function ProcessingPage() {
         }
 
         if (next.study_guide_status === "ready") {
-          router.replace(`/documents/${id}`);
+          holdReadyTransition();
+          setError(null);
           return;
         }
 
@@ -340,7 +370,7 @@ export default function ProcessingPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [id, refreshDocument, router]);
+  }, [holdReadyTransition, id, refreshDocument]);
 
   const startGeneration = useCallback(
     async () => {
@@ -349,6 +379,8 @@ export default function ProcessingPage() {
       if (isMountedRef.current) {
         setIsStarting(true);
         setError(null);
+        setOptimisticProcessing(true);
+        beginVisualSequence();
       }
 
       try {
@@ -361,22 +393,20 @@ export default function ProcessingPage() {
           return;
         }
 
-        setProcessingStartedAt(Date.now());
-        setElapsedMs(0);
-
         const next = await refreshDocument();
         if (!isMountedRef.current) {
           return;
         }
 
         if (next?.study_guide_status === "ready") {
-          router.replace(`/documents/${id}`);
+          holdReadyTransition();
           return;
         }
 
         setError(getStudyGuideFailureMessage(next ?? null));
       } catch (err) {
         if (isMountedRef.current) {
+          setOptimisticProcessing(false);
           if (
             err instanceof ApiClientError &&
             (err.code === "ALREADY_PROCESSING" || err.code === "ILLEGAL_RETRY_STATE")
@@ -401,7 +431,7 @@ export default function ProcessingPage() {
         }
       }
     },
-    [id, isStarting, refreshDocument, router]
+    [beginVisualSequence, holdReadyTransition, id, isStarting, refreshDocument]
   );
 
   const retryGeneration = useCallback(async () => {
@@ -409,6 +439,9 @@ export default function ProcessingPage() {
 
     if (isMountedRef.current) {
       setIsRetrying(true);
+      setOptimisticProcessing(true);
+      setError(null);
+      beginVisualSequence();
     }
 
     try {
@@ -419,13 +452,12 @@ export default function ProcessingPage() {
 
       if (isMountedRef.current) {
         setError(null);
-        setProcessingStartedAt(Date.now());
-        setElapsedMs(0);
       }
 
       await refreshDocument();
     } catch (err) {
       if (isMountedRef.current) {
+        setOptimisticProcessing(false);
         if (
           err instanceof ApiClientError &&
           (err.code === "ALREADY_PROCESSING" || err.code === "ILLEGAL_RETRY_STATE")
@@ -445,29 +477,53 @@ export default function ProcessingPage() {
         setIsRetrying(false);
       }
     }
-  }, [id, refreshDocument]);
+  }, [beginVisualSequence, id, refreshDocument]);
 
   useEffect(() => {
     if (document?.study_guide_status === "processing" && processingStartedAt == null) {
       setProcessingStartedAt(Date.now());
     }
 
-    if (document?.study_guide_status !== "processing" && !isRetrying) {
+    if (document?.study_guide_status === "ready") {
+      holdReadyTransition();
+    }
+
+    // Clear optimistic flag once the real server state confirms processing (or any terminal state)
+    if (optimisticProcessing && document?.study_guide_status != null && document.study_guide_status !== "idle") {
+      setOptimisticProcessing(false);
+    }
+
+    if (
+      document?.study_guide_status !== "processing" &&
+      !isRetrying &&
+      !optimisticProcessing &&
+      !isHoldingReadyTransition
+    ) {
       setElapsedMs(0);
     }
-  }, [document?.study_guide_status, isRetrying, processingStartedAt]);
+  }, [
+    document?.study_guide_status,
+    holdReadyTransition,
+    isHoldingReadyTransition,
+    isRetrying,
+    optimisticProcessing,
+    processingStartedAt,
+  ]);
 
   useEffect(() => {
-    if (document?.study_guide_status !== "processing" || processingStartedAt == null) return;
+    const shouldTick =
+      (optimisticProcessing || document?.study_guide_status === "processing" || isHoldingReadyTransition) &&
+      processingStartedAt != null;
+    if (!shouldTick) return;
 
     const interval = window.setInterval(() => {
-      setElapsedMs(Date.now() - processingStartedAt);
+      setElapsedMs(Date.now() - processingStartedAt!);
     }, 800);
 
     return () => {
       window.clearInterval(interval);
     };
-  }, [document?.study_guide_status, processingStartedAt]);
+  }, [document?.study_guide_status, isHoldingReadyTransition, optimisticProcessing, processingStartedAt]);
 
   useEffect(() => {
     if (!shouldRunPolling(id, isPageVisible, isProcessing)) return;
@@ -502,7 +558,7 @@ export default function ProcessingPage() {
         }
 
         if (next.study_guide_status === "ready") {
-          router.replace(`/documents/${id}`);
+          holdReadyTransition();
           return;
         }
 
@@ -551,38 +607,68 @@ export default function ProcessingPage() {
       if (timer) clearTimeout(timer);
       requestController?.abort();
     };
-  }, [id, isPageVisible, isProcessing, refreshDocument, router]);
+  }, [holdReadyTransition, id, isPageVisible, isProcessing, refreshDocument]);
+
+  const hasCompletedVisualSequence =
+    processingStartedAt != null && elapsedMs >= STEP_SEQUENCE_MIN_MS;
+  const isVisuallyReady = isReady && hasCompletedVisualSequence;
+  const visualStatus: GenerationStatus | undefined = isUnsupported
+    ? document?.study_guide_status
+    : isVisuallyReady
+      ? "ready"
+      : isFailed
+        ? "failed"
+        : isProcessing || isHoldingReadyTransition
+          ? "processing"
+          : document?.study_guide_status;
+
+  useEffect(() => {
+    if (!isReady || !hasCompletedVisualSequence) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      router.replace(`/documents/${id}`);
+    }, READY_REDIRECT_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [hasCompletedVisualSequence, id, isReady, router]);
 
   const statusLine = useMemo(() => {
     if (isUnsupported) return "This document type is not supported.";
     if (!document) return "Waiting for document status...";
-    if (document.study_guide_status === "ready") return "Study guide is ready.";
+    if (isVisuallyReady) return "Study guide is ready.";
     if (document.study_guide_status === "failed") return "Study guide generation failed.";
+    if (isHoldingReadyTransition) return "Finalizing study guide...";
     if (document.study_guide_status === "processing") return "Generating study guide...";
     return "Queued for generation...";
-  }, [document]);
+  }, [document, isHoldingReadyTransition, isUnsupported, isVisuallyReady]);
 
   const progressLabel = useMemo(() => {
-    if (isReady) return "100% complete";
+    if (isVisuallyReady) return "100% complete";
     if (document?.error_code === "DOCUMENT_UNSUPPORTED") return "Unsupported document";
     if (isFailed) return "Generation interrupted";
     if (!document) return "Preparing…";
     if (document.study_guide_status === "idle") return "Waiting for your action";
     return "Usually takes around 30–60 seconds";
-  }, [document, isFailed, isReady]);
+  }, [document, isFailed, isVisuallyReady]);
 
   const visualStepIndex = useMemo(() => {
-    if (isReady) return 5;
+    if (isVisuallyReady) return 5;
     if (isFailed) return 3;
     if (!document || document.study_guide_status === "idle") return 0;
-    if (document.study_guide_status !== "processing") return 1;
-
-    if (elapsedMs < 8_000) return 1;
-    if (elapsedMs < 18_000) return 2;
-    if (elapsedMs < 32_000) return 3;
-    if (elapsedMs < 50_000) return 4;
+    if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[0]) return 1;
+    if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[1]) return 2;
+    if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[2]) return 3;
+    if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[3]) return 4;
     return 5;
-  }, [document, elapsedMs, isFailed, isReady]);
+  }, [document, elapsedMs, isFailed, isVisuallyReady]);
 
   const steps = useMemo<StepItem[]>(() => {
     const labels = [
@@ -605,7 +691,7 @@ export default function ProcessingPage() {
       const stepNumber = index + 1;
       let state: StepState = "pending";
 
-      if (isReady || visualStepIndex > stepNumber) {
+      if (isVisuallyReady || visualStepIndex > stepNumber) {
         state = "complete";
       } else if (visualStepIndex === stepNumber) {
         state = "active";
@@ -617,15 +703,15 @@ export default function ProcessingPage() {
         state,
       };
     });
-  }, [isFailed, isReady, visualStepIndex]);
+  }, [isFailed, isVisuallyReady, visualStepIndex]);
 
- const completionPercent = useMemo(() => {
-  if (isReady) return 100;
-  if (isFailed) return 60;
+	 const completionPercent = useMemo(() => {
+	  if (isVisuallyReady) return 100;
+	  if (isFailed) return 60;
 
-  switch (visualStepIndex) {
-    case 0:
-      return 8;
+	  switch (visualStepIndex) {
+	    case 0:
+	      return 8;
     case 1:
       return 20;
     case 2:
@@ -634,18 +720,18 @@ export default function ProcessingPage() {
       return 60;
     case 4:
       return 80;
-    default:
-      return 92;
-  }
-}, [isFailed, isReady, visualStepIndex]);
+	    default:
+	      return 92;
+	  }
+	}, [isFailed, isVisuallyReady, visualStepIndex]);
 
   const statusPill = useMemo(() => {
     if (isUnsupported) return { label: "Unsupported", tone: "danger" as const };
     if (isFailed) return { label: "Failed", tone: "danger" as const };
-    if (isReady) return { label: "Ready", tone: "success" as const };
+    if (isVisuallyReady) return { label: "Ready", tone: "success" as const };
     if (document?.study_guide_status === "idle") return { label: "Not started", tone: "neutral" as const };
     return { label: "Processing", tone: "neutral" as const };
-  }, [document?.study_guide_status, isFailed, isReady, isUnsupported]);
+  }, [document?.study_guide_status, isFailed, isUnsupported, isVisuallyReady]);
 
   if (!id) {
     return <p className="px-6 py-10 text-sm text-gray-600">Missing document id.</p>;
@@ -658,11 +744,13 @@ export default function ProcessingPage() {
           <ProcessingGlyph failed={isFailed} />
 
           <h1 className="mt-7 max-w-2xl text-3xl font-semibold tracking-tight text-gray-950 md:text-4xl">
-            {isUnsupported ? "Document not supported" : getStatusHeading(document?.study_guide_status)}
+            {isUnsupported ? "Document not supported" : getStatusHeading(visualStatus)}
           </h1>
 
           <p className="mt-3 max-w-xl text-sm leading-7 text-gray-600 md:text-base">
-            {isUnsupported ? "This document type is not supported for study guide generation. Please upload a different document." : getStatusDescription(document?.study_guide_status)}
+            {isUnsupported
+              ? "This document type is not supported for study guide generation. Please upload a different document."
+              : getStatusDescription(visualStatus)}
           </p>
 
           <p className="mt-4 text-sm font-medium text-gray-400">{progressLabel}</p>
@@ -682,7 +770,13 @@ export default function ProcessingPage() {
               <div
                 className={[
                   "h-full rounded-full transition-all duration-700",
-                  isUnsupported ? "bg-amber-500" : isFailed ? "bg-rose-500" : isReady ? "bg-emerald-500" : "bg-gray-950",
+                  isUnsupported
+                    ? "bg-amber-500"
+                    : isFailed
+                      ? "bg-rose-500"
+                      : isVisuallyReady
+                        ? "bg-emerald-500"
+                        : "bg-gray-950",
                 ].join(" ")}
                 style={{ width: isUnsupported ? "100%" : `${completionPercent}%` }}
               />

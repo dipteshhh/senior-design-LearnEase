@@ -269,3 +269,31 @@ export async function sleepMs(delayMs: number): Promise<void> {
   if (delayMs <= 0) return;
   await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
 }
+
+/**
+ * Simple concurrency limiter for OpenAI API calls.
+ * Prevents stampede behavior when multiple users trigger generation
+ * simultaneously by queuing requests beyond the concurrency limit.
+ */
+const DEFAULT_OPENAI_CONCURRENCY = 3;
+const openaiConcurrencyLimit = readEnvInt(
+  "OPENAI_CONCURRENCY_LIMIT",
+  DEFAULT_OPENAI_CONCURRENCY,
+  1
+);
+let openaiInFlight = 0;
+const openaiWaitQueue: Array<() => void> = [];
+
+export async function withOpenAiConcurrency<T>(fn: () => Promise<T>): Promise<T> {
+  if (openaiInFlight >= openaiConcurrencyLimit) {
+    await new Promise<void>((resolve) => openaiWaitQueue.push(resolve));
+  }
+  openaiInFlight += 1;
+  try {
+    return await fn();
+  } finally {
+    openaiInFlight -= 1;
+    const next = openaiWaitQueue.shift();
+    if (next) next();
+  }
+}

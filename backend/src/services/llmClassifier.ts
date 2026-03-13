@@ -4,9 +4,11 @@ import { logger } from "../lib/logger.js";
 import { detectDocumentType } from "./documentDetector.js";
 import type { DetectionResult } from "./documentDetector.js";
 import { readEnvInt } from "../lib/env.js";
+import { withOpenAiConcurrency } from "./generationReliability.js";
 
 const DEFAULT_CLASSIFIER_TIMEOUT_MS = 10000;
-const DEFAULT_CLASSIFIER_MAX_RETRIES = 1;
+// Default 0: route-level retry handles failures; SDK retries would multiply tail latency.
+const DEFAULT_CLASSIFIER_MAX_RETRIES = 0;
 
 function getClassifierTimeoutMs(): number {
   return readEnvInt("LLM_CLASSIFIER_TIMEOUT_MS", DEFAULT_CLASSIFIER_TIMEOUT_MS, 1000);
@@ -63,15 +65,17 @@ export async function classifyWithLlm(
 
   let response;
   try {
-    response = await openAiClient.chat.completions.create({
-      model: CLASSIFIER_MODEL,
-      messages: [
-        { role: "system", content: CLASSIFIER_PROMPT },
-        { role: "user", content: truncated },
-      ],
-      max_tokens: 10,
-      temperature: 0,
-    });
+    response = await withOpenAiConcurrency(() =>
+      openAiClient.chat.completions.create({
+        model: CLASSIFIER_MODEL,
+        messages: [
+          { role: "system", content: CLASSIFIER_PROMPT },
+          { role: "user", content: truncated },
+        ],
+        max_tokens: 10,
+        temperature: 0,
+      })
+    );
   } catch (error) {
     // Fail closed: do not fall back to the local classifier because it is
     // known to produce false positives for out-of-scope documents. Let the
