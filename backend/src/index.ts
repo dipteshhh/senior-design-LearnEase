@@ -14,7 +14,9 @@ import {
   retryQuizHandler,
   retryStudyGuideHandler,
   updateChecklistHandler,
+  updateDueDateHandler,
   updateDueTimeHandler,
+  updateReminderOptInHandler,
   uploadDocumentHandler,
 } from "./routes/contract.js";
 import { googleAuthHandler, logoutHandler, meHandler } from "./routes/auth.js";
@@ -154,7 +156,9 @@ app.post("/api/quiz/create", createQuizHandler);
 app.post("/api/quiz/retry", retryQuizHandler);
 app.get("/api/quiz/:documentId", getQuizHandler);
 app.patch("/api/checklist/:documentId", updateChecklistHandler);
+app.patch("/api/documents/:documentId/due-date", updateDueDateHandler);
 app.patch("/api/documents/:documentId/due-time", updateDueTimeHandler);
+app.patch("/api/documents/:documentId/reminder-opt-in", updateReminderOptInHandler);
 app.delete("/api/user/data", deleteUserDataHandler);
 
 app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {

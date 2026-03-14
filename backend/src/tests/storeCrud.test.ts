@@ -44,6 +44,7 @@ function makeDoc(id: string, userId: string, overrides: Partial<DocumentRecord> 
     errorMessage: null,
     assignmentDueDate: null,
     assignmentDueTime: null,
+    reminderOptIn: false,
     reminderStatus: "pending",
     reminderDeadlineKey: null,
     reminderLastError: null,

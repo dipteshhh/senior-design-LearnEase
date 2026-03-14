@@ -12,6 +12,12 @@ process.env.DATABASE_PATH = path.join(tmpDir, "test.sqlite");
 process.env.ARTIFACTS_DIR = path.join(tmpDir, "artifacts");
 process.env.FILE_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef";
 process.env.APP_TIMEZONE = "America/New_York";
+// Dummy SMTP config so isEmailConfigured() returns true inside scheduler tests.
+// The transport will be created but never successfully sends (no real server).
+process.env.SMTP_HOST = "localhost";
+process.env.SMTP_PORT = "2525";
+process.env.SMTP_USER = "test";
+process.env.SMTP_PASS = "test";
 
 const sqlite = await import("../db/sqlite.js");
 const store = await import("../store/memoryStore.js");
@@ -51,6 +57,7 @@ function makeHomeworkDoc(
     errorMessage: null,
     assignmentDueDate: null,
     assignmentDueTime: null,
+    reminderOptIn: false,
     reminderStatus: "pending",
     reminderDeadlineKey: null,
     reminderLastError: null,
@@ -88,6 +95,7 @@ function makeLectureDoc(
     errorMessage: null,
     assignmentDueDate: null,
     assignmentDueTime: null,
+    reminderOptIn: false,
     reminderStatus: "pending",
     reminderDeadlineKey: null,
     reminderLastError: null,
@@ -100,6 +108,7 @@ function makeLectureDoc(
 
 const {
   buildDeadlineDatetime,
+  checkAndSendReminders,
   formatDueTime,
   getReminderSubject,
   getAppTimezone,
@@ -114,6 +123,7 @@ test("listPendingReminders returns homework with due date + time and pending sta
   const doc = makeHomeworkDoc({
     assignmentDueDate: "2099-12-31",
     assignmentDueTime: "23:59",
+    reminderOptIn: true,
   });
   store.saveDocument(doc);
 
@@ -216,6 +226,7 @@ test("listPendingReminders includes pending reminders with deadline key from pri
   const doc = makeHomeworkDoc({
     assignmentDueDate: "2099-12-31",
     assignmentDueTime: "14:00",
+    reminderOptIn: true,
     reminderStatus: "pending",
     reminderDeadlineKey: "2099-12-31T14:00",
     reminderLastError: "ETIMEDOUT",
@@ -235,6 +246,7 @@ test("claimReminderForSending transitions pending → sending and prevents doubl
   const doc = makeHomeworkDoc({
     assignmentDueDate: "2099-06-01",
     assignmentDueTime: "09:00",
+    reminderOptIn: true,
   });
   store.saveDocument(doc);
 
@@ -285,6 +297,7 @@ test("markReminderSent transitions to sent state", () => {
   const doc = makeHomeworkDoc({
     assignmentDueDate: "2099-08-01",
     assignmentDueTime: "11:00",
+    reminderOptIn: true,
   });
   store.saveDocument(doc);
 
@@ -304,6 +317,7 @@ test("markReminderFailed transitions to failed state and stores error", () => {
   const doc = makeHomeworkDoc({
     assignmentDueDate: "2099-09-01",
     assignmentDueTime: "12:00",
+    reminderOptIn: true,
   });
   store.saveDocument(doc);
 
@@ -364,6 +378,7 @@ test("changing deadline after sent allows new reminder to be picked up", () => {
   const doc = makeHomeworkDoc({
     assignmentDueDate: "2099-03-01",
     assignmentDueTime: "08:00",
+    reminderOptIn: true,
     reminderStatus: "sent",
     reminderDeadlineKey: "2099-03-01T08:00",
   });
@@ -455,6 +470,7 @@ test("markReminderPendingRetry transitions sending → pending and preserves err
   const doc = makeHomeworkDoc({
     assignmentDueDate: "2099-05-01",
     assignmentDueTime: "15:00",
+    reminderOptIn: true,
   });
   store.saveDocument(doc);
 
@@ -476,6 +492,7 @@ test("transient failure round-trip: claim → pendingRetry → re-select → re-
   const doc = makeHomeworkDoc({
     assignmentDueDate: "2099-05-15",
     assignmentDueTime: "10:00",
+    reminderOptIn: true,
   });
   store.saveDocument(doc);
 
@@ -557,6 +574,7 @@ test("terminal failure stays excluded until deadline changes", () => {
   const doc = makeHomeworkDoc({
     assignmentDueDate: "2099-06-01",
     assignmentDueTime: "08:00",
+    reminderOptIn: true,
   });
   store.saveDocument(doc);
 
@@ -574,6 +592,207 @@ test("terminal failure stays excluded until deadline changes", () => {
   const candidates2 = store.listPendingReminders();
   const match2 = candidates2.find((c) => c.documentId === doc.id);
   assert.ok(match2, "After deadline change, should be retryable again");
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// TESTS: Past-deadline reminder handling
+// ══════════════════════════════════════════════════════════════════════
+
+test("scheduler marks past-deadline reminder as past_due", () => {
+  // Create a homework doc with a deadline that is already in the past
+  const doc = makeHomeworkDoc({
+    assignmentDueDate: "2020-01-01",
+    assignmentDueTime: "08:00",
+    reminderOptIn: true,
+  });
+  store.saveDocument(doc);
+
+  // Confirm it starts as pending and appears in the list
+  const before = store.listPendingReminders();
+  const matchBefore = before.find((c) => c.documentId === doc.id);
+  assert.ok(matchBefore, "Past-deadline doc should initially be pending");
+
+  // Run the scheduler — it should mark the past-deadline doc as past_due
+  checkAndSendReminders();
+
+  // After scheduler tick, the doc should no longer appear in pending
+  const after = store.listPendingReminders();
+  const matchAfter = after.find((c) => c.documentId === doc.id);
+  assert.equal(matchAfter, undefined, "Past-deadline doc should no longer be pending");
+
+  // Verify the DB state is 'past_due'
+  const metadata = store.getDocumentMetadata(doc.id);
+  assert.equal(metadata?.reminderStatus, "past_due", "Should be marked past_due");
+});
+
+test("homework with future deadline retains pending status through scheduler", () => {
+  // Create a homework doc with a deadline far in the future (beyond 24h window)
+  const doc = makeHomeworkDoc({
+    assignmentDueDate: "2099-12-31",
+    assignmentDueTime: "23:59",
+    reminderOptIn: true,
+  });
+  store.saveDocument(doc);
+
+  // Run scheduler — future doc outside 24h window should stay pending
+  checkAndSendReminders();
+
+  const candidates = store.listPendingReminders();
+  const match = candidates.find((c) => c.documentId === doc.id);
+  assert.ok(match, "Future-deadline doc should remain pending");
+
+  const metadata = store.getDocumentMetadata(doc.id);
+  assert.equal(metadata?.reminderStatus, "pending", "Should still be pending");
+});
+
+test("past-deadline past_due doc becomes pending again when deadline changes to future", () => {
+  const doc = makeHomeworkDoc({
+    assignmentDueDate: "2020-06-15",
+    assignmentDueTime: "12:00",
+    reminderOptIn: true,
+  });
+  store.saveDocument(doc);
+
+  // Scheduler marks it past_due
+  checkAndSendReminders();
+  const meta1 = store.getDocumentMetadata(doc.id);
+  assert.equal(meta1?.reminderStatus, "past_due");
+
+  // Update deadline to a future date — should reset to pending
+  store.updateAssignmentDueDate(doc.id, "2099-06-15");
+  const meta2 = store.getDocumentMetadata(doc.id);
+  assert.equal(meta2?.reminderStatus, "pending", "Deadline change should reset to pending");
+
+  // Should reappear in pending list
+  const candidates = store.listPendingReminders();
+  const match = candidates.find((c) => c.documentId === doc.id);
+  assert.ok(match, "Should be eligible again after deadline change");
+});
+
+test("due date and time still display correctly for past-deadline documents", () => {
+  // This verifies extraction and storage are unaffected by past-deadline status
+  const doc = makeHomeworkDoc({
+    assignmentDueDate: "2020-03-15",
+    assignmentDueTime: "23:59",
+  });
+  store.saveDocument(doc);
+
+  const metadata = store.getDocumentMetadata(doc.id);
+  assert.equal(metadata?.assignmentDueDate, "2020-03-15", "Due date should be preserved");
+  assert.equal(metadata?.assignmentDueTime, "23:59", "Due time should be preserved");
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// TESTS: Reminder opt-in gating
+// ══════════════════════════════════════════════════════════════════════
+
+test("listPendingReminders excludes homework with reminder_opt_in = false", () => {
+  const doc = makeHomeworkDoc({
+    assignmentDueDate: "2099-12-31",
+    assignmentDueTime: "23:59",
+    reminderOptIn: false,
+  });
+  store.saveDocument(doc);
+
+  const candidates = store.listPendingReminders();
+  const match = candidates.find((c) => c.documentId === doc.id);
+  assert.equal(match, undefined, "Should not appear — opt-in is false");
+});
+
+test("updateReminderOptIn(true) sets opt-in and resets to pending", () => {
+  const doc = makeHomeworkDoc({
+    assignmentDueDate: "2099-12-31",
+    assignmentDueTime: "23:59",
+    reminderOptIn: false,
+  });
+  store.saveDocument(doc);
+
+  // Should not appear before opt-in
+  const before = store.listPendingReminders();
+  assert.equal(before.find((c) => c.documentId === doc.id), undefined, "Not in pending before opt-in");
+
+  store.updateReminderOptIn(doc.id, true);
+
+  const updated = store.getDocumentMetadata(doc.id);
+  assert.ok(updated);
+  assert.equal(updated.reminderOptIn, true);
+  assert.equal(updated.reminderStatus, "pending");
+
+  // Should now appear in pending
+  const after = store.listPendingReminders();
+  assert.ok(after.find((c) => c.documentId === doc.id), "Should appear after opt-in");
+});
+
+test("updateReminderOptIn(false) sets opt-out and marks skipped", () => {
+  const doc = makeHomeworkDoc({
+    assignmentDueDate: "2099-12-31",
+    assignmentDueTime: "23:59",
+    reminderOptIn: true,
+  });
+  store.saveDocument(doc);
+
+  store.updateReminderOptIn(doc.id, false);
+
+  const updated = store.getDocumentMetadata(doc.id);
+  assert.ok(updated);
+  assert.equal(updated.reminderOptIn, false);
+  assert.equal(updated.reminderStatus, "skipped");
+
+  // Should not appear in pending
+  const candidates = store.listPendingReminders();
+  assert.equal(candidates.find((c) => c.documentId === doc.id), undefined, "Opted-out doc should not be pending");
+});
+
+test("scheduler ignores opted-out homework even with valid future deadline", () => {
+  const doc = makeHomeworkDoc({
+    assignmentDueDate: "2099-12-31",
+    assignmentDueTime: "23:59",
+    reminderOptIn: false,
+  });
+  store.saveDocument(doc);
+
+  checkAndSendReminders();
+
+  const metadata = store.getDocumentMetadata(doc.id);
+  assert.ok(metadata);
+  // Should remain pending (not processed at all), since it was never picked up
+  assert.equal(metadata.reminderStatus, "pending", "Scheduler should not touch opted-out docs");
+});
+
+test("scheduler processes opted-in homework with past deadline", () => {
+  const doc = makeHomeworkDoc({
+    assignmentDueDate: "2020-01-01",
+    assignmentDueTime: "08:00",
+    reminderOptIn: true,
+  });
+  store.saveDocument(doc);
+
+  checkAndSendReminders();
+
+  const metadata = store.getDocumentMetadata(doc.id);
+  assert.equal(metadata?.reminderStatus, "past_due", "Opted-in past doc should be marked past_due");
+});
+
+test("homework with date but no time is excluded from pending even if opted in", () => {
+  const doc = makeHomeworkDoc({
+    assignmentDueDate: "2099-12-31",
+    reminderOptIn: true,
+  });
+  store.saveDocument(doc);
+
+  const candidates = store.listPendingReminders();
+  assert.equal(candidates.find((c) => c.documentId === doc.id), undefined, "Missing time should exclude from pending");
+});
+
+test("homework with no date is excluded from pending even if opted in", () => {
+  const doc = makeHomeworkDoc({
+    assignmentDueTime: "23:59",
+    reminderOptIn: true,
+  });
+  store.saveDocument(doc);
+
+  const candidates = store.listPendingReminders();
+  assert.equal(candidates.find((c) => c.documentId === doc.id), undefined, "Missing date should exclude from pending");
 });
 
 // ══════════════════════════════════════════════════════════════════════

@@ -19,10 +19,19 @@ test("buildAnalysisPrompt adds homework-specific important detail priorities", (
 
   assert.match(prompt, /Document-type instructions: HOMEWORK/);
   assert.match(prompt, /rubric expectations, grading breakdown, late policy/);
-  assert.match(prompt, /allowed file types, naming conventions, required tools\/software versions\/programming language\/formatting rules/);
+  assert.match(prompt, /allowed file types, naming conventions, final submission format requirements, required tools\/software versions\/programming language\/formatting rules/);
   assert.match(prompt, /Preserve overview\.due_date behavior/);
   assert.match(prompt, /Checklist MUST remain action-oriented and task-oriented/);
   assert.match(prompt, /target at least 3 sections with clear student-readable titles/);
+});
+
+test("buildAnalysisPrompt preserves distinction between submission constraints and workflow tools", () => {
+  const prompt = buildAnalysisPrompt("HOMEWORK", false, []);
+
+  assert.match(prompt, /Distinguish final submission requirements from allowed workflow tools/);
+  assert.match(prompt, /describe that as a final-file\/submission constraint, NOT as a blanket ban on every other tool/);
+  assert.match(prompt, /If the document explicitly allows another tool for part of the workflow.*keep that allowance visible/);
+  assert.match(prompt, /Do NOT collapse a qualified submission-format rule into a global software prohibition/);
 });
 
 test("buildAnalysisPrompt adds lecture study-checklist and class-notes behavior", () => {

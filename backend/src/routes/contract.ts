@@ -11,7 +11,8 @@ import {
   makeFlowFailureCode,
 } from "../services/generationState.js";
 import { generateQuiz } from "../services/quizGenerator.js";
-import { extractDueDate } from "../services/dueDateExtractor.js";
+import { extractDueDeadline } from "../services/dueDateExtractor.js";
+import { buildDeadlineDatetime } from "../services/reminderScheduler.js";
 import { extractTextFromBuffer } from "../services/textExtractor.js";
 import {
   ContractValidationError,
@@ -32,6 +33,7 @@ import {
   updateChecklistItem,
   updateAssignmentDueDate,
   updateAssignmentDueTime,
+  updateReminderOptIn,
   updateDocument,
   updateDocumentStatus,
 } from "../store/memoryStore.js";
@@ -52,6 +54,28 @@ interface ChecklistBody {
 const UUID_V4_OR_V1_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ALREADY_PROCESSING_RETRY_AFTER_SECONDS = "5";
+
+/**
+ * If the deadline is already past and the reminder hasn't been sent,
+ * return "past_due" so the frontend shows "Past due" immediately
+ * rather than a stale schedulable state. Uses the same APP_TIMEZONE
+ * as the scheduler so the two always agree.
+ */
+function deriveEffectiveReminderStatus(
+  doc: { assignmentDueDate: string | null; assignmentDueTime: string | null; reminderStatus: string }
+): string {
+  if (
+    doc.assignmentDueDate &&
+    doc.assignmentDueTime &&
+    (doc.reminderStatus === "pending" || doc.reminderStatus === "sending")
+  ) {
+    const deadline = buildDeadlineDatetime(doc.assignmentDueDate, doc.assignmentDueTime);
+    if (deadline && deadline.getTime() <= Date.now()) {
+      return "past_due";
+    }
+  }
+  return doc.reminderStatus;
+}
 
 function isUuid(value: string): boolean {
   return UUID_V4_OR_V1_REGEX.test(value);
@@ -342,6 +366,7 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
         errorMessage: null,
         assignmentDueDate: null,
         assignmentDueTime: null,
+        reminderOptIn: false,
         reminderStatus: "pending",
         reminderDeadlineKey: null,
         reminderLastError: null,
@@ -401,6 +426,7 @@ export async function listDocumentsHandler(_req: Request, res: Response): Promis
       has_quiz: doc.hasQuiz,
       assignment_due_date: doc.assignmentDueDate,
       assignment_due_time: doc.assignmentDueTime,
+      reminder_opt_in: doc.reminderOptIn,
       reminder_status: doc.reminderStatus,
     };
   });
@@ -412,7 +438,7 @@ export async function getDocumentHandler(req: Request, res: Response): Promise<v
   if (!documentId) return;
 
   const userId = getUserId(req);
-  const doc = getDocumentMetadata(documentId);
+  let doc = getDocumentMetadata(documentId);
   if (!doc) {
     sendApiError(res, 404, "NOT_FOUND", "Document not found.");
     return;
@@ -421,6 +447,47 @@ export async function getDocumentHandler(req: Request, res: Response): Promise<v
     sendApiError(res, 403, "FORBIDDEN", "You do not own this document.");
     return;
   }
+
+  // Older homework rows can still have a missing persisted due date even though the
+  // extracted text contains one. Reconcile that lazily so the detail UI stays consistent.
+  if (doc.documentType === "HOMEWORK" && doc.assignmentDueDate === null) {
+    const fullDoc = getDocument(documentId);
+    if (fullDoc?.userId === userId) {
+      const deadline = extractDueDeadline(fullDoc.extractedText);
+      if (deadline) {
+        updateAssignmentDueDate(documentId, deadline.date);
+        if (deadline.time) {
+          updateAssignmentDueTime(documentId, deadline.time);
+        }
+        doc = getDocumentMetadata(documentId) ?? {
+          ...doc,
+          assignmentDueDate: deadline.date,
+          reminderStatus: "pending",
+          reminderDeadlineKey: null,
+          reminderLastError: null,
+          reminderAttemptedAt: null,
+        };
+      }
+    }
+  }
+
+  // Legacy rows created under the old date-only extractor have a due date but no
+  // due time. Re-extract from the source text and backfill just the time.
+  if (doc.documentType === "HOMEWORK" && doc.assignmentDueDate !== null && doc.assignmentDueTime === null) {
+    const fullDoc = getDocument(documentId);
+    if (fullDoc?.userId === userId) {
+      const deadline = extractDueDeadline(fullDoc.extractedText);
+      if (deadline?.time) {
+        updateAssignmentDueTime(documentId, deadline.time);
+        doc = getDocumentMetadata(documentId) ?? {
+          ...doc,
+          assignmentDueTime: deadline.time,
+        };
+      }
+    }
+  }
+
+  const effectiveReminderStatus = deriveEffectiveReminderStatus(doc);
 
   const publicErrorCode = normalizePublicErrorCode(doc.status, doc.errorCode);
   res.status(200).json({
@@ -438,7 +505,8 @@ export async function getDocumentHandler(req: Request, res: Response): Promise<v
     has_quiz: doc.quiz !== null,
     assignment_due_date: doc.assignmentDueDate,
     assignment_due_time: doc.assignmentDueTime,
-    reminder_status: doc.reminderStatus,
+    reminder_opt_in: doc.reminderOptIn,
+    reminder_status: effectiveReminderStatus,
   });
 }
 
@@ -487,12 +555,15 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
         return;
       }
 
-      // Extract due date for HOMEWORK documents (best-effort, never blocks generation)
+      // Extract due date + time for HOMEWORK documents (best-effort, never blocks generation)
       if (classification.llmDocumentType === "HOMEWORK") {
         try {
-          const dueDate = extractDueDate(doc.extractedText);
-          if (dueDate) {
-            updateAssignmentDueDate(documentId, dueDate);
+          const deadline = extractDueDeadline(doc.extractedText);
+          if (deadline) {
+            updateAssignmentDueDate(documentId, deadline.date);
+            if (deadline.time) {
+              updateAssignmentDueTime(documentId, deadline.time);
+            }
           }
         } catch (dueDateError) {
           logger.warn("Due date extraction failed (non-blocking)", { documentId, error: dueDateError });
@@ -856,6 +927,52 @@ export async function updateChecklistHandler(req: Request, res: Response): Promi
   res.status(200).json({ success: true });
 }
 
+interface DueDateBody {
+  due_date?: string;
+}
+
+const YYYY_MM_DD_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+export async function updateDueDateHandler(req: Request, res: Response): Promise<void> {
+  const documentId = readDocumentIdParam(req, res);
+  if (!documentId) return;
+
+  const doc = ensureOwnership(req, res, documentId);
+  if (!doc) return;
+
+  if (doc.documentType !== "HOMEWORK") {
+    sendApiError(res, 422, "NOT_HOMEWORK", "Due date is only applicable to HOMEWORK documents.");
+    return;
+  }
+
+  const body = req.body as DueDateBody | undefined;
+  const dueDate = body?.due_date;
+
+  if (typeof dueDate !== "string" || !YYYY_MM_DD_REGEX.test(dueDate.trim())) {
+    sendApiError(res, 400, "INVALID_DUE_DATE", "due_date must be in YYYY-MM-DD format.");
+    return;
+  }
+
+  const normalized = dueDate.trim();
+  const [y, m, d] = normalized.split("-").map(Number);
+  const probe = new Date(y, m - 1, d);
+  if (probe.getFullYear() !== y || probe.getMonth() !== m - 1 || probe.getDate() !== d) {
+    sendApiError(res, 400, "INVALID_DUE_DATE", "due_date must be a valid calendar date.");
+    return;
+  }
+
+  updateAssignmentDueDate(documentId, normalized);
+  const updated = getDocumentMetadata(documentId);
+  const effectiveStatus = updated ? deriveEffectiveReminderStatus(updated) : "pending";
+  res.status(200).json({
+    success: true,
+    assignment_due_date: normalized,
+    assignment_due_time: updated?.assignmentDueTime ?? doc.assignmentDueTime,
+    reminder_opt_in: updated?.reminderOptIn ?? false,
+    reminder_status: effectiveStatus,
+  });
+}
+
 interface DueTimeBody {
   due_time?: string;
 }
@@ -895,11 +1012,57 @@ export async function updateDueTimeHandler(req: Request, res: Response): Promise
   }
 
   updateAssignmentDueTime(documentId, normalized);
+  const updated = getDocumentMetadata(documentId);
+  const effectiveStatus = updated ? deriveEffectiveReminderStatus(updated) : "pending";
   res.status(200).json({
     success: true,
-    assignment_due_date: doc.assignmentDueDate,
+    assignment_due_date: updated?.assignmentDueDate ?? doc.assignmentDueDate,
     assignment_due_time: normalized,
-    reminder_status: "pending",
+    reminder_opt_in: updated?.reminderOptIn ?? false,
+    reminder_status: effectiveStatus,
+  });
+}
+
+interface ReminderOptInBody {
+  opt_in?: boolean;
+}
+
+export async function updateReminderOptInHandler(req: Request, res: Response): Promise<void> {
+  const documentId = readDocumentIdParam(req, res);
+  if (!documentId) return;
+
+  const doc = ensureOwnership(req, res, documentId);
+  if (!doc) return;
+
+  if (doc.documentType !== "HOMEWORK") {
+    sendApiError(res, 422, "NOT_HOMEWORK", "Reminder opt-in is only applicable to HOMEWORK documents.");
+    return;
+  }
+
+  const body = req.body as ReminderOptInBody | undefined;
+  if (typeof body?.opt_in !== "boolean") {
+    sendApiError(res, 400, "INVALID_OPT_IN", "opt_in must be a boolean.");
+    return;
+  }
+
+  // Cannot opt in without both due date and due time
+  if (body.opt_in && (!doc.assignmentDueDate || !doc.assignmentDueTime)) {
+    sendApiError(
+      res,
+      422,
+      "DEADLINE_REQUIRED",
+      "Cannot opt in to reminders without both a due date and due time."
+    );
+    return;
+  }
+
+  updateReminderOptIn(documentId, body.opt_in);
+  const updated = getDocumentMetadata(documentId);
+  const effectiveStatus = updated ? deriveEffectiveReminderStatus(updated) : "pending";
+  res.status(200).json({
+    success: true,
+    reminder_opt_in: updated?.reminderOptIn ?? body.opt_in,
+    reminder_status: effectiveStatus,
   });
 }
 

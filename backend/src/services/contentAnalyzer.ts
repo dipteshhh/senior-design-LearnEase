@@ -143,8 +143,13 @@ function buildDocumentTypeInstructions(documentType: SupportedAnalysisDocumentTy
 - Prioritize high-value important_details for homework:
   - dates: due dates, submission deadlines, milestone dates
   - policies: rubric expectations, grading breakdown, late policy, collaboration/academic-integrity constraints
-  - logistics: allowed file types, naming conventions, required tools/software versions/programming language/formatting rules, zip/unzip or packaging requirements
+  - logistics: allowed file types, naming conventions, final submission format requirements, required tools/software versions/programming language/formatting rules, zip/unzip or packaging requirements
   - contacts: instructor/TA contact channels only when explicitly present
+- Preserve scope exactly when extracting tool/software restrictions:
+  - Distinguish final submission requirements from allowed workflow tools.
+  - If a document requires Microsoft Word for the final .docx submission, describe that as a final-file/submission constraint, NOT as a blanket ban on every other tool.
+  - If the document explicitly allows another tool for part of the workflow (for example ADS / SSMS for query text or screenshots), keep that allowance visible in checklist and/or important_details.logistics.
+  - Do NOT collapse a qualified submission-format rule into a global software prohibition unless the document explicitly states a global prohibition.
 - Preserve overview.due_date behavior. If a due date exists, keep it in overview.due_date and also capture additional deadline context in important_details when present.
 - For sufficiently structured homework documents, target at least 3 sections with clear student-readable titles.
 - Never provide answers or solved work; only organize and extract requirements already present in the document.`;

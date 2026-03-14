@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { extractDueDate } from "../services/dueDateExtractor.js";
+import { extractDueDate, extractDueDeadline } from "../services/dueDateExtractor.js";
 
 // ── Pattern: "due <Month> <Day>, <Year>" ────────────────────────────
 
@@ -110,4 +110,163 @@ test("lecture text without deadline language returns null", () => {
     "Chapter 5: Operating Systems. Topics covered include process scheduling, " +
     "memory management, and file systems. Week 7 slides.";
   assert.equal(extractDueDate(text), null);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// extractDueDeadline: date + time extraction
+// ══════════════════════════════════════════════════════════════════════
+
+test("extractDueDeadline: 'Due: 10/12/2025 at 11:59pm' → date + time", () => {
+  const text = "Assignment instructions\nDue: 10/12/2025 at 11:59pm\nSubmit on Canvas.";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2025-10-12");
+  assert.equal(result.time, "23:59");
+});
+
+test("extractDueDeadline: 'Due: Oct 12, 2025 11:59 PM' → date + time", () => {
+  const text = "Homework 3\nDue: Oct 12, 2025 11:59 PM\nLate penalty applies.";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2025-10-12");
+  assert.equal(result.time, "23:59");
+});
+
+test("extractDueDeadline: 'Due: 10/12/2025 23:59' → date + 24h time", () => {
+  const text = "Due: 10/12/2025 23:59";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2025-10-12");
+  assert.equal(result.time, "23:59");
+});
+
+test("extractDueDeadline: 'Due: October 12, 2025 11:59pm' → date + time", () => {
+  const text = "Due: October 12, 2025 11:59pm";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2025-10-12");
+  assert.equal(result.time, "23:59");
+});
+
+test("extractDueDeadline: 'Due: 10/12/2025 11:59 PM' → date + time with space", () => {
+  const text = "Due: 10/12/2025 11:59 PM";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2025-10-12");
+  assert.equal(result.time, "23:59");
+});
+
+test("extractDueDeadline: date without time returns time = null", () => {
+  const text = "Assignment due February 1, 2026. Submit on Canvas.";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2026-02-01");
+  assert.equal(result.time, null);
+});
+
+test("extractDueDeadline: 'at 2:30am' → early morning time", () => {
+  const text = "Due: 03/15/2026 at 2:30am";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2026-03-15");
+  assert.equal(result.time, "02:30");
+});
+
+test("extractDueDeadline: 12:00am → midnight = 00:00", () => {
+  const text = "Due: 03/15/2026 at 12:00am";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2026-03-15");
+  assert.equal(result.time, "00:00");
+});
+
+test("extractDueDeadline: 12:00pm → noon = 12:00", () => {
+  const text = "Due: 03/15/2026 at 12:00pm";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2026-03-15");
+  assert.equal(result.time, "12:00");
+});
+
+test("extractDueDeadline returns null for no date text", () => {
+  assert.equal(extractDueDeadline("Lecture notes on algorithms"), null);
+});
+
+test("extractDueDeadline: 'Due Sunday, Mar 15 at 11:59 PM' uses nearby Spring year context", () => {
+  const text =
+    "EECS 4560 - Database Management Systems\n" +
+    "Spring 2026 - Homework Set #6 - Due Sunday, Mar 15 at 11:59 PM";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2026-03-15");
+  assert.equal(result.time, "23:59");
+});
+
+test("extractDueDeadline: 'Due Mon, Mar 15 at 11:59 PM' supports abbreviated weekday", () => {
+  const text = "Spring 2026 schedule\nDue Mon, Mar 15 at 11:59 PM";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2026-03-15");
+  assert.equal(result.time, "23:59");
+});
+
+test("extractDueDeadline: 'Due Mar 15 at 11:59 PM' supports omitted weekday", () => {
+  const text = "Spring 2026 assignment\nDue Mar 15 at 11:59 PM";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2026-03-15");
+  assert.equal(result.time, "23:59");
+});
+
+test("extractDueDeadline: 'Due Sunday, March 15 at 11:59 PM' supports full month and weekday", () => {
+  const text = "Spring 2026 assignment\nDue Sunday, March 15 at 11:59 PM";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2026-03-15");
+  assert.equal(result.time, "23:59");
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// "due at <time> ... on <weekday>, <month> <day>, <year>" pattern
+// ══════════════════════════════════════════════════════════════════════
+
+test("extractDueDeadline: 'due at 1:30pm (beginning of class) on Wednesday, January 21, 2009'", () => {
+  const text =
+    "The assignment is due at 1:30pm (beginning of class) on Wednesday, January 21, 2009.";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2009-01-21");
+  assert.equal(result.time, "13:30");
+});
+
+test("extractDueDeadline: 'due at 1:30pm on Wednesday, January 21, 2009' (no parenthetical)", () => {
+  const text = "The assignment is due at 1:30pm on Wednesday, January 21, 2009";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2009-01-21");
+  assert.equal(result.time, "13:30");
+});
+
+test("extractDueDeadline: 'Due at 5:00 PM on Monday, February 3, 2026'", () => {
+  const text = "Due at 5:00 PM on Monday, February 3, 2026";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2026-02-03");
+  assert.equal(result.time, "17:00");
+});
+
+test("extractDueDeadline: 'due at 11:59pm on Friday, Dec 20, 2025' with abbreviated month", () => {
+  const text = "Homework is due at 11:59pm on Friday, Dec 20, 2025.";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2025-12-20");
+  assert.equal(result.time, "23:59");
+});
+
+test("extractDueDeadline: 'due at 8:00 AM on March 1' (no year) infers year", () => {
+  const text = "Spring 2026 course\nAssignment due at 8:00 AM on March 1";
+  const result = extractDueDeadline(text);
+  assert.ok(result, "Should extract a deadline");
+  assert.equal(result.date, "2026-03-01");
+  assert.equal(result.time, "08:00");
 });

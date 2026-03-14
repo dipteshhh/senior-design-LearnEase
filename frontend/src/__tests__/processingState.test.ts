@@ -27,6 +27,7 @@ function makeDoc(overrides: Partial<DocumentListItem> = {}): DocumentListItem {
     has_quiz: false,
     assignment_due_date: null,
     assignment_due_time: null,
+    reminder_opt_in: false,
     reminder_status: null,
     ...overrides,
   };

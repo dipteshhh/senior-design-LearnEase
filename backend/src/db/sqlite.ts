@@ -65,6 +65,7 @@ function ensureHomeworkDeadlineColumns(db: SqliteDatabase): void {
     { name: "assignment_due_time", sql: "TEXT" },
     // Legacy column kept for migration compatibility; new code uses reminder_status + reminder_deadline_key.
     { name: "reminder_sent", sql: "INTEGER NOT NULL DEFAULT 0" },
+    { name: "reminder_opt_in", sql: "INTEGER NOT NULL DEFAULT 0" },
     { name: "reminder_status", sql: "TEXT NOT NULL DEFAULT 'pending'" },
     { name: "reminder_deadline_key", sql: "TEXT" },
     { name: "reminder_last_error", sql: "TEXT" },
@@ -87,6 +88,21 @@ function ensureHomeworkDeadlineColumns(db: SqliteDatabase): void {
       AND reminder_status = 'pending'
       AND assignment_due_date IS NOT NULL
       AND assignment_due_time IS NOT NULL
+  `);
+
+  // Backfill: existing homework rows that were already participating in the
+  // reminder system (non-default reminder_status or had a deadline key) should
+  // be treated as opted-in so rollout doesn't silently disable their reminders.
+  db.exec(`
+    UPDATE documents
+    SET reminder_opt_in = 1
+    WHERE document_type = 'HOMEWORK'
+      AND reminder_opt_in = 0
+      AND (
+        reminder_status IN ('sending', 'sent', 'failed', 'past_due')
+        OR reminder_deadline_key IS NOT NULL
+        OR (assignment_due_date IS NOT NULL AND assignment_due_time IS NOT NULL AND reminder_status = 'pending')
+      )
   `);
 }
 

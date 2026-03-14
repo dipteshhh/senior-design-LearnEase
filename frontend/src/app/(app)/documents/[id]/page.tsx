@@ -14,7 +14,9 @@ import {
   deleteDocument,
   getDocument,
   updateChecklistItem,
+  updateDueDate,
   updateDueTime,
+  updateReminderOptIn,
 } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
 
@@ -281,6 +283,21 @@ function QuoteIcon() {
 }
 
 function formatDate(value: string): string {
+  // Parse YYYY-MM-DD manually to avoid timezone shift.
+  // new Date("2025-10-12") is parsed as UTC midnight, which
+  // toLocaleDateString converts to the previous day in US timezones.
+  const parts = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (parts) {
+    const [, y, m, d] = parts;
+    // Construct with local components — month is 0-indexed
+    const date = new Date(Number(y), Number(m) - 1, Number(d));
+    return date.toLocaleDateString(undefined, {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+  // Fallback for non-ISO formats
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString(undefined, {
@@ -288,6 +305,16 @@ function formatDate(value: string): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function formatTime(hhmm: string): string {
+  const [hStr, mStr] = hhmm.split(":");
+  const h = Number(hStr);
+  const m = Number(mStr);
+  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${hour12}:${m.toString().padStart(2, "0")} ${period}`;
 }
 
 function buildTabHref(
@@ -377,6 +404,10 @@ export default function DocumentPage() {
   const [dueTimeInput, setDueTimeInput] = useState("");
   const [dueTimeSaving, setDueTimeSaving] = useState(false);
   const [savedDueTime, setSavedDueTime] = useState<string | null>(null);
+  const [reminderOptInSaving, setReminderOptInSaving] = useState(false);
+  const [manualReminderOpen, setManualReminderOpen] = useState(false);
+  const [dueDateInput, setDueDateInput] = useState("");
+  const [dueDateSaving, setDueDateSaving] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -424,6 +455,8 @@ export default function DocumentPage() {
       setSavedDueTime(null);
       setDueTimeInput("");
     }
+    setManualReminderOpen(false);
+    setDueDateInput("");
   }, [detail]);
 
   useEffect(() => {
@@ -617,6 +650,33 @@ export default function DocumentPage() {
     }
   }
 
+  async function handleSaveDueDate() {
+    if (!document || dueDateSaving || !dueDateInput.trim()) return;
+
+    setDueDateSaving(true);
+    setError(null);
+
+    try {
+      const result = await updateDueDate(document.id, dueDateInput.trim());
+      if (detail) {
+        setDetail({
+          ...detail,
+          document: {
+            ...detail.document,
+            assignment_due_date: result.assignment_due_date,
+            assignment_due_time: result.assignment_due_time,
+            reminder_opt_in: result.reminder_opt_in,
+            reminder_status: result.reminder_status as DocumentListItem["reminder_status"],
+          },
+        });
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, "Unable to save due date."));
+    } finally {
+      setDueDateSaving(false);
+    }
+  }
+
   async function handleSaveDueTime() {
     if (!document || dueTimeSaving || !dueTimeInput.trim()) return;
 
@@ -632,6 +692,7 @@ export default function DocumentPage() {
           document: {
             ...detail.document,
             assignment_due_time: result.assignment_due_time,
+            reminder_opt_in: result.reminder_opt_in,
             reminder_status: result.reminder_status as DocumentListItem["reminder_status"],
           },
         });
@@ -640,6 +701,31 @@ export default function DocumentPage() {
       setError(getErrorMessage(err, "Unable to save due time."));
     } finally {
       setDueTimeSaving(false);
+    }
+  }
+
+  async function handleReminderOptIn(optIn: boolean) {
+    if (!document || reminderOptInSaving) return;
+
+    setReminderOptInSaving(true);
+    setError(null);
+
+    try {
+      const result = await updateReminderOptIn(document.id, optIn);
+      if (detail) {
+        setDetail({
+          ...detail,
+          document: {
+            ...detail.document,
+            reminder_opt_in: result.reminder_opt_in,
+            reminder_status: result.reminder_status as DocumentListItem["reminder_status"],
+          },
+        });
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, "Unable to update reminder preference."));
+    } finally {
+      setReminderOptInSaving(false);
     }
   }
 
@@ -879,13 +965,13 @@ export default function DocumentPage() {
             </p>
 
             {(studyGuide.overview.topic ||
-              studyGuide.overview.due_date ||
+              (studyGuide.overview.due_date && document.document_type !== "HOMEWORK") ||
               studyGuide.overview.estimated_time) ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {studyGuide.overview.topic ? (
                   <MetricCard label="Topic" value={studyGuide.overview.topic} />
                 ) : null}
-                {studyGuide.overview.due_date ? (
+                {studyGuide.overview.due_date && document.document_type !== "HOMEWORK" ? (
                   <MetricCard label="Due Date" value={studyGuide.overview.due_date} />
                 ) : null}
                 {studyGuide.overview.estimated_time ? (
@@ -901,37 +987,71 @@ export default function DocumentPage() {
               <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 space-y-4">
                 <h3 className="text-base font-semibold text-gray-950">Assignment Deadline</h3>
 
-                {document.assignment_due_date ? (
+                {document.assignment_due_date && savedDueTime ? (
+                  /* ── Case 1: due date + due time both present ── */
                   <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-gray-500">Due Date:</span>
-                      <span className="text-sm font-semibold text-gray-900">
-                        {formatDate(document.assignment_due_date)}
-                      </span>
-                    </div>
+                    <p className="text-[17px] font-semibold text-gray-900">
+                      Due: {formatDate(document.assignment_due_date)} — {formatTime(savedDueTime)}
+                    </p>
 
-                    {savedDueTime ? (
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium text-gray-500">Due Time:</span>
-                        <span className="text-sm font-semibold text-gray-900">{savedDueTime}</span>
-                        {document.reminder_status === "sent" ? (
-                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                            Reminder sent
-                          </span>
-                        ) : document.reminder_status === "sending" || document.reminder_status === "pending" ? (
-                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                            Reminder pending
-                          </span>
-                        ) : document.reminder_status === "failed" ? (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                            Reminder pending retry
-                          </span>
-                        ) : null}
+                    {document.reminder_status === "past_due" ? (
+                      <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                        Past due
+                      </span>
+                    ) : (
+                      <div className="space-y-2">
+                        {document.reminder_opt_in ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {document.reminder_status === "sent" ? (
+                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                                Reminder sent
+                              </span>
+                            ) : document.reminder_status === "sending" || document.reminder_status === "pending" ? (
+                              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                Reminder scheduled
+                              </span>
+                            ) : document.reminder_status === "failed" ? (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                Reminder pending retry
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => { void handleReminderOptIn(false); }}
+                              disabled={reminderOptInSaving}
+                              className="text-xs text-gray-500 underline hover:text-gray-700 disabled:opacity-60"
+                            >
+                              {reminderOptInSaving ? "Updating..." : "Cancel reminder"}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { void handleReminderOptIn(true); }}
+                            disabled={reminderOptInSaving}
+                            className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {reminderOptInSaving ? "Enabling..." : "Email me a reminder"}
+                          </button>
+                        )}
                       </div>
+                    )}
+                  </div>
+                ) : document.assignment_due_date && !savedDueTime ? (
+                  /* ── Case 2: due date detected, due time missing ── */
+                  <div className="space-y-3">
+                    <p className="text-[17px] font-semibold text-gray-900">
+                      Due: {formatDate(document.assignment_due_date)}
+                    </p>
+
+                    {document.reminder_status === "past_due" ? (
+                      <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                        Past due
+                      </span>
                     ) : (
                       <div className="space-y-2">
                         <p className="text-sm text-amber-700">
-                          Exact due time not found. Set the time below to receive a reminder 24 hours before the deadline.
+                          Due time was not detected. Enter the time to enable a reminder.
                         </p>
                         <div className="flex items-center gap-3">
                           <input
@@ -953,9 +1073,43 @@ export default function DocumentPage() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">
-                    No due date was detected from this document.
-                  </p>
+                  /* ── Case 3: no due date detected ── */
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-500">
+                      No due date was detected from this document.
+                    </p>
+                    {!manualReminderOpen ? (
+                      <button
+                        type="button"
+                        onClick={() => setManualReminderOpen(true)}
+                        className="text-sm font-medium text-gray-700 underline hover:text-gray-900"
+                      >
+                        I want to set a reminder for this assignment
+                      </button>
+                    ) : (
+                      <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+                        <p className="text-sm font-medium text-gray-700">
+                          Enter the due date and time to enable a reminder.
+                        </p>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <input
+                            type="date"
+                            value={dueDateInput}
+                            onChange={(e) => setDueDateInput(e.target.value)}
+                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { void handleSaveDueDate(); }}
+                            disabled={dueDateSaving || !dueDateInput.trim()}
+                            className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {dueDateSaving ? "Saving..." : "Set Due Date"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             ) : null}

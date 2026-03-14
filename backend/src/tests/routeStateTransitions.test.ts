@@ -164,6 +164,7 @@ function seedDocument(overrides: Partial<DocumentRecord> = {}): DocumentRecord {
     errorMessage: null,
     assignmentDueDate: null,
     assignmentDueTime: null,
+    reminderOptIn: false,
     reminderStatus: "pending",
     reminderDeadlineKey: null,
     reminderLastError: null,
@@ -247,6 +248,115 @@ test("uploadDocumentHandler rejects invoice before persistence", async () => {
   await assertUnsupportedUploadRejected({
     filename: "invoice.pdf",
     text: "Invoice number 1042. Billing statement with amount due by May 15.",
+  });
+});
+
+test("uploadDocumentHandler rejects administrative award approval email before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "award-email.pdf",
+    text:
+      "From: Student Awards studentawards@lastmile-ed.org\n" +
+      "Subject: Congratulations! Your Financial Support Application Has Been Approved\n" +
+      "Date: February 24, 2026 at 11:09 AM\n" +
+      "To: student@example.com\n" +
+      "Award Details:\nAward Amount: $1,744.69\n" +
+      "Accept Your Award in the Student Application Portal to begin disbursement for tuition payout.",
+  });
+});
+
+test("uploadDocumentHandler rejects financial support notice with admin-email patterns before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "financial-support.pdf",
+    text:
+      "From: Financial Support Office\n" +
+      "Subject: Funding approval update\n" +
+      "Date: March 1, 2026\n" +
+      "To: student@example.com\n" +
+      "Your financial support application has been approved. Review the award details, award amount, and disbursement instructions.",
+  });
+});
+
+test("uploadDocumentHandler rejects insurance policy brochure before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "student-secure.pdf",
+    text:
+      "International Student Health Insurance\n" +
+      "General Information\n" +
+      "Claims Information\n" +
+      "Policy Benefits\n" +
+      "Policy Pricing\n" +
+      "Policy Exclusions\n" +
+      "Description of Coverage with deductible, copayments, and coinsurance tables.",
+  });
+});
+
+test("uploadDocumentHandler rejects academic administrative approval form before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "research-coop-approval-form.pdf",
+    text:
+      "RESEARCH CO-OP APPROVAL FORM\n" +
+      "STATEMENT OF EXPECTATIONS\n" +
+      "Name: Student Rocket ID #: R01234567\n" +
+      "Co-op Semester: Spring 2026\n" +
+      "Start Date: January 21, 2026 End Date: May 5, 2026\n" +
+      "Supervisor/Professor Name: Dr. Example\n" +
+      "Institution Name: University of Toledo\n" +
+      "Department Name: EECS\n" +
+      "Faculty Signature: Example\nStudent Signature: Student\n" +
+      "GradLeaders and CPT approval instructions included.",
+  });
+});
+
+test("uploadDocumentHandler rejects weekly project status report before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "Project_Report_Week8.pdf",
+    text:
+      "Weekly Progress Report\n" +
+      "Project Status Summary (Percentage Completed: 80%)\n" +
+      "Individual Contributions\n" +
+      "Next Week's SMART Goals\n" +
+      "Action/Task Plan\n" +
+      "Open Issues, Risks, Change Requests\n" +
+      "Milestones and Deliverables\n" +
+      "Project Faculty Advisor\n" +
+      "Signatures",
+  });
+});
+
+test("uploadDocumentHandler rejects research proposal before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "Research Proposal.pdf",
+    text:
+      "Research Proposal\n" +
+      "Title: Data-Driven Neural Network Models for Intelligent Engineering Applications\n" +
+      "Co-op Period: January 21, 2026 - May 5, 2026\n" +
+      "Proposed Faculty Supervisor: Dr. Example\n" +
+      "Research Objectives\n" +
+      "Scope of Work\n" +
+      "Proposed Datasets\n" +
+      "Methodology\n" +
+      "Timeline & Milestones\n" +
+      "Expected Outcomes\n" +
+      "Student Responsibilities\n" +
+      "Faculty Supervisor Role",
+  });
+});
+
+test("uploadDocumentHandler rejects rental agreement before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "Thrifty Rental Agreement.pdf",
+    text:
+      "Thrifty Rental Agreement\n" +
+      "Rental Record# 422397172\n" +
+      "Vehicle: 2025 ALTIMA\n" +
+      "Rental Rate 3 @ $52.02 per day\n" +
+      "Fuel Responsibility\n" +
+      "Service Charges/Taxes\n" +
+      "TOTAL ESTIMATED CHARGE $268.96\n" +
+      "Credit Card Authorization Amount $469.00\n" +
+      "Rental Location: ILIKAI HOTEL\n" +
+      "Rental Time: 03/02/26 at 12:11PM\n" +
+      "Return Time: 03/05/26 at 10:30AM",
   });
 });
 
@@ -671,6 +781,31 @@ test("getDocumentHandler returns metadata for owned document", async () => {
   assert.equal(body.filename, doc.filename);
   assert.equal(body.study_guide_status, "ready");
   assert.equal(body.quiz_status, "failed");
+});
+
+test("getDocumentHandler backfills missing homework due date from extracted text", async () => {
+  const { getDocumentHandler } = await loadHandlers();
+  const doc = seedDocument({
+    documentType: "HOMEWORK",
+    assignmentDueDate: null,
+    extractedText:
+      "Assignment 01\nAssigned: 09/28/2025\nDue: 10/12/2025 at 11:59pm\nSubmit on Canvas.",
+  });
+  const req: MockReq = {
+    params: { documentId: doc.id },
+    auth: { userId: "test-user", email: "test@example.com" },
+  };
+  const res = makeRes();
+
+  await getDocumentHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 200);
+  const body = res.body as Record<string, unknown>;
+  assert.equal(body.assignment_due_date, "2025-10-12");
+
+  const persisted = getDocument(doc.id);
+  assert.ok(persisted);
+  assert.equal(persisted.assignmentDueDate, "2025-10-12");
 });
 
 test("getDocumentHandler returns 403 for non-owner", async () => {

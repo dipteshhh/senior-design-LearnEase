@@ -224,3 +224,182 @@ test("homework mentioning office hours is still HOMEWORK", () => {
   const result = detectDocumentType(text);
   assert.equal(result.documentType, "HOMEWORK");
 });
+
+test("award approval email with headers is rejected as UNSUPPORTED", () => {
+  const text =
+    "From: Student Awards studentawards@lastmile-ed.org\n" +
+    "Subject: Congratulations! Your Financial Support Application Has Been Approved\n" +
+    "Date: February 24, 2026 at 11:09 AM\n" +
+    "To: student@example.com\n" +
+    "Award Details:\nAward Amount: $1,744.69\nAccept Your Award in the Student Application Portal.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("financial support award notice without full email header still rejects", () => {
+  const text =
+    "Your financial support application has been approved.\n" +
+    "Award Details: Award Amount $1,744.69.\n" +
+    "Accept Your Award to begin disbursement for tuition payout.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+});
+
+test("insurance brochure with policy sections is rejected as UNSUPPORTED", () => {
+  const text =
+    "International Student Health Insurance\n" +
+    "General Information\n" +
+    "Claims Information\n" +
+    "Policy Benefits\n" +
+    "Policy Pricing\n" +
+    "Policy Exclusions\n" +
+    "Deductible, Copayments, Coinsurance, and Explanation of Benefits.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("policy brochure with claims and benefits vocabulary is rejected as UNSUPPORTED", () => {
+  const text =
+    "Plan Participant ID Card\n" +
+    "Description of Coverage\n" +
+    "Claims Information and claim form instructions\n" +
+    "Deductible and copayment tables for insurance coverage.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("research co-op approval form is rejected as UNSUPPORTED", () => {
+  const text =
+    "RESEARCH CO-OP APPROVAL FORM\n" +
+    "STATEMENT OF EXPECTATIONS\n" +
+    "Co-op Semester: Spring 2026\n" +
+    "Start Date: January 21, 2026 End Date: May 5, 2026\n" +
+    "Supervisor/Professor Name: Dr. Example\n" +
+    "Institution Name: University of Toledo\n" +
+    "Department Name: Electrical Engineering\n" +
+    "Faculty Signature:\nStudent Signature:";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("academic administrative form with GradLeaders and CPT is rejected as UNSUPPORTED", () => {
+  const text =
+    "Approval Form\n" +
+    "Statement of Expectations\n" +
+    "Start Date: January 21, 2026 End Date: May 5, 2026\n" +
+    "Report your approved research as a co-op in GradLeaders.\n" +
+    "International Students may need work authorization and CPT approval.\n" +
+    "Faculty Signature and Student Signature required.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("weekly project progress report is rejected as UNSUPPORTED", () => {
+  const text =
+    "Weekly Progress Report\n" +
+    "Project Status Summary (Percentage Completed: 80%)\n" +
+    "Individual Contributions\n" +
+    "Next Week's SMART Goals\n" +
+    "Action/Task Plan\n" +
+    "Open Issues, Risks, Change Requests\n" +
+    "Milestones and Deliverables\n" +
+    "Faculty Advisor";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("status report with milestones and advisor section is rejected as UNSUPPORTED", () => {
+  const text =
+    "Project Status Summary\n" +
+    "Percentage Completed: 65%\n" +
+    "Individual Contributions by team member\n" +
+    "Milestones and Deliverables\n" +
+    "Status Note\n" +
+    "Open Issues, Risks, Change Requests\n" +
+    "Project Faculty Advisor signature";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("research proposal is rejected as UNSUPPORTED", () => {
+  const text =
+    "Research Proposal\n" +
+    "Proposed Faculty Supervisor: Dr. Example\n" +
+    "Research Objectives\n" +
+    "Scope of Work\n" +
+    "Proposed Datasets\n" +
+    "Methodology\n" +
+    "Timeline & Milestones\n" +
+    "Expected Outcomes";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("academic planning proposal with supervisor role and milestones is rejected as UNSUPPORTED", () => {
+  const text =
+    "Project Proposal\n" +
+    "Co-op Period: January 21, 2026 - May 5, 2026\n" +
+    "Student Responsibilities\n" +
+    "Faculty Supervisor Role\n" +
+    "Research Objectives\n" +
+    "Methodology\n" +
+    "Timeline and Milestones\n" +
+    "Expected Outcomes";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("rental agreement is rejected as UNSUPPORTED", () => {
+  const text =
+    "Thrifty Rental Agreement\n" +
+    "Rental Record# 422397172\n" +
+    "Vehicle: 2025 ALTIMA\n" +
+    "Rental Rate 3 @ $52.02 per day\n" +
+    "Service Charges/Taxes\n" +
+    "TOTAL ESTIMATED CHARGE $268.96\n" +
+    "Credit Card Authorization Amount $469.00\n" +
+    "Rental Time: 03/02/26 at 12:11PM\n" +
+    "Return Time: 03/05/26 at 10:30AM";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("transactional receipt-style document is rejected as UNSUPPORTED", () => {
+  const text =
+    "Booking Confirmation\n" +
+    "Receipt\n" +
+    "Service Charges and Taxes\n" +
+    "Total Charge $189.20\n" +
+    "Credit Card Authorization\n" +
+    "Rental Location: Airport Counter\n" +
+    "Return Location: Downtown Office";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("supported homework is not rejected by admin award rules", () => {
+  const text =
+    "Homework 6 assignment. Submit your answers by the due date and include screenshots from ADS / SSMS.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "HOMEWORK");
+  assert.equal(result.isAssignment, true);
+});
+
+test("supported class notes are not rejected by insurance brochure rules", () => {
+  const text =
+    "Class notes for week 5 lecture on health policy modeling and coverage estimation.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "LECTURE");
+  assert.equal(result.isAssignment, false);
+});

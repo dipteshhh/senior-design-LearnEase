@@ -63,6 +63,7 @@ function makeDocument(id: string, userId: string, checklistLabel: string): Docum
     errorMessage: null,
     assignmentDueDate: null,
     assignmentDueTime: null,
+    reminderOptIn: false,
     reminderStatus: "pending",
     reminderDeadlineKey: null,
     reminderLastError: null,

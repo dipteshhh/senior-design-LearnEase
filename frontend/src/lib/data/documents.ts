@@ -85,15 +85,41 @@ export async function deleteDocument(documentId: string): Promise<void> {
   });
 }
 
+export async function updateDueDate(
+  documentId: string,
+  dueDate: string
+): Promise<{ assignment_due_date: string; assignment_due_time: string | null; reminder_opt_in: boolean; reminder_status: string }> {
+  return api<{ assignment_due_date: string; assignment_due_time: string | null; reminder_opt_in: boolean; reminder_status: string }>(
+    `/api/documents/${documentId}/due-date`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ due_date: dueDate }),
+    }
+  );
+}
+
 export async function updateDueTime(
   documentId: string,
   dueTime: string
-): Promise<{ assignment_due_date: string | null; assignment_due_time: string; reminder_status: string }> {
-  return api<{ assignment_due_date: string | null; assignment_due_time: string; reminder_status: string }>(
+): Promise<{ assignment_due_date: string | null; assignment_due_time: string; reminder_opt_in: boolean; reminder_status: string }> {
+  return api<{ assignment_due_date: string | null; assignment_due_time: string; reminder_opt_in: boolean; reminder_status: string }>(
     `/api/documents/${documentId}/due-time`,
     {
       method: "PATCH",
       body: JSON.stringify({ due_time: dueTime }),
+    }
+  );
+}
+
+export async function updateReminderOptIn(
+  documentId: string,
+  optIn: boolean
+): Promise<{ reminder_opt_in: boolean; reminder_status: string }> {
+  return api<{ reminder_opt_in: boolean; reminder_status: string }>(
+    `/api/documents/${documentId}/reminder-opt-in`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ opt_in: optIn }),
     }
   );
 }

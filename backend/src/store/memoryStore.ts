@@ -13,7 +13,7 @@ import {
 export type DocumentStatus = "uploaded" | "processing" | "ready" | "failed";
 export type GenerationStatus = "idle" | "processing" | "ready" | "failed";
 export type FileType = "PDF" | "DOCX";
-export type ReminderStatus = "pending" | "sending" | "sent" | "failed" | "skipped";
+export type ReminderStatus = "pending" | "sending" | "sent" | "failed" | "skipped" | "past_due";
 
 const FLOW_PROCESSING_CODE = {
   STUDY_GUIDE: "STUDY_GUIDE_PROCESSING",
@@ -56,6 +56,7 @@ export interface DocumentRecord {
   errorMessage: string | null;
   assignmentDueDate: string | null;
   assignmentDueTime: string | null;
+  reminderOptIn: boolean;
   reminderStatus: ReminderStatus;
   reminderDeadlineKey: string | null;
   reminderLastError: string | null;
@@ -87,6 +88,7 @@ interface DocumentRow {
   assignment_due_date: string | null;
   assignment_due_time: string | null;
   reminder_sent: number | null;
+  reminder_opt_in: number | null;
   reminder_status: string | null;
   reminder_deadline_key: string | null;
   reminder_last_error: string | null;
@@ -414,6 +416,7 @@ function upsertDocument(doc: DocumentRecord): void {
         assignment_due_date,
         assignment_due_time,
         reminder_sent,
+        reminder_opt_in,
         reminder_status,
         reminder_deadline_key,
         reminder_last_error,
@@ -442,6 +445,7 @@ function upsertDocument(doc: DocumentRecord): void {
         @assignment_due_date,
         @assignment_due_time,
         @reminder_sent,
+        @reminder_opt_in,
         @reminder_status,
         @reminder_deadline_key,
         @reminder_last_error,
@@ -469,6 +473,7 @@ function upsertDocument(doc: DocumentRecord): void {
         assignment_due_date = excluded.assignment_due_date,
         assignment_due_time = excluded.assignment_due_time,
         reminder_sent = excluded.reminder_sent,
+        reminder_opt_in = excluded.reminder_opt_in,
         reminder_status = excluded.reminder_status,
         reminder_deadline_key = excluded.reminder_deadline_key,
         reminder_last_error = excluded.reminder_last_error,
@@ -497,6 +502,7 @@ function upsertDocument(doc: DocumentRecord): void {
     assignment_due_date: doc.assignmentDueDate,
     assignment_due_time: doc.assignmentDueTime,
     reminder_sent: doc.reminderStatus === "sent" ? 1 : 0,
+    reminder_opt_in: doc.reminderOptIn ? 1 : 0,
     reminder_status: doc.reminderStatus,
     reminder_deadline_key: doc.reminderDeadlineKey,
     reminder_last_error: doc.reminderLastError,
@@ -580,6 +586,7 @@ function readDocumentRowById(id: string): DocumentRow | undefined {
           d.assignment_due_date,
           d.assignment_due_time,
           d.reminder_sent,
+          d.reminder_opt_in,
           d.reminder_status,
           d.reminder_deadline_key,
           d.reminder_last_error,
@@ -654,6 +661,7 @@ function hydrateDocument(row: DocumentRow, options: HydrationOptions): DocumentR
     errorMessage: row.error_message,
     assignmentDueDate: row.assignment_due_date ?? null,
     assignmentDueTime: row.assignment_due_time ?? null,
+    reminderOptIn: (row.reminder_opt_in ?? 0) === 1,
     reminderStatus: (row.reminder_status as ReminderStatus) ?? "pending",
     reminderDeadlineKey: row.reminder_deadline_key ?? null,
     reminderLastError: row.reminder_last_error ?? null,
@@ -718,6 +726,7 @@ export function listDocuments(): DocumentRecord[] {
           d.assignment_due_date,
           d.assignment_due_time,
           d.reminder_sent,
+          d.reminder_opt_in,
           d.reminder_status,
           d.reminder_deadline_key,
           d.reminder_last_error,
@@ -762,6 +771,7 @@ export function listDocumentsByUser(userId: string): DocumentRecord[] {
           d.assignment_due_date,
           d.assignment_due_time,
           d.reminder_sent,
+          d.reminder_opt_in,
           d.reminder_status,
           d.reminder_deadline_key,
           d.reminder_last_error,
@@ -800,6 +810,7 @@ export interface DocumentSummary {
   hasQuiz: boolean;
   assignmentDueDate: string | null;
   assignmentDueTime: string | null;
+  reminderOptIn: boolean;
   reminderStatus: ReminderStatus;
 }
 
@@ -820,6 +831,7 @@ interface DocumentSummaryRow {
   has_quiz: number;
   assignment_due_date: string | null;
   assignment_due_time: string | null;
+  reminder_opt_in: number | null;
   reminder_status: string | null;
 }
 
@@ -844,6 +856,7 @@ export function listDocumentSummariesByUser(userId: string): DocumentSummary[] {
           EXISTS (SELECT 1 FROM quizzes q WHERE q.document_id = d.id) AS has_quiz,
           d.assignment_due_date,
           d.assignment_due_time,
+          d.reminder_opt_in,
           d.reminder_status
         FROM documents d
         WHERE d.user_id = ?
@@ -875,6 +888,7 @@ export function listDocumentSummariesByUser(userId: string): DocumentSummary[] {
     hasQuiz: row.has_quiz === 1,
     assignmentDueDate: row.assignment_due_date ?? null,
     assignmentDueTime: row.assignment_due_time ?? null,
+    reminderOptIn: (row.reminder_opt_in ?? 0) === 1,
     reminderStatus: (row.reminder_status as ReminderStatus) ?? "pending",
   }));
 }
@@ -1069,6 +1083,43 @@ export function updateDocumentStatus(
   return result.changes > 0;
 }
 
+/**
+ * Update the reminder opt-in preference for a document.
+ * When opting in, resets reminder state to 'pending' so the scheduler picks it up.
+ * When opting out, sets status to 'skipped' to stop processing.
+ */
+export function updateReminderOptIn(id: string, optIn: boolean): boolean {
+  if (optIn) {
+    const result = db
+      .prepare(
+        `UPDATE documents
+         SET reminder_opt_in = 1,
+             reminder_status = 'pending',
+             reminder_deadline_key = NULL,
+             reminder_last_error = NULL,
+             reminder_attempted_at = NULL,
+             reminder_sent = 0
+         WHERE id = ?`
+      )
+      .run(id);
+    return result.changes > 0;
+  } else {
+    const result = db
+      .prepare(
+        `UPDATE documents
+         SET reminder_opt_in = 0,
+             reminder_status = 'skipped',
+             reminder_deadline_key = NULL,
+             reminder_last_error = NULL,
+             reminder_attempted_at = NULL,
+             reminder_sent = 0
+         WHERE id = ?`
+      )
+      .run(id);
+    return result.changes > 0;
+  }
+}
+
 export function buildDeadlineKey(dueDate: string, dueTime: string): string {
   return `${dueDate}T${dueTime}`;
 }
@@ -1124,12 +1175,13 @@ export interface ReminderCandidate {
 
 /**
  * Lists HOMEWORK documents eligible for a reminder:
+ * - user has opted in (reminder_opt_in = 1)
  * - has both due date and due time
  * - reminder_status is 'pending' (includes transient-retry rows reset to pending)
  *
- * Rows in 'sending', 'sent', 'failed', or 'skipped' are excluded.
+ * Rows in 'sending', 'sent', 'failed', 'skipped', or 'past_due' are excluded.
  * Transient failures are set back to 'pending' by markReminderPendingRetry,
- * so they re-enter here automatically. Terminal failures ('failed', 'skipped')
+ * so they re-enter here automatically. Terminal failures ('failed', 'skipped', 'past_due')
  * only become eligible again when the deadline changes (which resets to 'pending').
  */
 export function listPendingReminders(): ReminderCandidate[] {
@@ -1146,6 +1198,7 @@ export function listPendingReminders(): ReminderCandidate[] {
         FROM documents d
         LEFT JOIN users u ON u.id = d.user_id
         WHERE d.document_type = 'HOMEWORK'
+          AND d.reminder_opt_in = 1
           AND d.assignment_due_date IS NOT NULL
           AND d.assignment_due_time IS NOT NULL
           AND d.reminder_status = 'pending'
@@ -1280,6 +1333,29 @@ export function markReminderSkipped(
        WHERE id = ?`
     )
     .run(deadlineKey, now, reason, documentId);
+  return result.changes > 0;
+}
+
+/**
+ * Mark a reminder as past due (terminal). The deadline has already passed,
+ * so no reminder email will be sent. Like 'skipped', this is terminal
+ * unless the deadline changes (which resets status to 'pending').
+ */
+export function markReminderPastDue(
+  documentId: string,
+  deadlineKey: string
+): boolean {
+  const now = new Date().toISOString();
+  const result = db
+    .prepare(
+      `UPDATE documents
+       SET reminder_status = 'past_due',
+           reminder_deadline_key = ?,
+           reminder_attempted_at = ?,
+           reminder_last_error = 'Deadline already passed'
+       WHERE id = ?`
+    )
+    .run(deadlineKey, now, documentId);
   return result.changes > 0;
 }
 

@@ -4,6 +4,7 @@ import {
   claimReminderForSending,
   listPendingReminders,
   markReminderFailed,
+  markReminderPastDue,
   markReminderPendingRetry,
   markReminderSent,
   markReminderSkipped,
@@ -155,8 +156,23 @@ export function checkAndSendReminders(nowOverride?: Date): void {
 
     const timeUntilDeadline = deadline.getTime() - nowMs;
 
-    // Only send if deadline is within the next 24 hours and hasn't passed
-    if (timeUntilDeadline <= 0 || timeUntilDeadline > REMINDER_WINDOW_MS) {
+    // Deadline already passed — mark as past_due so it stops being queried.
+    if (timeUntilDeadline <= 0) {
+      const deadlineKey = buildDeadlineKey(
+        candidate.assignmentDueDate,
+        candidate.assignmentDueTime
+      );
+      markReminderPastDue(candidate.documentId, deadlineKey);
+      logger.info("Marked reminder past due — deadline already passed", {
+        documentId: candidate.documentId,
+        dueDate: candidate.assignmentDueDate,
+        dueTime: candidate.assignmentDueTime,
+      });
+      continue;
+    }
+
+    // Not yet within the 24-hour reminder window
+    if (timeUntilDeadline > REMINDER_WINDOW_MS) {
       continue;
     }
 
