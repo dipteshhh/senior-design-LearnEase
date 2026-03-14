@@ -5,11 +5,9 @@ export interface DetectionResult {
   isAssignment: boolean;
 }
 
-// ── Negative signals: documents that should be rejected at upload ────
+// ── Unsupported document profiles ────────────────────────────────────
 
-const UNSUPPORTED_TRIGGERS = [
-  "syllabus",
-  "syllabi",
+const HARD_UNSUPPORTED_TRIGGERS = [
   "resume",
   "curriculum vitae",
   "portfolio",
@@ -21,13 +19,33 @@ const UNSUPPORTED_TRIGGERS = [
   "transcript key",
   "cumulative gpa",
   "grade points",
-  "invoice",
   "invoice number",
   "billing statement",
   "amount due",
+];
+
+const SYLLABUS_TRIGGERS = ["syllabus", "syllabi"];
+
+const SYLLABUS_STRUCTURE_TRIGGERS = [
+  "grading policy",
+  "attendance policy",
+  "late work",
+  "catalog description",
+  "learning outcomes",
+  "course schedule",
+];
+
+const SCHEDULE_DOCUMENT_TRIGGERS = [
   "class schedule",
   "course schedule",
   "semester schedule",
+];
+
+const OUT_OF_SCOPE_ACADEMIC_DOC_TRIGGERS = [
+  "project report",
+  "research paper",
+  "lab report",
+  "technical report",
 ];
 
 const ADMIN_EMAIL_HEADER_TRIGGERS = [
@@ -156,17 +174,54 @@ const TRANSACTIONAL_DOCUMENT_TRIGGERS = [
   "vehicle:",
 ];
 
-// ── Positive signals ─────────────────────────────────────────────────
+// ── Supported document profiles ─────────────────────────────────────
 
-const HOMEWORK_TRIGGERS = [
+const HOMEWORK_CORE_TRIGGERS = [
   "homework",
   "assignment",
   "problem set",
-  "due date",
-  "submit",
 ];
 
-const LECTURE_TRIGGERS = [
+const HOMEWORK_SUBMISSION_TRIGGERS = [
+  "submit",
+  "submission",
+  "submitted",
+  "upload",
+  "turn in",
+];
+
+const HOMEWORK_FORMAT_TRIGGERS = [
+  ".pdf",
+  ".docx",
+  ".doc",
+  ".zip",
+  ".7z",
+  "file format",
+  "hardcopy",
+  "typed",
+  "max points",
+  "points",
+];
+
+const HOMEWORK_DELIVERABLE_TRIGGERS = [
+  "question 1",
+  "question 2",
+  "problem 1",
+  "problem 2",
+  "exercise 1",
+  "exercise 2",
+  "requirements:",
+  "write a function",
+  "implement",
+  "your solution should",
+];
+
+const HOMEWORK_DUE_TRIGGERS = [
+  "due date",
+  "deadline",
+];
+
+const LECTURE_CORE_TRIGGERS = [
   "lecture",
   "learning objectives",
   "slides",
@@ -177,6 +232,21 @@ const LECTURE_TRIGGERS = [
   "class notes",
   "course notes",
   "notes:",
+];
+
+const LECTURE_DECK_SUPPORT_TRIGGERS = [
+  "course introduction",
+  "chapter objectives",
+  "continued next slide",
+  "you should be able to",
+  "my lectures",
+  "lectures in",
+  "textbook",
+  "agenda",
+  "before we start",
+  "concept",
+  "overview",
+  "learning goal",
 ];
 
 function hasAnyTrigger(text: string, triggers: string[]): boolean {
@@ -190,6 +260,132 @@ function countTriggers(text: string, triggers: string[]): number {
     (count, trigger) => count + (lowerText.includes(trigger) ? 1 : 0),
     0
   );
+}
+
+function countPattern(text: string, pattern: RegExp): number {
+  return [...text.matchAll(pattern)].length;
+}
+
+function countBulletLikeMarkers(text: string): number {
+  return countPattern(text, /[•▪○]/g);
+}
+
+function scoreLectureProfile(text: string): number {
+  const lowerText = text.toLowerCase();
+  const lectureTriggerCount = countTriggers(lowerText, LECTURE_CORE_TRIGGERS);
+  const lectureDeckSupportCount = countTriggers(lowerText, LECTURE_DECK_SUPPORT_TRIGGERS);
+  const hasLectureSessionAnchor = /\blecture\s+\d+[a-z]?\b/.test(lowerText);
+  const hasChapterAnchor = /\bchapter\s+\d+[a-z]?\b/.test(lowerText);
+  const objectiveMentions = countPattern(lowerText, /\b(?:objective|objectives|agenda)\b/g);
+  const repeatedLectureMentions = countPattern(lowerText, /\blecture\b/g);
+  const repeatedChapterMentions = countPattern(lowerText, /\bchapter\b/g);
+  const bulletMarkers = countBulletLikeMarkers(text);
+
+  let score = lectureTriggerCount;
+  if (hasLectureSessionAnchor) score += 4;
+  if (hasChapterAnchor) score += 2;
+  if (objectiveMentions >= 1) score += 2;
+  if (objectiveMentions >= 2) score += 1;
+  if (lectureDeckSupportCount >= 1) score += 2;
+  if (lectureDeckSupportCount >= 3) score += 1;
+  if (repeatedLectureMentions >= 3) score += 2;
+  if (repeatedChapterMentions >= 2) score += 1;
+  if (bulletMarkers >= 8) score += 2;
+  if (bulletMarkers >= 20) score += 1;
+  if (lowerText.includes("lecture slides")) score += 2;
+  if (lowerText.includes("continued next slide")) score += 2;
+  return score;
+}
+
+function scoreHomeworkProfile(text: string): number {
+  const lowerText = text.toLowerCase();
+  const coreMatches = countTriggers(lowerText, HOMEWORK_CORE_TRIGGERS);
+  const submissionMatches = countTriggers(lowerText, HOMEWORK_SUBMISSION_TRIGGERS);
+  const formatMatches = countTriggers(lowerText, HOMEWORK_FORMAT_TRIGGERS);
+  const deliverableMatches = countTriggers(lowerText, HOMEWORK_DELIVERABLE_TRIGGERS);
+  const dueMatches =
+    countTriggers(lowerText, HOMEWORK_DUE_TRIGGERS) +
+    countPattern(lowerText, /\bdue\s*:/g);
+  const hasHomeworkTitleAnchor =
+    /(?:^|\n)\s*(?:homework|assignment|problem set)\b/m.test(lowerText);
+  const numberedAssignmentMentions = countPattern(
+    lowerText,
+    /\b(?:assignment|homework|problem set)\s*(?:#?\d+[a-z]?|[ivxlcdm]+)\b/g
+  );
+  const numberedProblemMentions = countPattern(
+    lowerText,
+    /\b(?:question|problem|exercise)\s+\d+\b/g
+  );
+
+  let score = 0;
+  score += coreMatches * 2;
+  score += Math.min(submissionMatches, 2) * 2;
+  score += Math.min(dueMatches, 2) * 2;
+  score += Math.min(formatMatches, 2);
+  score += Math.min(deliverableMatches, 3);
+  if (hasHomeworkTitleAnchor) score += 2;
+  if (numberedAssignmentMentions >= 1) score += 2;
+  if (numberedProblemMentions >= 2) score += 2;
+  if (lowerText.includes("max points")) score += 1;
+
+  // Reject generic mentions of assignments/homework inside other document types.
+  if (
+    !hasHomeworkTitleAnchor &&
+    numberedAssignmentMentions === 0 &&
+    numberedProblemMentions === 0 &&
+    formatMatches === 0 &&
+    deliverableMatches < 2
+  ) {
+    score = Math.min(score, 5);
+  }
+
+  return score;
+}
+
+function looksLikeSyllabusDocument(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  const hasSyllabusAnchor = hasAnyTrigger(lowerText, SYLLABUS_TRIGGERS);
+  const hasCourseSyllabusAnchor = lowerText.includes("course syllabus");
+  const structureMatches = countTriggers(lowerText, SYLLABUS_STRUCTURE_TRIGGERS);
+
+  if (!hasSyllabusAnchor) {
+    return false;
+  }
+
+  if (hasCourseSyllabusAnchor && structureMatches >= 1) {
+    return true;
+  }
+
+  return structureMatches >= 2;
+}
+
+function looksLikeStandaloneScheduleDocument(text: string): boolean {
+  return hasAnyTrigger(text, SCHEDULE_DOCUMENT_TRIGGERS);
+}
+
+function looksLikeOutOfScopeAcademicDocument(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  const outOfScopeMatches = countTriggers(lowerText, OUT_OF_SCOPE_ACADEMIC_DOC_TRIGGERS);
+
+  if (lowerText.includes("research paper")) {
+    return true;
+  }
+
+  if (lowerText.includes("lab report")) {
+    return true;
+  }
+
+  if (
+    lowerText.includes("project report") &&
+    (lowerText.includes("submit") ||
+      lowerText.includes("due date") ||
+      lowerText.includes("results") ||
+      lowerText.includes("analysis"))
+  ) {
+    return true;
+  }
+
+  return outOfScopeMatches >= 2;
 }
 
 function looksLikeAdministrativeAwardEmail(text: string): boolean {
@@ -372,30 +568,115 @@ function looksLikeTransactionalDocument(text: string): boolean {
   return transactionalMatches >= 4;
 }
 
+function scoreUnsupportedProfile(text: string): number {
+  const lowerText = text.toLowerCase();
+  const hardUnsupportedMatches = countTriggers(lowerText, HARD_UNSUPPORTED_TRIGGERS);
+  const syllabusDocument = looksLikeSyllabusDocument(lowerText);
+  const standaloneScheduleDocument = looksLikeStandaloneScheduleDocument(lowerText);
+  const outOfScopeAcademicDocument = looksLikeOutOfScopeAcademicDocument(lowerText);
+  const administrativeAwardEmail = looksLikeAdministrativeAwardEmail(lowerText);
+  const insurancePolicyBrochure = looksLikeInsurancePolicyBrochure(lowerText);
+  const academicAdministrativeForm = looksLikeAcademicAdministrativeForm(lowerText);
+  const projectStatusReport = looksLikeProjectStatusReport(lowerText);
+  const researchProposal = looksLikeResearchProposal(lowerText);
+  const transactionalDocument = looksLikeTransactionalDocument(lowerText);
+  const hasStrongUnsupportedProfile =
+    syllabusDocument ||
+    standaloneScheduleDocument ||
+    outOfScopeAcademicDocument ||
+    administrativeAwardEmail ||
+    insurancePolicyBrochure ||
+    academicAdministrativeForm ||
+    projectStatusReport ||
+    researchProposal ||
+    transactionalDocument;
+  let score = 0;
+
+  if (hardUnsupportedMatches >= 2) {
+    score += 8;
+  } else if (hardUnsupportedMatches === 1) {
+    score += hasStrongUnsupportedProfile ? 8 : 3;
+  }
+
+  if (syllabusDocument) {
+    score += 7;
+  }
+
+  if (standaloneScheduleDocument) {
+    score += 7;
+  }
+
+  if (outOfScopeAcademicDocument) {
+    score += 7;
+  }
+
+  if (administrativeAwardEmail) {
+    score += 8;
+  }
+
+  if (insurancePolicyBrochure) {
+    score += 8;
+  }
+
+  if (academicAdministrativeForm) {
+    score += 8;
+  }
+
+  if (projectStatusReport) {
+    score += 8;
+  }
+
+  if (researchProposal) {
+    score += 8;
+  }
+
+  if (transactionalDocument) {
+    score += 8;
+  }
+
+  return score;
+}
+
 export function detectDocumentType(text: string): DetectionResult {
   const normalized = text.trim();
   if (!normalized) {
     return { documentType: "UNSUPPORTED", isAssignment: false };
   }
 
-  // Check negative signals first — reject obvious unsupported content
+  const lectureScore = scoreLectureProfile(normalized);
+  const homeworkScore = scoreHomeworkProfile(normalized);
+  const unsupportedScore = scoreUnsupportedProfile(normalized);
+
+  // Priority order:
+  // 1. Strong lecture decks
+  // 2. Strong homework assignments
+  // 3. Strong unsupported/out-of-scope documents
+  // 4. Conservative fallback based on the highest remaining score
+  if (lectureScore >= 8 && lectureScore >= homeworkScore + 2 && lectureScore >= unsupportedScore - 1) {
+    return { documentType: "LECTURE", isAssignment: false };
+  }
+
+  if (homeworkScore >= 8 && homeworkScore >= lectureScore && homeworkScore >= unsupportedScore + 2) {
+    return { documentType: "HOMEWORK", isAssignment: true };
+  }
+
   if (
-    hasAnyTrigger(normalized, UNSUPPORTED_TRIGGERS) ||
-    looksLikeAdministrativeAwardEmail(normalized) ||
-    looksLikeInsurancePolicyBrochure(normalized) ||
-    looksLikeAcademicAdministrativeForm(normalized) ||
-    looksLikeProjectStatusReport(normalized) ||
-    looksLikeResearchProposal(normalized) ||
-    looksLikeTransactionalDocument(normalized)
+    unsupportedScore >= 7 &&
+    lectureScore < 8 &&
+    homeworkScore < unsupportedScore + 3
   ) {
     return { documentType: "UNSUPPORTED", isAssignment: false };
   }
 
-  if (hasAnyTrigger(normalized, HOMEWORK_TRIGGERS)) {
+  if (lectureScore >= 5 && lectureScore >= homeworkScore && lectureScore > unsupportedScore) {
+    return { documentType: "LECTURE", isAssignment: false };
+  }
+
+  if (homeworkScore >= 6 && unsupportedScore <= 4) {
     return { documentType: "HOMEWORK", isAssignment: true };
   }
 
-  if (hasAnyTrigger(normalized, LECTURE_TRIGGERS)) {
+  if (countTriggers(normalized, LECTURE_CORE_TRIGGERS) >= 1 && unsupportedScore === 0) {
     return { documentType: "LECTURE", isAssignment: false };
   }
 

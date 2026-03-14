@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 
-type SqliteDatabase = any;
+type SqliteDatabase = InstanceType<typeof Database>;
 
 let dbInstance: SqliteDatabase | null = null;
 

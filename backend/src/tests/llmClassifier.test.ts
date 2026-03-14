@@ -69,9 +69,8 @@ test("LLM classifier returns UNSUPPORTED for project report with trigger words",
   const text = "Project Report: Database Design. Submit your project report by the due date.";
   const result = await classifyWithLlm(text, client);
   assert.equal(result.llmDocumentType, "UNSUPPORTED");
-  // Local classifier would say HOMEWORK due to "submit" and "due date"
-  assert.equal(result.localDetection.documentType, "HOMEWORK");
-  assert.equal(result.disagreement, true);
+  assert.equal(result.localDetection.documentType, "UNSUPPORTED");
+  assert.equal(result.disagreement, false);
 });
 
 test("LLM classifier returns UNSUPPORTED for research paper assignment", async () => {
@@ -79,8 +78,8 @@ test("LLM classifier returns UNSUPPORTED for research paper assignment", async (
   const text = "Research paper assignment. Submit your draft by due date.";
   const result = await classifyWithLlm(text, client);
   assert.equal(result.llmDocumentType, "UNSUPPORTED");
-  assert.equal(result.localDetection.documentType, "HOMEWORK");
-  assert.equal(result.disagreement, true);
+  assert.equal(result.localDetection.documentType, "UNSUPPORTED");
+  assert.equal(result.disagreement, false);
 });
 
 test("LLM classifier returns UNSUPPORTED for lab report with homework words", async () => {
@@ -88,8 +87,8 @@ test("LLM classifier returns UNSUPPORTED for lab report with homework words", as
   const text = "Lab report assignment due date and submit instructions.";
   const result = await classifyWithLlm(text, client);
   assert.equal(result.llmDocumentType, "UNSUPPORTED");
-  assert.equal(result.localDetection.documentType, "HOMEWORK");
-  assert.equal(result.disagreement, true);
+  assert.equal(result.localDetection.documentType, "UNSUPPORTED");
+  assert.equal(result.disagreement, false);
 });
 
 test("LLM classifier returns LECTURE for lecture about case study", async () => {

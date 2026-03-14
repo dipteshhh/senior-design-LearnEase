@@ -88,6 +88,8 @@ function normalizeUnicodeVariants(text: string): string {
 }
 
 function removeHiddenCharacters(text: string): string {
+  // This class intentionally strips several zero-width code points.
+  // eslint-disable-next-line no-misleading-character-class
   return text.replace(/[\u00AD\u200B\u200C\u200D\uFEFF]/g, "");
 }
 

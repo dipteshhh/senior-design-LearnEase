@@ -607,7 +607,7 @@ export default function ProcessingPage() {
       if (timer) clearTimeout(timer);
       requestController?.abort();
     };
-  }, [holdReadyTransition, id, isPageVisible, isProcessing, refreshDocument]);
+  }, [holdReadyTransition, id, isPageVisible, isProcessing, processingStartedAt, refreshDocument]);
 
   const hasCompletedVisualSequence =
     processingStartedAt != null && elapsedMs >= STEP_SEQUENCE_MIN_MS;

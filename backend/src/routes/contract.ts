@@ -27,7 +27,6 @@ import {
   getDocumentOwnerId,
   backfillMissingContentHashesForUser,
   findDocumentIdByUserAndContentHash,
-  listDocumentsByUser,
   listDocumentSummariesByUser,
   saveDocument,
   updateChecklistItem,

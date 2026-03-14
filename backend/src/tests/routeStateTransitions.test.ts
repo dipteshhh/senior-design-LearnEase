@@ -206,6 +206,26 @@ async function assertUnsupportedUploadRejected(options: {
   assert.equal(countArtifactDirectories(), beforeArtifacts);
 }
 
+async function assertSupportedLectureUploadAccepted(options: {
+  filename: string;
+  text: string;
+  userId?: string;
+}) {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = options.userId ?? randomUUID();
+  const req = makeUploadReq(options.text, { filename: options.filename, userId });
+  const res = makeRes();
+  const beforeArtifacts = countArtifactDirectories();
+
+  await uploadDocumentHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 201);
+  const docs = listDocumentsByUser(userId);
+  assert.equal(docs.length, 1);
+  assert.equal(docs[0]?.documentType, "LECTURE");
+  assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+}
+
 test("createStudyGuideHandler returns 202 and sets status to processing", async () => {
   const { createStudyGuideHandler } = await loadHandlers();
   const doc = seedDocument();
@@ -396,6 +416,112 @@ test("uploadDocumentHandler stores supported lecture upload", async () => {
   assert.equal(docs.length, 1);
   assert.equal(docs[0]?.documentType, "LECTURE");
   assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+});
+
+test("uploadDocumentHandler accepts lecture PDF 01A course introduction content", async () => {
+  await assertSupportedLectureUploadAccepted({
+    filename: "4560-S26 - Lecture 01A - Course Introduction.pdf",
+    text:
+      "Spring 2026\n" +
+      "Lecture 01: Course Introduction\n" +
+      "Welcome to EECS 4560 / 5560 / 6980\n" +
+      "Instructor: Dr. Larry Thomas\n" +
+      "Office Hours: Still TBD\n" +
+      "We meet at: M/W 9:35 - 10:55 AM (lecture)\n" +
+      "We meet in: NE 2105 / RC 301: FOR EXAMS ONLY\n" +
+      "Lectures in Blackboard Collaborate.\n" +
+      "About me\n" +
+      "Philosophy for the Course\n" +
+      "Our Database Platform\n" +
+      "One Sticky Point\n" +
+      "About the Textbook(s): Textbook (required).\n" +
+      "My Lectures: Almost universally PowerPoint presentations.\n" +
+      "I will post my slides to Blackboard AFTER the lecture.\n" +
+      "A note about lectures in general.\n" +
+      "Assignments will be submitted via Blackboard (as .7z archives - see syllabus).\n" +
+      "Your homework will be submitted as MS Word files.\n" +
+      "Academic Integrity: You may not post any class materials online.",
+  });
+});
+
+test("uploadDocumentHandler accepts lecture PDF 01B chapter introduction content", async () => {
+  await assertSupportedLectureUploadAccepted({
+    filename: "4560-S26 - Lecture 01B - Chapter 01 - Introduction.pdf",
+    text:
+      "Lecture 01B: Chapter 01 - Introduction to Relational Databases and SQL\n" +
+      "Chapter 1 - Objectives\n" +
+      "After completing this chapter, you should be able to describe tables, rows, and cells.\n" +
+      "Continued next slide...\n" +
+      "Tables typically model entities such as invoices, customers, students, vendors, employees.\n" +
+      "The InvoiceID in the Invoice table is the Invoice's PK.",
+  });
+});
+
+test("uploadDocumentHandler accepts lecture deck with logistics and policy slides", async () => {
+  await assertSupportedLectureUploadAccepted({
+    filename: "lecture-logistics.pdf",
+    text:
+      "Lecture 02: Course Expectations\n" +
+      "Slides for week 2 module.\n" +
+      "Office hours, academic integrity, and technology requirements.\n" +
+      "Lecture slides will be posted after class.\n" +
+      "See the syllabus for archive-format submission rules.",
+  });
+});
+
+test("uploadDocumentHandler accepts lecture deck with textbook and objectives slides", async () => {
+  await assertSupportedLectureUploadAccepted({
+    filename: "lecture-objectives.pdf",
+    text:
+      "Lecture 03: Chapter 02 - Data Modeling\n" +
+      "Chapter Objectives\n" +
+      "After completing this chapter, you should be able to explain ER modeling.\n" +
+      "Textbook chapter coverage and concept explanation slides continue next slide.",
+  });
+});
+
+test("uploadDocumentHandler accepts weaker lecture deck with isolated syllabus mention", async () => {
+  await assertSupportedLectureUploadAccepted({
+    filename: "lecture-syllabus-reference.pdf",
+    text:
+      "Lecture 04: Query Optimization\n" +
+      "Chapter 4 overview and learning objectives.\n" +
+      "Slides explain join ordering, cost models, and execution plans.\n" +
+      "See syllabus for archive-format submission rules.",
+  });
+});
+
+test("uploadDocumentHandler accepts weaker lecture deck with isolated amount due mention", async () => {
+  await assertSupportedLectureUploadAccepted({
+    filename: "lecture-invoice-example.pdf",
+    text:
+      "Lecture 05: Entity Relationships\n" +
+      "Chapter objectives and concept overview.\n" +
+      "Slides explain why amount due belongs in an invoice example table.\n" +
+      "Lecture discussion compares invoices, customers, and orders.",
+  });
+});
+
+test("uploadDocumentHandler accepts weaker lecture deck with isolated portfolio mention", async () => {
+  await assertSupportedLectureUploadAccepted({
+    filename: "lecture-portfolio.pdf",
+    text:
+      "Lecture 06: Career Applications of UX Research\n" +
+      "Module agenda and learning objectives.\n" +
+      "Slides explain how to present course projects in a portfolio after graduation.\n" +
+      "Concept overview and discussion prompts continue next slide.",
+  });
+});
+
+test("uploadDocumentHandler accepts weaker lecture deck with isolated transcript mention", async () => {
+  await assertSupportedLectureUploadAccepted({
+    filename: "lecture-transcript.pdf",
+    text:
+      "Lecture 07: Advising and Degree Planning\n" +
+      "Week 7 lecture slides with learning objectives.\n" +
+      "Concept explanation covers how transcript data maps to prerequisite checks.\n" +
+      "Chapter overview and examples continue next slide.",
+  });
 });
 
 test("uploadDocumentHandler reuses existing document for exact duplicate by same user", async () => {

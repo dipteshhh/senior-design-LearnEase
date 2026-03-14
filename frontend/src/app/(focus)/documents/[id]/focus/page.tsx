@@ -89,16 +89,17 @@ export default function FocusModePage() {
 
   const studyGuide = detail?.studyGuide ?? null;
   const sections = studyGuide?.sections ?? [];
+  const sectionCount = sections.length;
   const focusSection = sections[focusIndex] ?? null;
 
   useEffect(() => {
-    if (sections.length === 0) {
+    if (sectionCount === 0) {
       setFocusIndex(0);
       return;
     }
 
-    setFocusIndex((prev) => Math.max(0, Math.min(prev, sections.length - 1)));
-  }, [sections]);
+    setFocusIndex((prev) => Math.max(0, Math.min(prev, sectionCount - 1)));
+  }, [sectionCount]);
 
   const scrollToTop = useCallback(() => {
     window.scrollTo({
@@ -122,11 +123,11 @@ export default function FocusModePage() {
 
   const goToNextSection = useCallback(() => {
     setFocusIndex((prev) => {
-      const next = Math.min(sections.length - 1, prev + 1);
+      const next = Math.min(sectionCount - 1, prev + 1);
       if (next !== prev) scrollToTop();
       return next;
     });
-  }, [scrollToTop, sections.length]);
+  }, [scrollToTop, sectionCount]);
 
   function openCitationDrawer(title: string, citations: Citation[]) {
     setCitationTitle(title);
@@ -196,7 +197,7 @@ export default function FocusModePage() {
     );
   }
 
-  if (!studyGuide || sections.length === 0 || !focusSection) {
+  if (!studyGuide || sectionCount === 0 || !focusSection) {
     return (
      <div className="min-h-screen bg-[#f5f5f3] px-6 pt-6 pb-8">
         <div className="mx-auto max-w-[940px]">
@@ -237,7 +238,7 @@ export default function FocusModePage() {
                 Focus Mode
               </h1>
               <p className="mt-1 text-[15px] text-gray-500">
-                Section {focusIndex + 1} of {sections.length}
+                Section {focusIndex + 1} of {sectionCount}
               </p>
             </div>
 
@@ -267,7 +268,7 @@ export default function FocusModePage() {
                 type="button"
                 aria-label="Next section"
                 onClick={goToNextSection}
-                disabled={focusIndex === sections.length - 1}
+                disabled={focusIndex === sectionCount - 1}
                 className="transition hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <svg

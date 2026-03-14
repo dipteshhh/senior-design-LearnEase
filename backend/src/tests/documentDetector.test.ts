@@ -6,7 +6,7 @@ import { detectDocumentType } from "../services/documentDetector.js";
 
 test("classifier rejects syllabus as UNSUPPORTED", () => {
   const text =
-    "Course syllabus with grading and office hours includes assignment details and lecture week outline.";
+    "Course syllabus with grading policy, late work rules, and course schedule includes assignment details.";
   const result = detectDocumentType(text);
   assert.equal(result.documentType, "UNSUPPORTED");
   assert.equal(result.isAssignment, false);
@@ -74,24 +74,27 @@ test("research paper with no triggers is UNSUPPORTED", () => {
   assert.equal(result.documentType, "UNSUPPORTED");
 });
 
-// ── Mixed-signal documents: trigger present → classified per spec ────
-// Per CLASSIFICATION.md, any listed trigger is sufficient.
-// Documents whose *topic* is out-of-scope but contain a valid trigger
-// are classified by the trigger. This is a known limitation of the
-// keyword-based classifier documented in CLASSIFICATION.md §3.
+// ── Mixed-signal documents should be classified by overall profile ───
 
-test("project report with 'submit' and 'due date' classifies as HOMEWORK", () => {
+test("project report with 'submit' and 'due date' stays UNSUPPORTED", () => {
   const text =
     "Project Report: Database Design. Submit your project report by the due date.";
   const result = detectDocumentType(text);
-  assert.equal(result.documentType, "HOMEWORK");
+  assert.equal(result.documentType, "UNSUPPORTED");
 });
 
-test("research paper with 'assignment' classifies as HOMEWORK", () => {
+test("research paper with 'assignment' stays UNSUPPORTED", () => {
   const text =
     "Research paper assignment. Submit your draft by due date.";
   const result = detectDocumentType(text);
-  assert.equal(result.documentType, "HOMEWORK");
+  assert.equal(result.documentType, "UNSUPPORTED");
+});
+
+test("lab report with assignment language stays UNSUPPORTED", () => {
+  const text =
+    "Lab report assignment due date and submit instructions.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
 });
 
 test("lecture slides on case study classifies as LECTURE", () => {
@@ -109,7 +112,7 @@ test("capstone project assignment classifies as HOMEWORK", () => {
 
 test("capstone project syllabus classifies as UNSUPPORTED", () => {
   const text =
-    "Capstone Project Syllabus with grading and office hours.";
+    "Capstone Project course syllabus with grading policy and course schedule.";
   const result = detectDocumentType(text);
   assert.equal(result.documentType, "UNSUPPORTED");
 });
@@ -127,6 +130,137 @@ test("technical report writing lecture classifies as LECTURE", () => {
     "Technical report writing lecture slides for week 2.";
   const result = detectDocumentType(text);
   assert.equal(result.documentType, "LECTURE");
+});
+
+test("real homework sheet with due date and submission instructions classifies as HOMEWORK", () => {
+  const text =
+    "Assignment 01\n" +
+    "Max points: 100\n" +
+    "Due: 10/12/2025 at 11:59pm\n" +
+    "Your submission must be written entirely in your own words.\n" +
+    "Question 1: Implement scaled dot-product attention.\n" +
+    "Question 2: Write a 2-3 page summary (typed, PDF).";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "HOMEWORK");
+  assert.equal(result.isAssignment, true);
+});
+
+test("machine learning homework handout classifies as HOMEWORK", () => {
+  const text =
+    "Machine Learning: Homework Assignment 1\n" +
+    "The assignment is due at 1:30pm on Wednesday, January 21, 2009.\n" +
+    "To submit your code, please send it as an attachment via email.\n" +
+    "Implement the basic decision tree learning algorithm.\n" +
+    "Question 1. What are the accuracies over the training set and test set?";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "HOMEWORK");
+  assert.equal(result.isAssignment, true);
+});
+
+test("lecture PDF 01A course introduction deck stays LECTURE despite syllabus and homework references", () => {
+  const text =
+    "Spring 2026\n" +
+    "Lecture 01: Course Introduction\n" +
+    "Welcome to EECS 4560 / 5560 / 6980\n" +
+    "Instructor: Dr. Larry Thomas\n" +
+    "Office Hours: Still TBD\n" +
+    "We meet at: M/W 9:35 - 10:55 AM (lecture)\n" +
+    "We meet in: NE 2105 / RC 301: FOR EXAMS ONLY\n" +
+    "Lectures in Blackboard Collaborate.\n" +
+    "About me\n" +
+    "Philosophy for the Course\n" +
+    "Our Database Platform\n" +
+    "One Sticky Point\n" +
+    "About the Textbook(s): Textbook (required).\n" +
+    "My Lectures: Almost universally PowerPoint presentations.\n" +
+    "I will post my slides to Blackboard AFTER the lecture.\n" +
+    "A note about lectures in general.\n" +
+    "Assignments will be submitted via Blackboard (as .7z archives - see syllabus).\n" +
+    "Your homework will be submitted as MS Word files.\n" +
+    "Academic Integrity: You may not post any class materials online.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "LECTURE");
+  assert.equal(result.isAssignment, false);
+});
+
+test("lecture PDF 01B chapter introduction deck stays LECTURE despite invoice examples", () => {
+  const text =
+    "Lecture 01B: Chapter 01 - Introduction to Relational Databases and SQL\n" +
+    "Chapter 1 - Objectives\n" +
+    "After completing this chapter, you should be able to describe tables, rows, and cells.\n" +
+    "Continued next slide...\n" +
+    "Tables typically model entities such as invoices, customers, students, vendors, employees.\n" +
+    "The InvoiceID in the Invoice table is the Invoice's PK.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "LECTURE");
+  assert.equal(result.isAssignment, false);
+});
+
+test("lecture deck with course logistics and policy slides stays LECTURE", () => {
+  const text =
+    "Lecture 02: Course Expectations\n" +
+    "Slides for week 2 module.\n" +
+    "Office hours, academic integrity, and technology requirements.\n" +
+    "Lecture slides will be posted after class.\n" +
+    "See the syllabus for archive-format submission rules.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "LECTURE");
+  assert.equal(result.isAssignment, false);
+});
+
+test("lecture deck with textbook chapter objectives stays LECTURE", () => {
+  const text =
+    "Lecture 03: Chapter 02 - Data Modeling\n" +
+    "Chapter Objectives\n" +
+    "After completing this chapter, you should be able to explain ER modeling.\n" +
+    "Textbook chapter coverage and concept explanation slides continue next slide.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "LECTURE");
+  assert.equal(result.isAssignment, false);
+});
+
+test("weaker lecture deck with isolated syllabus mention stays LECTURE", () => {
+  const text =
+    "Lecture 04: Query Optimization\n" +
+    "Chapter 4 overview and learning objectives.\n" +
+    "Slides explain join ordering, cost models, and execution plans.\n" +
+    "See syllabus for archive-format submission rules.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "LECTURE");
+  assert.equal(result.isAssignment, false);
+});
+
+test("weaker lecture deck with isolated amount due mention stays LECTURE", () => {
+  const text =
+    "Lecture 05: Entity Relationships\n" +
+    "Chapter objectives and concept overview.\n" +
+    "Slides explain why amount due belongs in an invoice example table.\n" +
+    "Lecture discussion compares invoices, customers, and orders.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "LECTURE");
+  assert.equal(result.isAssignment, false);
+});
+
+test("weaker lecture deck with isolated portfolio mention stays LECTURE", () => {
+  const text =
+    "Lecture 06: Career Applications of UX Research\n" +
+    "Module agenda and learning objectives.\n" +
+    "Slides explain how to present course projects in a portfolio after graduation.\n" +
+    "Concept overview and discussion prompts continue next slide.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "LECTURE");
+  assert.equal(result.isAssignment, false);
+});
+
+test("weaker lecture deck with isolated transcript mention stays LECTURE", () => {
+  const text =
+    "Lecture 07: Advising and Degree Planning\n" +
+    "Week 7 lecture slides with learning objectives.\n" +
+    "Concept explanation covers how transcript data maps to prerequisite checks.\n" +
+    "Chapter overview and examples continue next slide.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "LECTURE");
+  assert.equal(result.isAssignment, false);
 });
 
 // ── Class notes acceptance (normalized to LECTURE) ───────────────────
@@ -208,7 +342,8 @@ test("syllabi plural is rejected as UNSUPPORTED", () => {
 // ── Negative triggers take priority over positive triggers ──────────
 
 test("syllabus with lecture triggers is still UNSUPPORTED", () => {
-  const text = "Course syllabus including lecture schedule for each week.";
+  const text =
+    "Course syllabus including grading policy and course schedule for each week.";
   const result = detectDocumentType(text);
   assert.equal(result.documentType, "UNSUPPORTED");
 });

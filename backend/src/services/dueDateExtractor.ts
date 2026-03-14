@@ -92,7 +92,7 @@ const DUE_DATE_PATTERNS: Array<{
   },
   // "due 02/01/2026" or "due 2/1/2026" or "due date: 02-01-2026"
   {
-    regex: /(?:due\s*(?:date)?\s*[:;]?\s*|deadline\s*[:;]?\s*)(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/i,
+    regex: /(?:due\s*(?:date)?\s*[:;]?\s*|deadline\s*[:;]?\s*)(\d{1,2})[/-](\d{1,2})[/-](\d{4})/i,
     extract: (m) => ({
       month: parseInt(m[1], 10),
       day: parseInt(m[2], 10),
@@ -101,7 +101,7 @@ const DUE_DATE_PATTERNS: Array<{
   },
   // "due 02/01" (no year)
   {
-    regex: /(?:due\s*(?:date)?\s*[:;]?\s*|deadline\s*[:;]?\s*)(\d{1,2})[\/\-](\d{1,2})/i,
+    regex: /(?:due\s*(?:date)?\s*[:;]?\s*|deadline\s*[:;]?\s*)(\d{1,2})[/-](\d{1,2})/i,
     extract: (m) => ({
       month: parseInt(m[1], 10),
       day: parseInt(m[2], 10),

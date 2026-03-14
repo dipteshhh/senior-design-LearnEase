@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "lint": "eslint .",
     "start": "node dist/index.js",
     "test": "node --import tsx --test src/tests/*.test.ts",
     "test:integration": "node --import tsx --test src/tests/integration/*.test.ts"
@@ -26,12 +27,16 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
     "@types/node": "^25",
     "@types/nodemailer": "^7.0.11",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
     "tsx": "^4.19.0",
+    "typescript-eslint": "^8.46.3",
     "typescript": "^5"
   }
 }
