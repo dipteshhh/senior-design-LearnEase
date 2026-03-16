@@ -380,6 +380,18 @@ test("uploadDocumentHandler rejects rental agreement before persistence", async 
   });
 });
 
+test("uploadDocumentHandler rejects peer observation/self-assessment document before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "Peer Observation and Self Assessment.pdf",
+    text:
+      "Senior Design Project Mid-Semester Peer Observations and Self Assessment\n" +
+      "What is your name?\n" +
+      "What are your contributions to the senior design project?\n" +
+      "Group member name:\n" +
+      "What are this group member's contributions to the senior design project?",
+  });
+});
+
 test("uploadDocumentHandler stores supported homework upload", async () => {
   const { uploadDocumentHandler } = await loadHandlers();
   const userId = randomUUID();

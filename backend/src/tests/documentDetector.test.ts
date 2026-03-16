@@ -523,6 +523,30 @@ test("transactional receipt-style document is rejected as UNSUPPORTED", () => {
   assert.equal(result.isAssignment, false);
 });
 
+test("peer observation and self-assessment form is rejected as UNSUPPORTED", () => {
+  const text =
+    "Senior Design Project Mid-Semester Peer Observations and Self Assessment\n" +
+    "What is your name?\n" +
+    "What are your contributions to the senior design project?\n" +
+    "Group member name:\n" +
+    "What are this group member's contributions to the senior design project?";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("peer review contribution worksheet is rejected as UNSUPPORTED", () => {
+  const text =
+    "Peer Review Form\n" +
+    "Self Assessment\n" +
+    "Group member name\n" +
+    "Describe this member's contributions and collaboration.\n" +
+    "Mid-semester evaluation for senior design project team.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
 test("supported homework is not rejected by admin award rules", () => {
   const text =
     "Homework 6 assignment. Submit your answers by the due date and include screenshots from ADS / SSMS.";

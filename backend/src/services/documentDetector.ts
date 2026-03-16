@@ -174,6 +174,20 @@ const TRANSACTIONAL_DOCUMENT_TRIGGERS = [
   "vehicle:",
 ];
 
+const PEER_REVIEW_DOCUMENT_TRIGGERS = [
+  "peer observation",
+  "peer observations",
+  "peer review",
+  "self assessment",
+  "self-assessment",
+  "mid-semester",
+  "group member name",
+  "contributions to the senior design project",
+  "what are your contributions",
+  "what are this group member's contributions",
+  "what are this group member’s contributions",
+];
+
 // ── Supported document profiles ─────────────────────────────────────
 
 const HOMEWORK_CORE_TRIGGERS = [
@@ -568,6 +582,36 @@ function looksLikeTransactionalDocument(text: string): boolean {
   return transactionalMatches >= 4;
 }
 
+function looksLikePeerReviewAssessmentDocument(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  const peerReviewMatches = countTriggers(lowerText, PEER_REVIEW_DOCUMENT_TRIGGERS);
+
+  if (
+    (lowerText.includes("peer observation") || lowerText.includes("peer observations")) &&
+    (lowerText.includes("self assessment") || lowerText.includes("self-assessment"))
+  ) {
+    return true;
+  }
+
+  if (
+    lowerText.includes("peer review") &&
+    lowerText.includes("group member name") &&
+    (lowerText.includes("contributions") || lowerText.includes("self assessment"))
+  ) {
+    return true;
+  }
+
+  if (
+    lowerText.includes("group member name") &&
+    lowerText.includes("what are your contributions") &&
+    lowerText.includes("senior design project")
+  ) {
+    return true;
+  }
+
+  return peerReviewMatches >= 4;
+}
+
 function scoreUnsupportedProfile(text: string): number {
   const lowerText = text.toLowerCase();
   const hardUnsupportedMatches = countTriggers(lowerText, HARD_UNSUPPORTED_TRIGGERS);
@@ -580,6 +624,7 @@ function scoreUnsupportedProfile(text: string): number {
   const projectStatusReport = looksLikeProjectStatusReport(lowerText);
   const researchProposal = looksLikeResearchProposal(lowerText);
   const transactionalDocument = looksLikeTransactionalDocument(lowerText);
+  const peerReviewAssessmentDocument = looksLikePeerReviewAssessmentDocument(lowerText);
   const hasStrongUnsupportedProfile =
     syllabusDocument ||
     standaloneScheduleDocument ||
@@ -589,7 +634,8 @@ function scoreUnsupportedProfile(text: string): number {
     academicAdministrativeForm ||
     projectStatusReport ||
     researchProposal ||
-    transactionalDocument;
+    transactionalDocument ||
+    peerReviewAssessmentDocument;
   let score = 0;
 
   if (hardUnsupportedMatches >= 2) {
@@ -631,6 +677,10 @@ function scoreUnsupportedProfile(text: string): number {
   }
 
   if (transactionalDocument) {
+    score += 8;
+  }
+
+  if (peerReviewAssessmentDocument) {
     score += 8;
   }
 
