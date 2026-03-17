@@ -164,8 +164,8 @@ export default function FocusModePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#f5f5f3] px-6 pt-6 pb-8">
-        <div className="mx-auto max-w-[940px] animate-pulse">
+      <div className="min-h-screen bg-[#f5f5f3] px-4 pb-8 pt-6 sm:px-6">
+        <div className="mx-auto w-full max-w-5xl animate-pulse">
           <div className="flex items-start justify-between">
             <div className="h-8 w-40 rounded bg-gray-200" />
             <div className="flex gap-4">
@@ -174,7 +174,7 @@ export default function FocusModePage() {
             </div>
           </div>
 
-          <div className="mt-14 rounded-[22px] border border-gray-200 bg-white px-16 py-16 shadow-[0_2px_8px_rgba(15,23,42,0.06)]">
+          <div className="mt-10 rounded-[22px] border border-gray-200 bg-white px-6 py-10 shadow-[0_2px_8px_rgba(15,23,42,0.06)] sm:px-10 sm:py-14 lg:px-14 lg:py-16">
             <div className="h-10 w-2/3 rounded bg-gray-200" />
             <div className="mt-8 h-5 w-full rounded bg-gray-100" />
             <div className="mt-3 h-5 w-11/12 rounded bg-gray-100" />
@@ -187,8 +187,8 @@ export default function FocusModePage() {
 
   if (error) {
     return (
-    <div className="min-h-screen bg-[#f5f5f3] px-6 pt-6 pb-8">
-        <div className="mx-auto max-w-[940px]">
+      <div className="min-h-screen bg-[#f5f5f3] px-4 pb-8 pt-6 sm:px-6">
+        <div className="mx-auto w-full max-w-5xl">
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
           </div>
@@ -199,8 +199,8 @@ export default function FocusModePage() {
 
   if (!studyGuide || sectionCount === 0 || !focusSection) {
     return (
-     <div className="min-h-screen bg-[#f5f5f3] px-6 pt-6 pb-8">
-        <div className="mx-auto max-w-[940px]">
+      <div className="min-h-screen bg-[#f5f5f3] px-4 pb-8 pt-6 sm:px-6">
+        <div className="mx-auto w-full max-w-5xl">
           <EmptyState text="No sections available for focus mode." />
         </div>
       </div>
@@ -209,9 +209,9 @@ export default function FocusModePage() {
 
   return (
     <>
-      <div className="min-h-screen bg-[#f5f5f3] px-6 pt-6 pb-8">
-        <div className="mx-auto max-w-[900px]">
-          <div className="flex items-start justify-between">
+      <div className="min-h-screen bg-[#f5f5f3] px-4 pb-8 pt-6 sm:px-6">
+        <div className="mx-auto w-full max-w-5xl">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
               aria-label="Exit focus mode"
@@ -233,7 +233,7 @@ export default function FocusModePage() {
               </svg>
             </button>
 
-            <div className="flex-1 px-6">
+            <div className="order-last w-full sm:order-none sm:flex-1 sm:px-4">
               <h1 className="text-[18px] font-semibold tracking-tight text-gray-950">
                 Focus Mode
               </h1>
@@ -242,7 +242,7 @@ export default function FocusModePage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-6 pt-1 text-gray-500">
+            <div className="flex items-center gap-5 pt-1 text-gray-500 sm:gap-6">
               <button
                 type="button"
                 aria-label="Previous section"
@@ -287,26 +287,26 @@ export default function FocusModePage() {
             </div>
           </div>
 
-         <div className="mt-10 rounded-[24px] border border-[#dedede] bg-white px-14 py-14 shadow-[0_2px_10px_rgba(15,23,42,0.06)]">
-         <h2 className="text-[25px] font-semibold tracking-tight text-gray-950">
-         {focusSection.title}
-         </h2>
+          <div className="mt-8 rounded-[24px] border border-[#dedede] bg-white px-6 py-8 shadow-[0_2px_10px_rgba(15,23,42,0.06)] sm:mt-10 sm:px-10 sm:py-10 lg:px-14 lg:py-14">
+            <h2 className="text-[22px] font-semibold tracking-tight text-gray-950 sm:text-[25px]">
+              {focusSection.title}
+            </h2>
 
-         <p className="mt-8 max-w-[700px] text-[16px] leading-[1.95] text-gray-700">
-          {focusSection.content}
-         </p>
+            <p className="mt-6 text-[16px] leading-[1.95] text-gray-700 sm:mt-8">
+              {focusSection.content}
+            </p>
 
-     <button
-    type="button"
-    onClick={() =>
-      openCitationDrawer(focusSection.title, focusSection.citations)
-    }
-    className="mt-11 inline-flex items-center gap-2 text-[15px] font-medium text-gray-500 transition hover:text-gray-800"
-  >
-    <QuoteIcon />
-    View source citations ({focusSection.citations.length})
-  </button>
-</div>
+            <button
+              type="button"
+              onClick={() =>
+                openCitationDrawer(focusSection.title, focusSection.citations)
+              }
+              className="mt-8 inline-flex items-center gap-2 text-[15px] font-medium text-gray-500 transition hover:text-gray-800 sm:mt-11"
+            >
+              <QuoteIcon />
+              View source citations ({focusSection.citations.length})
+            </button>
+          </div>
 
           <div className="mt-12 flex items-center justify-center gap-3">
             {sections.map((_, index) => {

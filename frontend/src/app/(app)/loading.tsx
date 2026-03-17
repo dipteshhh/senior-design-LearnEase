@@ -1,6 +1,6 @@
 export default function AppLoading() {
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-8">
+    <div className="mx-auto w-full max-w-4xl py-2 sm:py-4">
       <div className="space-y-4 animate-pulse">
         <div className="h-8 w-56 rounded-lg bg-gray-200" />
         <div className="h-4 w-80 rounded bg-gray-100" />

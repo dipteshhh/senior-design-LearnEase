@@ -17,7 +17,7 @@ function NavItem({ href, label }: { href: string; label: string }) {
     <Link
       href={href}
       className={[
-        "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
+        "flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition",
         isActive ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50",
       ].join(" ")}
     >
@@ -131,8 +131,8 @@ function ProtectedShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="flex">
-        <aside className="hidden w-64 shrink-0 flex-col border-r bg-white px-4 py-6 md:flex">
+      <div className="md:flex md:min-h-screen">
+        <aside className="hidden w-64 shrink-0 flex-col border-r bg-white px-4 py-6 md:flex lg:w-72">
           <div className="px-2">
             <div className="text-lg font-semibold text-gray-900">LearnEase</div>
             <div className="mt-1 text-xs text-gray-500">Study smarter, not harder</div>
@@ -155,48 +155,83 @@ function ProtectedShell({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <div className="flex-1">
-          <header className="sticky top-0 z-10 border-b bg-white">
-            <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-              <div className="flex w-full max-w-xl items-center gap-2 rounded-2xl border bg-white px-4 py-3">
-                <span className="text-gray-400">🔍</span>
-                <input
-                  value={q}
-                  onChange={(event) => {
-                    setQ(event.target.value);
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-20 border-b bg-white/95 backdrop-blur">
+            <div className="mx-auto w-full max-w-screen-2xl px-4 py-3 sm:px-6 lg:px-8">
+              <div className="flex items-center justify-between gap-3 md:hidden">
+                <Link href="/dashboard" className="min-w-0">
+                  <p className="truncate text-base font-semibold text-gray-900">LearnEase</p>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void logout();
                   }}
-                  placeholder="Search documents..."
-                  className="w-full bg-transparent text-sm outline-none"
-                />
+                  className="rounded-lg border px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                >
+                  Sign out
+                </button>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-gray-600">
-                  <span className={`h-2.5 w-2.5 rounded-full ${healthColor}`} />
-                  {healthLabel}
-                </div>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-white">
-                  👤
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-gray-900">
-                    {user.name ?? user.email ?? "Profile"}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void logout();
+              <div className="mt-3 flex flex-col gap-3 md:mt-0 md:flex-row md:items-center md:justify-between md:gap-4">
+                <div className="flex w-full items-center gap-2 rounded-2xl border bg-white px-4 py-3 md:max-w-xl lg:max-w-2xl">
+                  <span className="text-gray-400">🔍</span>
+                  <input
+                    value={q}
+                    onChange={(event) => {
+                      setQ(event.target.value);
                     }}
-                    className="text-xs text-gray-500 hover:text-gray-900"
-                  >
-                    Sign out
-                  </button>
+                    placeholder="Search documents..."
+                    className="w-full min-w-0 bg-transparent text-sm outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:justify-end">
+                  <div className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] text-gray-600 sm:px-3 sm:text-xs">
+                    <span className={`h-2.5 w-2.5 rounded-full ${healthColor}`} />
+                    <span className="hidden sm:inline">{healthLabel}</span>
+                    <span className="sm:hidden">
+                      {backendHealth === "online"
+                        ? "Online"
+                        : backendHealth === "offline"
+                        ? "Offline"
+                        : "Checking"}
+                    </span>
+                  </div>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full border bg-white text-sm sm:h-10 sm:w-10">
+                    👤
+                  </div>
+                  <div className="hidden min-w-0 sm:block">
+                    <p className="truncate text-sm font-semibold text-gray-900">
+                      {user.name ?? user.email ?? "Profile"}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void logout();
+                      }}
+                      className="text-xs text-gray-500 hover:text-gray-900"
+                    >
+                      Sign out
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
+
+            <div className="mx-auto w-full max-w-screen-2xl px-4 pb-2 sm:px-6 lg:px-8">
+              <nav className="mt-3 flex gap-2 overflow-x-auto pb-1 md:hidden">
+                <NavItem href="/dashboard" label="Dashboard" />
+                <NavItem href="/upload" label="Upload" />
+                <NavItem href="/documents" label="Documents" />
+                <NavItem href="/settings" label="Settings" />
+              </nav>
+            </div>
           </header>
 
-          <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+          <main className="mx-auto w-full max-w-screen-2xl flex-1 px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-10">
+            {children}
+          </main>
         </div>
       </div>
     </div>

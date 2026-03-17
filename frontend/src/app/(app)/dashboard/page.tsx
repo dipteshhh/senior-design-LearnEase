@@ -66,17 +66,17 @@ function DashboardPageContent() {
   );
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Welcome back</h1>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Welcome back</h1>
         <p className="mt-2 text-sm text-gray-500">
           {readyCount} ready, {processingCount} processing
           {q ? <span className="ml-2 text-gray-400">• filtered by “{q}”</span> : null}
         </p>
       </div>
 
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-950 to-gray-800 p-8 text-white shadow-sm">
-        <h2 className="text-2xl font-semibold tracking-tight">Transform your next assignment</h2>
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-950 to-gray-800 p-6 text-white shadow-sm sm:p-8">
+        <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">Transform your next assignment</h2>
         <p className="mt-3 max-w-xl text-sm text-white/80">
           Upload a PDF or DOCX and generate structured study guides with key actions, checklist,
           sections, and lecture quizzes.
@@ -91,10 +91,10 @@ function DashboardPageContent() {
         </div>
       </div>
 
-      <div className="mt-10">
-        <div className="mb-4 flex items-center justify-between">
+      <div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-base font-semibold text-gray-900">Recent uploads</h3>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <p className="text-sm text-gray-500">{docs.length} documents</p>
             {docs.length > DASHBOARD_RECENT_LIMIT ? (
               <Link
@@ -108,7 +108,7 @@ function DashboardPageContent() {
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3 animate-pulse">
+          <div className="grid grid-cols-1 gap-4 animate-pulse sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="rounded-2xl border bg-white p-5 shadow-sm space-y-3">
                 <div className="flex items-start justify-between gap-4">
@@ -140,7 +140,7 @@ function DashboardPageContent() {
         ) : null}
 
         {!isLoading && !error && recentDocs.length > 0 ? (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {recentDocs.map((doc) => (
               <DocumentCard key={doc.id} doc={doc} onDeleted={refetch} />
             ))}
@@ -153,7 +153,7 @@ function DashboardPageContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<p className="p-8 text-sm text-gray-600">Loading dashboard...</p>}>
+    <Suspense fallback={<p className="py-4 text-sm text-gray-600">Loading dashboard...</p>}>
       <DashboardPageContent />
     </Suspense>
   );

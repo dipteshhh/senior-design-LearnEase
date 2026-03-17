@@ -156,6 +156,77 @@ function hasStrongCitationOverlap(quote: string, citationExcerpts: string[]): bo
   return false;
 }
 
+/**
+ * Token-overlap grounding check for citation excerpts against the full
+ * document text. Uses a sliding window over the document token stream so
+ * that a locally concentrated cluster of matching tokens passes, even if
+ * the model paraphrased slightly or PDF extraction introduced artifacts.
+ */
+function hasTokenOverlapWithDocument(
+  normalizedExcerpt: string,
+  context: ValidationContext
+): boolean {
+  const excerptTokens = toLooseTokenSet(normalizedExcerpt);
+  if (excerptTokens.size < 3) {
+    return false;
+  }
+
+  const docTokens = normalizeForLooseGroundingMatch(context.normalizedText)
+    .split(" ")
+    .filter(Boolean);
+  if (docTokens.length === 0) {
+    return false;
+  }
+
+  // Window size: twice the excerpt token count, capped to avoid degenerate scans
+  const windowSize = Math.min(excerptTokens.size * 2, docTokens.length);
+  const required = Math.max(3, Math.ceil(excerptTokens.size * 0.6));
+
+  // Build initial window token counts
+  const windowCounts = new Map<string, number>();
+  let overlap = 0;
+
+  for (let i = 0; i < windowSize; i++) {
+    const token = docTokens[i];
+    windowCounts.set(token, (windowCounts.get(token) ?? 0) + 1);
+    if (excerptTokens.has(token) && windowCounts.get(token) === 1) {
+      overlap += 1;
+    }
+  }
+
+  if (overlap >= required) {
+    return true;
+  }
+
+  // Slide the window
+  for (let i = windowSize; i < docTokens.length; i++) {
+    // Add new token entering the window
+    const entering = docTokens[i];
+    windowCounts.set(entering, (windowCounts.get(entering) ?? 0) + 1);
+    if (excerptTokens.has(entering) && windowCounts.get(entering) === 1) {
+      overlap += 1;
+    }
+
+    // Remove token leaving the window
+    const leaving = docTokens[i - windowSize];
+    const leavingCount = (windowCounts.get(leaving) ?? 1) - 1;
+    if (leavingCount <= 0) {
+      windowCounts.delete(leaving);
+      if (excerptTokens.has(leaving)) {
+        overlap -= 1;
+      }
+    } else {
+      windowCounts.set(leaving, leavingCount);
+    }
+
+    if (overlap >= required) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function countHeadingMarkers(normalizedText: string): number {
   const patterns = [
     /\bquestion\s+\d+\b/gi,
@@ -185,6 +256,56 @@ function normalizeCitationText(citation: Citation): string {
   return normalizeDocumentText(citation.excerpt, sourceFileType);
 }
 
+function isDirectGroundingMatch(normalizedFragment: string, context: ValidationContext): boolean {
+  if (!normalizedFragment) {
+    return false;
+  }
+
+  if (context.normalizedText.includes(normalizedFragment)) {
+    return true;
+  }
+
+  if (!shouldAllowLooseGroundingMatch(normalizedFragment)) {
+    return false;
+  }
+
+  const looseFragment = normalizeForLooseGroundingMatch(normalizedFragment);
+  return Boolean(looseFragment && context.groundingTextLoose.includes(looseFragment));
+}
+
+function hasOrderedEllipsisFragmentGrounding(
+  normalizedFragment: string,
+  context: ValidationContext
+): boolean {
+  const rawFragments = normalizedFragment
+    .split(/\s*(?:\.\.\.|…|\[\.\.\.\])\s*/g)
+    .map((fragment) => fragment.trim())
+    .filter((fragment) => fragment.length > 0);
+
+  if (rawFragments.length < 2) {
+    return false;
+  }
+
+  const looseFragments = rawFragments
+    .map((fragment) => normalizeForLooseGroundingMatch(fragment))
+    .filter((fragment) => shouldAllowLooseGroundingMatch(fragment));
+
+  if (looseFragments.length < 2) {
+    return false;
+  }
+
+  let searchStart = 0;
+  for (const looseFragment of looseFragments) {
+    const position = context.groundingTextLoose.indexOf(looseFragment, searchStart);
+    if (position < 0) {
+      return false;
+    }
+    searchStart = position + looseFragment.length;
+  }
+
+  return true;
+}
+
 function validateQuoteExists(
   quote: string,
   context: ValidationContext,
@@ -199,15 +320,8 @@ function validateQuoteExists(
     });
   }
 
-  if (context.normalizedText.includes(normalizedQuote)) {
+  if (isDirectGroundingMatch(normalizedQuote, context)) {
     return;
-  }
-
-  if (shouldAllowLooseGroundingMatch(normalizedQuote)) {
-    const looseQuote = normalizeForLooseGroundingMatch(normalizedQuote);
-    if (looseQuote && context.groundingTextLoose.includes(looseQuote)) {
-      return;
-    }
   }
 
   if (hasStrongCitationOverlap(normalizedQuote, citationExcerpts)) {
@@ -224,7 +338,16 @@ function validateQuoteExists(
   );
 }
 
-function validateCitation(citation: Citation, context: ValidationContext, path: string): void {
+interface CitationValidationOptions {
+  groundedFallbackExcerpt?: string;
+}
+
+function validateCitation(
+  citation: Citation,
+  context: ValidationContext,
+  path: string,
+  options: CitationValidationOptions = {}
+): void {
   const normalizedExcerpt = normalizeCitationText(citation);
   if (!normalizedExcerpt) {
     throw new ContractValidationError("CITATION_EXCERPT_NOT_FOUND", "Citation excerpt was not found in extracted text.", {
@@ -233,23 +356,22 @@ function validateCitation(citation: Citation, context: ValidationContext, path: 
     });
   }
 
-  if (context.normalizedText.includes(normalizedExcerpt)) {
-    // Exact grounded match.
-  } else if (shouldAllowLooseGroundingMatch(normalizedExcerpt)) {
-    const looseExcerpt = normalizeForLooseGroundingMatch(normalizedExcerpt);
-    if (!looseExcerpt || !context.groundingTextLoose.includes(looseExcerpt)) {
+  const citationGrounded =
+    isDirectGroundingMatch(normalizedExcerpt, context) ||
+    hasOrderedEllipsisFragmentGrounding(normalizedExcerpt, context) ||
+    hasTokenOverlapWithDocument(normalizedExcerpt, context);
+  if (!citationGrounded) {
+    const normalizedFallback = options.groundedFallbackExcerpt
+      ? normalizeDocumentText(options.groundedFallbackExcerpt, context.fileType)
+      : "";
+    const fallbackGrounded = isDirectGroundingMatch(normalizedFallback, context);
+    if (!fallbackGrounded) {
       throw new ContractValidationError(
         "CITATION_EXCERPT_NOT_FOUND",
         "Citation excerpt was not found in extracted text.",
         { path, excerpt_preview: normalizedExcerpt.slice(0, 180) }
       );
     }
-  } else {
-    throw new ContractValidationError(
-      "CITATION_EXCERPT_NOT_FOUND",
-      "Citation excerpt was not found in extracted text.",
-      { path, excerpt_preview: normalizedExcerpt.slice(0, 180) }
-    );
   }
 
   if (citation.source_type === "pdf") {
@@ -296,8 +418,14 @@ function validateExtractionItems(
   items.forEach((item, index) => {
     const itemPath = `${path}[${index}]`;
     const citationExcerpts = item.citations.map((citation) => normalizeCitationText(citation));
+    const normalizedQuote = normalizeDocumentText(item.supporting_quote, context.fileType);
+    const groundedFallbackExcerpt = isDirectGroundingMatch(normalizedQuote, context)
+      ? item.supporting_quote
+      : undefined;
     item.citations.forEach((citation, citationIndex) => {
-      validateCitation(citation, context, `${itemPath}.citations[${citationIndex}]`);
+      validateCitation(citation, context, `${itemPath}.citations[${citationIndex}]`, {
+        groundedFallbackExcerpt,
+      });
     });
     validateQuoteExists(
       item.supporting_quote,

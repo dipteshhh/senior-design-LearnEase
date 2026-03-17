@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ApiClientError, api } from "@/lib/api";
@@ -47,6 +47,7 @@ export default function QuizPage() {
   const isPageVisible = usePageVisible();
   const isMountedRef = useRef(true);
   const hasLoadedQuizRef = useRef(false);
+  const autoStartFiredRef = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -57,6 +58,7 @@ export default function QuizPage() {
 
   useEffect(() => {
     hasLoadedQuizRef.current = false;
+    autoStartFiredRef.current = false;
   }, [id]);
 
   useEffect(() => {
@@ -92,6 +94,42 @@ export default function QuizPage() {
       }
     },
     [id]
+  );
+
+  const syncStateFromDocument = useCallback(
+    async (nextDoc: DocumentListItem | null): Promise<void> => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      if (!nextDoc) {
+        setState("failed");
+        setError("Document not found.");
+        return;
+      }
+
+      if (nextDoc.quiz_status === "ready") {
+        const fetched = await fetchQuiz();
+        if (!isMountedRef.current) {
+          return;
+        }
+
+        if (fetched) {
+          setError(null);
+          return;
+        }
+      }
+
+      if (nextDoc.quiz_status === "failed") {
+        setState("failed");
+        setError(nextDoc.error_message ?? "Quiz generation failed.");
+        return;
+      }
+
+      setState("loading");
+      setError(null);
+    },
+    [fetchQuiz]
   );
 
   useEffect(() => {
@@ -130,7 +168,7 @@ export default function QuizPage() {
             return;
           }
 
-          setState("idle");
+          setState("loading");
           setError(null);
           return;
         }
@@ -162,7 +200,8 @@ export default function QuizPage() {
   }, [fetchQuiz, id, refreshDocument]);
 
   useEffect(() => {
-    if (!shouldRunPolling(id, isPageVisible, doc?.quiz_status === "processing")) return;
+    const shouldPollWhileLoading = state === "loading";
+    if (!shouldRunPolling(id, isPageVisible, shouldPollWhileLoading || doc?.quiz_status === "processing")) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -248,9 +287,9 @@ export default function QuizPage() {
       }
       requestController?.abort();
     };
-  }, [doc?.quiz_status, fetchQuiz, id, isPageVisible, refreshDocument]);
+  }, [doc?.quiz_status, fetchQuiz, id, isPageVisible, refreshDocument, state]);
 
-  async function handleStart() {
+  const handleStart = useCallback(async () => {
     if (!id || isStarting) return;
 
     if (isMountedRef.current) {
@@ -292,10 +331,7 @@ export default function QuizPage() {
         return;
       }
 
-      if (isMountedRef.current) {
-        setState(nextDoc.quiz_status === "processing" ? "loading" : "idle");
-        setError(null);
-      }
+      await syncStateFromDocument(nextDoc);
     } catch (err) {
       if (err instanceof ApiClientError && err.code === "DOCUMENT_NOT_LECTURE") {
         if (isMountedRef.current) {
@@ -307,15 +343,8 @@ export default function QuizPage() {
           err instanceof ApiClientError &&
           (err.code === "ALREADY_PROCESSING" || err.code === "ILLEGAL_RETRY_STATE")
         ) {
-          void refreshDocument().then((nextDoc) => {
-            if (!isMountedRef.current || !nextDoc) {
-              return;
-            }
-            setState(nextDoc.quiz_status === "processing" ? "loading" : "idle");
-            if (nextDoc.quiz_status === "failed") {
-              setState("failed");
-              setError(nextDoc.error_message ?? "Quiz generation failed.");
-            }
+          void refreshDocument().then(async (nextDoc) => {
+            await syncStateFromDocument(nextDoc);
           });
         }
 
@@ -327,7 +356,7 @@ export default function QuizPage() {
         if (doc?.quiz_status === "processing") {
           setState("loading");
         } else {
-          setState("idle");
+          setState("failed");
         }
       }
     } finally {
@@ -335,7 +364,17 @@ export default function QuizPage() {
         setIsStarting(false);
       }
     }
-  }
+  }, [doc?.quiz_status, fetchQuiz, id, isStarting, refreshDocument, syncStateFromDocument]);
+
+  // Auto-start quiz generation when state becomes "idle" (no quiz exists yet).
+  // This removes the intermediate "Generate quiz" confirmation page — clicking
+  // "Test Your Knowledge" from the study guide now triggers generation immediately.
+  useEffect(() => {
+    if (state === "idle" && !autoStartFiredRef.current) {
+      autoStartFiredRef.current = true;
+      void handleStart();
+    }
+  }, [state, handleStart]);
 
   async function handleRetry() {
     if (!id || isRetrying) return;
@@ -354,8 +393,7 @@ export default function QuizPage() {
 
       const nextDoc = await refreshDocument();
       if (isMountedRef.current) {
-        setError(null);
-        setState(nextDoc?.quiz_status === "processing" ? "loading" : "idle");
+        await syncStateFromDocument(nextDoc);
       }
     } catch (err) {
       if (
@@ -364,11 +402,8 @@ export default function QuizPage() {
       ) {
         if (isMountedRef.current) {
           if (err.code === "ALREADY_PROCESSING") {
-            void refreshDocument().then((nextDoc) => {
-              if (!isMountedRef.current || !nextDoc) {
-                return;
-              }
-              setState(nextDoc.quiz_status === "processing" ? "loading" : "failed");
+            void refreshDocument().then(async (nextDoc) => {
+              await syncStateFromDocument(nextDoc);
             });
           }
           setError(getErrorMessage(err, "Quiz generation is already in progress."));
@@ -394,69 +429,38 @@ export default function QuizPage() {
   const isLast = quiz ? index === quiz.questions.length - 1 : false;
   const answerIndex = current ? getAnswerIndex(current.answer, current.options) : -1;
   const isCorrect = checked && selected != null && selected === answerIndex;
+  const progressPercent = quiz ? ((index + 1) / quiz.questions.length) * 100 : 0;
 
   if (!id) {
-    return <p className="text-sm text-gray-600">Missing document id.</p>;
+    return <p className="px-1 py-4 text-sm text-gray-600">Missing document id.</p>;
   }
 
-  if (state === "idle") {
+  if (state === "loading" || state === "idle") {
     return (
-      <div className="space-y-4 p-8">
-        <div className="space-y-2">
-          <p className="text-sm text-gray-500">{doc?.filename ?? "Lecture Quiz"}</p>
-          <h1 className="text-2xl font-semibold text-gray-900">Generate quiz</h1>
+      <div className="mx-auto flex min-h-[55vh] w-full max-w-3xl flex-col items-center justify-center gap-6 px-4 py-10 sm:px-6 sm:py-14">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900" />
+        <div className="space-y-2 text-center">
+          <h1 className="text-xl font-semibold text-gray-900">Generating your quiz...</h1>
+          <p className="text-sm text-gray-500">
+            We&apos;re creating practice questions from your lecture.
+          </p>
+          <p className="text-xs text-gray-400">This may take a few seconds. Please don&apos;t close this page.</p>
         </div>
-        <p className="max-w-2xl text-sm text-gray-600">
-          Quiz generation is lecture-only and starts only when you trigger it.
-        </p>
         {error ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <div className="w-full max-w-xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
             {error}
           </div>
         ) : null}
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              void handleStart();
-            }}
-            disabled={isStarting}
-            className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isStarting ? "Starting..." : "Generate quiz"}
-          </button>
-          <Link href={`/documents/${id}`} className="rounded-xl border px-4 py-2 text-sm font-semibold">
-            Back to Document
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (state === "loading") {
-    return (
-      <div className="space-y-6 p-8 animate-pulse">
-        <div className="space-y-2">
-          <div className="h-4 w-32 rounded bg-gray-100" />
-          <div className="h-7 w-56 rounded-lg bg-gray-200" />
-        </div>
-        <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-4">
-          <div className="h-4 w-20 rounded bg-gray-200" />
-          <div className="h-4 w-full rounded bg-gray-100" />
-          <div className="h-4 w-3/4 rounded bg-gray-100" />
-          <div className="space-y-3 mt-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50" />
-            ))}
-          </div>
-        </div>
+        <Link href={`/documents/${id}`} className="text-sm text-gray-500 underline hover:text-gray-700">
+          Back to Study Guide
+        </Link>
       </div>
     );
   }
 
   if (state === "blocked") {
     return (
-      <div className="space-y-4 p-8">
+      <div className="mx-auto w-full max-w-3xl space-y-4 px-1 py-2 sm:py-4">
         <h1 className="text-2xl font-semibold text-gray-900">Quiz unavailable</h1>
         <p className="text-sm text-gray-600">{error}</p>
         <Link href={`/documents/${id}`} className="text-sm underline">
@@ -467,22 +471,32 @@ export default function QuizPage() {
   }
 
   if (state === "failed") {
+    // Use /api/quiz/retry only when the backend recorded a failure;
+    // otherwise fall back to /api/quiz/create so we don't hit ILLEGAL_RETRY_STATE.
+    const canRetry = doc?.quiz_status === "failed";
+    const retryInProgress = canRetry ? isRetrying : isStarting;
+
     return (
-      <div className="space-y-4 p-8">
+      <div className="mx-auto w-full max-w-3xl space-y-4 px-1 py-2 sm:py-4">
         <h1 className="text-2xl font-semibold text-gray-900">Quiz generation failed</h1>
         <p className="text-sm text-rose-700">{error ?? "Unable to generate quiz."}</p>
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <button
             type="button"
             onClick={() => {
-              void handleRetry();
+              if (canRetry) {
+                void handleRetry();
+              } else {
+                autoStartFiredRef.current = false;
+                void handleStart();
+              }
             }}
-            disabled={isRetrying}
-            className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={retryInProgress}
+            className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
-            {isRetrying ? "Retrying..." : "Retry quiz"}
+            {retryInProgress ? "Retrying..." : "Retry quiz"}
           </button>
-          <Link href={`/documents/${id}`} className="rounded-xl border px-4 py-2 text-sm font-semibold">
+          <Link href={`/documents/${id}`} className="rounded-xl border px-4 py-2 text-center text-sm font-semibold sm:w-auto">
             Back to Document
           </Link>
         </div>
@@ -492,7 +506,7 @@ export default function QuizPage() {
 
   if (!quiz || !current) {
     return (
-      <div className="space-y-4 p-8">
+      <div className="mx-auto w-full max-w-3xl space-y-4 px-1 py-2 sm:py-4">
         <h1 className="text-2xl font-semibold text-gray-900">Quiz</h1>
         <p className="text-sm text-gray-600">No quiz questions available yet.</p>
         <Link href={`/documents/${id}`} className="text-sm underline">
@@ -503,8 +517,8 @@ export default function QuizPage() {
   }
 
   return (
-    <div className="space-y-6 p-8">
-      <div className="flex items-start justify-between gap-4">
+    <div className="mx-auto w-full max-w-4xl space-y-5 sm:space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-sm text-gray-500">{doc?.filename ?? "Lecture Quiz"}</p>
           <h1 className="text-2xl font-semibold text-gray-900">
@@ -513,89 +527,134 @@ export default function QuizPage() {
         </div>
         <Link
           href={`/documents/${id}`}
-          className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+          className="inline-flex w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 sm:w-auto"
         >
           Back to Study Guide
         </Link>
       </div>
 
-      <div className="rounded-2xl border bg-white p-6 shadow-sm">
+      {/* Progress bar */}
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+        <div
+          className="h-full rounded-full bg-gray-900 transition-all duration-300"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+
+      <div className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
         <p className="text-sm font-semibold text-gray-900">Question</p>
         <p className="mt-2 whitespace-pre-line text-sm text-gray-700">{current.question}</p>
 
         <div className="mt-5 space-y-3">
           {current.options.map((option, optionIndex) => {
-            const active = selected === optionIndex;
+            const isSelected = selected === optionIndex;
+            const isCorrectOption = optionIndex === answerIndex;
+
+            let optionStyle = "border-gray-200 bg-white hover:bg-gray-50";
+            if (checked) {
+              if (isCorrectOption) {
+                optionStyle = "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500";
+              } else if (isSelected) {
+                optionStyle = "border-rose-500 bg-rose-50 ring-1 ring-rose-500";
+              } else {
+                optionStyle = "border-gray-200 bg-white opacity-60";
+              }
+            } else if (isSelected) {
+              optionStyle = "border-gray-900 bg-gray-50 ring-1 ring-gray-900";
+            }
+
             return (
               <button
                 key={option}
                 type="button"
                 onClick={() => {
-                  setSelected(optionIndex);
-                  setChecked(false);
+                  if (!checked) {
+                    setSelected(optionIndex);
+                  }
                 }}
+                disabled={checked}
                 className={[
                   "w-full rounded-xl border px-4 py-3 text-left text-sm transition",
-                  active ? "border-gray-900 bg-gray-50" : "border-gray-200 bg-white hover:bg-gray-50",
+                  checked ? "cursor-default" : "",
+                  optionStyle,
                 ].join(" ")}
               >
-                {option}
+                <span className="flex items-center justify-between gap-2">
+                  <span>{option}</span>
+                  {checked && isCorrectOption ? (
+                    <span className="shrink-0 text-emerald-600 font-semibold text-xs">Correct</span>
+                  ) : null}
+                  {checked && isSelected && !isCorrectOption ? (
+                    <span className="shrink-0 text-rose-600 font-semibold text-xs">Incorrect</span>
+                  ) : null}
+                </span>
               </button>
             );
           })}
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => setChecked(true)}
-            disabled={selected == null}
-            className="rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            Check Answer
-          </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setIndex((value) => Math.max(value - 1, 0));
-                setSelected(null);
-                setChecked(false);
-              }}
-              disabled={index === 0}
-              className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIndex((value) => Math.min(value + 1, quiz.questions.length - 1));
-                setSelected(null);
-                setChecked(false);
-              }}
-              disabled={selected == null || isLast}
-              className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-
+        {/* Feedback panel after checking */}
         {checked ? (
-          <div className="mt-6 rounded-xl bg-gray-50 p-4">
-            <p className="text-sm font-semibold text-gray-900">
-              {isCorrect ? "Correct" : "Not quite"}
+          <div className={[
+            "mt-5 rounded-xl p-4",
+            isCorrect ? "bg-emerald-50 border border-emerald-200" : "bg-rose-50 border border-rose-200",
+          ].join(" ")}>
+            <p className={[
+              "text-sm font-semibold",
+              isCorrect ? "text-emerald-800" : "text-rose-800",
+            ].join(" ")}>
+              {isCorrect ? "Correct!" : "Not quite"}
             </p>
             <p className="mt-2 text-sm text-gray-700">
-              Answer: {answerIndex >= 0 ? current.options[answerIndex] : current.answer}
+              {answerIndex >= 0 ? current.options[answerIndex] : current.answer}
             </p>
-            <p className="mt-1 text-xs text-gray-500">
-              {current.supporting_quote}
-            </p>
+            {current.supporting_quote ? (
+              <p className="mt-1 text-xs text-gray-500 italic">
+                {current.supporting_quote}
+              </p>
+            ) : null}
           </div>
         ) : null}
+
+        {/* Action buttons */}
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {!checked ? (
+            <button
+              type="button"
+              onClick={() => setChecked(true)}
+              disabled={selected == null}
+              className="w-full rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto"
+            >
+              Check Answer
+            </button>
+          ) : (
+            <div className="hidden sm:block" />
+          )}
+
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            {checked && !isLast ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIndex((value) => Math.min(value + 1, quiz.questions.length - 1));
+                  setSelected(null);
+                  setChecked(false);
+                }}
+                className="w-full rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-black/90 sm:w-auto"
+              >
+                Next Question
+              </button>
+            ) : null}
+            {checked && isLast ? (
+              <Link
+                href={`/documents/${id}`}
+                className="inline-flex w-full items-center justify-center rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-black/90 sm:w-auto"
+              >
+                Finish Quiz
+              </Link>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   );

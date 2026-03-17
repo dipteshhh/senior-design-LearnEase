@@ -13,7 +13,7 @@ export default function AppError({ error, reset }: AppErrorProps) {
   }, [error]);
 
   return (
-    <div className="mx-auto max-w-3xl rounded-2xl border border-rose-200 bg-white p-8 shadow-sm">
+    <div className="mx-auto w-full max-w-3xl rounded-2xl border border-rose-200 bg-white p-5 shadow-sm sm:p-8">
       <h1 className="text-2xl font-semibold text-gray-900">Something went wrong</h1>
       <p className="mt-2 text-sm text-gray-600">
         An unexpected error occurred while loading this page.
@@ -30,4 +30,3 @@ export default function AppError({ error, reset }: AppErrorProps) {
     </div>
   );
 }
-

@@ -110,7 +110,7 @@ function ConfirmDeleteDialog({
         <p className="mt-2 text-sm text-gray-600">
           Are you sure you want to delete <span className="font-medium text-gray-900">{filename}</span>? This will also remove any generated study guides, quizzes, and related data. This action cannot be undone.
         </p>
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onCancel}
@@ -192,7 +192,7 @@ export function DocumentCard({
                 e.stopPropagation();
                 setShowConfirm(true);
               }}
-              className="relative z-10 rounded-lg p-1.5 text-gray-400 opacity-0 transition hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-rose-300"
+              className="relative z-10 rounded-lg p-1.5 text-gray-400 opacity-100 transition hover:bg-rose-50 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-rose-300"
               aria-label={`Delete ${doc.filename}`}
             >
               <Trash2 className="h-4 w-4" />

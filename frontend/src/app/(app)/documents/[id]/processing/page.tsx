@@ -586,8 +586,11 @@ export default function ProcessingPage() {
           setError(getErrorMessage(err, "Temporary backend limit reached."));
           nextDelayMs = transientDelayMs;
         } else {
+          // Non-transient poll error (e.g. network hiccup). Show the error
+          // but keep polling with a longer backoff — backend generation may
+          // still be running and the next poll could succeed.
           setError(getErrorMessage(err, "Unable to check generation status."));
-          return;
+          nextDelayMs = DEFAULT_POLL_DELAY_MS * 3;
         }
       }
 
@@ -738,9 +741,9 @@ export default function ProcessingPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-[#fafafa]">
-      <div className="mx-auto flex w-full max-w-4xl flex-col px-6 py-10 md:px-8 md:py-14">
-        <div className="mx-auto flex w-full max-w-2xl flex-col items-center text-center">
+    <div className="w-full bg-[#fafafa]">
+      <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
+        <div className="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
           <ProcessingGlyph failed={isFailed} />
 
           <h1 className="mt-7 max-w-2xl text-3xl font-semibold tracking-tight text-gray-950 md:text-4xl">
@@ -756,8 +759,8 @@ export default function ProcessingPage() {
           <p className="mt-4 text-sm font-medium text-gray-400">{progressLabel}</p>
         </div>
 
-        <div className="mx-auto mt-12 grid w-full max-w-4xl gap-6 lg:grid-cols-[1.55fr_0.95fr] lg:items-start">
-          <section className="rounded-[28px] border border-gray-200 bg-white p-7 shadow-[0_10px_30px_rgba(15,23,42,0.05)] md:p-8">
+        <div className="mx-auto mt-10 grid w-full max-w-6xl gap-6 xl:grid-cols-[1.45fr_1fr] xl:items-start">
+          <section className="rounded-[28px] border border-gray-200 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] sm:p-6 lg:p-8">
             <div className="mb-6 flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-gray-950">Generation progress</h2>
@@ -823,7 +826,7 @@ export default function ProcessingPage() {
           </section>
 
           <aside className="space-y-6">
-            <section className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
+            <section className="rounded-[28px] border border-gray-200 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] sm:p-6">
               <div className="flex items-start gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gray-50 text-xs font-semibold text-gray-700">
                   {document?.filename ? inferExtension(document.filename) : "DOC"}
@@ -848,12 +851,12 @@ export default function ProcessingPage() {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
+            <section className="rounded-[28px] border border-gray-200 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] sm:p-6">
               <h2 className="text-base font-semibold text-gray-950">Helpful note</h2>
-              <p className="mt-3 max-w-[30ch] text-sm leading-7 text-gray-600">
+              <p className="mt-3 text-sm leading-7 text-gray-600">
                 Processing can take longer when the document is large or when the response must match a strict structured format.
               </p>
-              <p className="mt-3 max-w-[30ch] text-sm leading-7 text-gray-500">
+              <p className="mt-3 text-sm leading-7 text-gray-500">
                 Generation begins only when you trigger it. Once it is processing, you can leave this page and return from the dashboard at any time.
               </p>
 
@@ -861,7 +864,7 @@ export default function ProcessingPage() {
                 {isUnsupported ? (
                   <Link
                     href="/upload"
-                    className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                    className="inline-flex w-full items-center justify-center rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 sm:w-auto"
                   >
                     Upload a different document
                   </Link>
@@ -872,7 +875,7 @@ export default function ProcessingPage() {
                       void startGeneration();
                     }}
                     disabled={isStarting}
-                    className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex w-full items-center justify-center rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   >
                     {isStarting ? "Starting..." : "Create Study Guide"}
                   </button>
@@ -883,7 +886,7 @@ export default function ProcessingPage() {
                       void retryGeneration();
                     }}
                     disabled={isRetrying}
-                    className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex w-full items-center justify-center rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   >
                     {isRetrying ? "Retrying..." : "Retry generation"}
                   </button>
@@ -891,7 +894,7 @@ export default function ProcessingPage() {
 
                 <Link
                   href="/dashboard"
-                  className="inline-flex items-center justify-center rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 transition hover:bg-gray-50"
+                  className="inline-flex w-full items-center justify-center rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 transition hover:bg-gray-50 sm:w-auto"
                 >
                   Back to Dashboard
                 </Link>

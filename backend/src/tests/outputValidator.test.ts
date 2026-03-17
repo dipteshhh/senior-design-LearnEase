@@ -187,6 +187,75 @@ test("validateStudyGuideAgainstDocument accepts quote when strongly aligned with
   );
 });
 
+test("validateStudyGuideAgainstDocument accepts extraction-item citation fallback to grounded supporting quote", () => {
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        supporting_quote: "Review the weekly schedule before class.",
+        citations: [
+          {
+            source_type: "pdf",
+            page: 1,
+            excerpt: "Review the weekly schedule before each class session.",
+          },
+        ],
+      },
+    ],
+  };
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text: "Review the weekly schedule before class.",
+      fileType: "PDF",
+      pageCount: 1,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument accepts citation excerpts with ordered ellipsis fragments", () => {
+  const text = "Review the weekly schedule before class and discuss assignments with your group.";
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        supporting_quote: "Review the weekly schedule before class.",
+        citations: [
+          {
+            source_type: "pdf",
+            page: 1,
+            excerpt: "Review the weekly schedule...discuss assignments with your group.",
+          },
+        ],
+      },
+    ],
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        citations: [
+          {
+            source_type: "pdf",
+            page: 1,
+            excerpt: "Review the weekly schedule...discuss assignments with your group.",
+          },
+        ],
+      },
+    ],
+  };
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 1,
+      paragraphCount: null,
+    })
+  );
+});
+
 test("validateStudyGuideAgainstDocument rejects citation range violations", () => {
   const invalid: StudyGuide = {
     ...BASE_STUDY_GUIDE,
@@ -216,12 +285,12 @@ test("validateStudyGuideAgainstDocument rejects citation range violations", () =
   );
 });
 
-test("validateStudyGuideAgainstDocument rejects missing citation excerpt", () => {
+test("validateStudyGuideAgainstDocument rejects missing section citation excerpt", () => {
   const invalid: StudyGuide = {
     ...BASE_STUDY_GUIDE,
-    key_actions: [
+    sections: [
       {
-        ...BASE_STUDY_GUIDE.key_actions[0],
+        ...BASE_STUDY_GUIDE.sections[0],
         citations: [{ source_type: "pdf", page: 1, excerpt: "This excerpt is missing." }],
       },
     ],
@@ -546,6 +615,96 @@ test("validateStudyGuideAgainstDocument rejects 'follow these step-by-step' solv
     (error: unknown) => {
       assert.ok(error instanceof ContractValidationError);
       assert.equal(error.code, "ACADEMIC_INTEGRITY_VIOLATION");
+      return true;
+    }
+  );
+});
+
+test("validateStudyGuideAgainstDocument accepts citation excerpt with token-overlap grounding (PDF extraction artifacts)", () => {
+  // Simulates a model-generated excerpt that is close to but not identical to the extracted text
+  // due to PDF extraction artifacts (e.g. ligatures, extra whitespace, minor reordering).
+  const text =
+    "The transformer architecture uses self-attention mechanisms to process input sequences in parallel. " +
+    "Multi-head attention allows the model to jointly attend to information from different representation subspaces. " +
+    "Each attention head computes scaled dot-product attention independently.";
+
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        supporting_quote: "self-attention mechanisms to process input sequences in parallel",
+        citations: [
+          {
+            source_type: "pdf",
+            page: 1,
+            // Excerpt has minor word differences vs extracted text — direct substring match fails
+            excerpt: "The transformer architecture uses self-attention mechanisms to process input sequences",
+          },
+        ],
+      },
+    ],
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        citations: [
+          {
+            source_type: "pdf",
+            page: 1,
+            excerpt: "Multi-head attention allows the model to jointly attend to information from different subspaces",
+          },
+        ],
+      },
+    ],
+  };
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 1,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument still rejects completely fabricated section citation excerpts even with token-overlap", () => {
+  // Section citations do NOT have the groundedFallbackExcerpt path, so the
+  // fabricated excerpt must fail on its own merits (no supporting-quote bail-out).
+  const text =
+    "Review the weekly schedule before class and prepare for the group discussion. " +
+    "Students should complete all assigned readings prior to the lecture session. " +
+    "Active participation in seminar activities contributes to the final grade. " +
+    "Office hours are available on Tuesday and Thursday afternoons for additional help.";
+
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        citations: [
+          {
+            source_type: "pdf",
+            page: 1,
+            // Completely fabricated excerpt — zero meaningful token overlap with source text
+            excerpt: "Convolutional kernels apply spatial filtering across pixel neighborhoods in image tensors.",
+          },
+        ],
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(guide, {
+        text,
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "CITATION_EXCERPT_NOT_FOUND");
       return true;
     }
   );

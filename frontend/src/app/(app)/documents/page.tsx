@@ -59,10 +59,10 @@ function DocumentsPageContent() {
   );
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-end justify-between gap-4">
+    <div className="space-y-6 sm:space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Documents</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Documents</h1>
           <p className="mt-2 text-sm text-gray-500">
             {docs.length} documents — {readyCount} ready, {processingCount} processing
             {q ? <span className="ml-2 text-gray-400">• filtered by &ldquo;{q}&rdquo;</span> : null}
@@ -70,14 +70,14 @@ function DocumentsPageContent() {
         </div>
         <Link
           href="/upload"
-          className="inline-flex items-center justify-center rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+          className="inline-flex w-full items-center justify-center rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 sm:w-auto"
         >
           Upload Document
         </Link>
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 animate-pulse">
+        <div className="grid grid-cols-1 gap-4 animate-pulse sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="rounded-2xl border bg-white p-5 shadow-sm space-y-3">
               <div className="flex items-start justify-between gap-4">
@@ -110,7 +110,7 @@ function DocumentsPageContent() {
       ) : null}
 
       {!isLoading && !error && docs.length > 0 ? (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {docs.map((doc) => (
             <DocumentCard key={doc.id} doc={doc} onDeleted={refetch} />
           ))}
@@ -122,7 +122,7 @@ function DocumentsPageContent() {
 
 export default function DocumentsPage() {
   return (
-    <Suspense fallback={<p className="p-8 text-sm text-gray-600">Loading documents...</p>}>
+    <Suspense fallback={<p className="py-4 text-sm text-gray-600">Loading documents...</p>}>
       <DocumentsPageContent />
     </Suspense>
   );

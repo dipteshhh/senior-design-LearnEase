@@ -1,11 +1,11 @@
 export default function DocumentLoading() {
   return (
-    <div className="mx-auto max-w-5xl space-y-8 animate-pulse">
+    <div className="mx-auto w-full max-w-6xl animate-pulse space-y-6 sm:space-y-8">
       <div className="space-y-3">
         <div className="h-9 w-2/3 rounded-xl bg-gray-200" />
         <div className="h-4 w-1/3 rounded-lg bg-gray-100" />
       </div>
-      <div className="flex gap-8 border-b pb-3">
+      <div className="flex gap-4 border-b pb-3 sm:gap-8">
         {Array.from({ length: 5 }).map((_, index) => (
           <div key={index} className="h-4 w-20 rounded bg-gray-100" />
         ))}

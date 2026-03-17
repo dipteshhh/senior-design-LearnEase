@@ -102,15 +102,15 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-8 px-1 pb-10">
+    <div className="mx-auto w-full max-w-5xl space-y-6 pb-4 sm:space-y-8 sm:pb-8">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-gray-950">Settings</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-gray-950 sm:text-3xl">Settings</h1>
         <p className="mt-2 text-sm text-gray-500">
           Manage your LearnEase data settings and account safety controls.
         </p>
       </div>
 
-      <section className="overflow-hidden rounded-[28px] border border-gray-200 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.16),_rgba(255,255,255,0.04)),linear-gradient(135deg,#0f172a_0%,#111827_55%,#1f2937_100%)] p-7 text-white shadow-[0_12px_32px_rgba(15,23,42,0.14)]">
+      <section className="overflow-hidden rounded-[28px] border border-gray-200 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.16),_rgba(255,255,255,0.04)),linear-gradient(135deg,#0f172a_0%,#111827_55%,#1f2937_100%)] p-5 text-white shadow-[0_12px_32px_rgba(15,23,42,0.14)] sm:p-7">
         <div className="flex items-start gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-inset ring-white/10">
             <ShieldIcon />
@@ -125,7 +125,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-gray-200 bg-white p-7 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
+      <section className="rounded-[28px] border border-gray-200 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] sm:p-7">
         <div className="flex items-start gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-gray-200 bg-gray-50">
             <DatabaseIcon />
@@ -158,7 +158,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-rose-200 bg-rose-50/80 p-7 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+      <section className="rounded-[28px] border border-rose-200 bg-rose-50/80 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-7">
         <div className="flex items-start gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-100 ring-1 ring-inset ring-rose-200">
             <TrashIcon />

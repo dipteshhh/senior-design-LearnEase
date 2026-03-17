@@ -61,7 +61,7 @@ function Card({
 }) {
   return (
     <section
-      className={`rounded-[28px] border border-gray-200 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)] ${className}`}
+      className={`rounded-[28px] border border-gray-200 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)] sm:p-6 ${className}`}
     >
       {children}
     </section>
@@ -544,7 +544,7 @@ export default function DocumentPage() {
 
   if (!studyGuide) {
     return (
-      <div className="mx-auto max-w-5xl space-y-6">
+      <div className="mx-auto w-full max-w-5xl space-y-6">
         <div className="space-y-3">
           {document.status !== "failed" ? <StatusPill status={document.status} /> : null}
           <h1 className="text-3xl font-semibold tracking-tight text-gray-950 sm:text-4xl">
@@ -835,7 +835,7 @@ export default function DocumentPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-7xl space-y-8">
+      <div className="mx-auto w-full max-w-7xl space-y-6 sm:space-y-8">
         {error ? (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
@@ -852,10 +852,10 @@ export default function DocumentPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:justify-end">
             <Link
               href={`/documents/${document.id}/focus`}
-              className="inline-flex items-center justify-center rounded-2xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-950 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-gray-50"
+              className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-950 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-gray-50 sm:w-auto"
             >
               <span className="mr-2">
                 <svg
@@ -880,7 +880,7 @@ export default function DocumentPage() {
             {canOpenQuiz ? (
               <Link
                 href={`/documents/${document.id}/quiz`}
-                className="inline-flex items-center justify-center rounded-2xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-black/90"
+                className="inline-flex w-full items-center justify-center rounded-2xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-black/90 sm:w-auto"
               >
                 <span className="mr-2">
                   <svg
@@ -902,7 +902,7 @@ export default function DocumentPage() {
                 Test Your Knowledge
               </Link>
             ) : (
-              <span className="inline-flex items-center justify-center rounded-2xl bg-gray-100 px-6 py-3 text-sm font-semibold text-gray-600">
+              <span className="inline-flex w-full items-center justify-center rounded-2xl bg-gray-100 px-6 py-3 text-sm font-semibold text-gray-600 sm:w-auto">
                 Quiz for lecture docs only
               </span>
             )}
@@ -913,7 +913,7 @@ export default function DocumentPage() {
                 void handleDeleteDocument();
               }}
               disabled={isDeleting}
-              className="inline-flex items-center justify-center rounded-2xl border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex w-full items-center justify-center rounded-2xl border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {isDeleting ? "Deleting..." : "Delete"}
             </button>
@@ -921,7 +921,8 @@ export default function DocumentPage() {
         </header>
 
         <nav className="border-b border-gray-200">
-          <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+          <div className="-mx-1 overflow-x-auto pb-1">
+            <div className="flex min-w-max items-end gap-2 px-1 sm:gap-3">
             {tabs.map((tabItem) => {
               const active = tab === tabItem.id;
 
@@ -953,6 +954,7 @@ export default function DocumentPage() {
                 </Link>
               );
             })}
+            </div>
           </div>
         </nav>
 
@@ -1053,7 +1055,7 @@ export default function DocumentPage() {
                         <p className="text-sm text-amber-700">
                           Due time was not detected. Enter the time to enable a reminder.
                         </p>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                           <input
                             type="time"
                             value={dueTimeInput}
