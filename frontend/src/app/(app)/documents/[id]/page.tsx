@@ -349,17 +349,33 @@ function formatCitationSubLabel(citation: Citation): string | null {
   return citation.anchor_type === "paragraph" ? "DOCX paragraph reference" : null;
 }
 
+type ImportantDetailBucket = "dates" | "policies" | "contacts" | "logistics";
+type FlattenedImportantDetail = ExtractionItem & {
+  bucket: ImportantDetailBucket;
+  stableKey: string;
+};
+
 function flattenImportantDetails(items: {
   dates: ExtractionItem[];
   policies: ExtractionItem[];
   contacts: ExtractionItem[];
   logistics: ExtractionItem[];
-}): Array<ExtractionItem & { bucket: "dates" | "policies" | "contacts" | "logistics" }> {
+}): FlattenedImportantDetail[] {
+  const addBucket = (
+    bucket: ImportantDetailBucket,
+    entries: ExtractionItem[]
+  ): FlattenedImportantDetail[] =>
+    entries.map((item, index) => ({
+      ...item,
+      bucket,
+      stableKey: `${bucket}:${item.id}:${index}`,
+    }));
+
   return [
-    ...items.dates.map((item) => ({ ...item, bucket: "dates" as const })),
-    ...items.policies.map((item) => ({ ...item, bucket: "policies" as const })),
-    ...items.contacts.map((item) => ({ ...item, bucket: "contacts" as const })),
-    ...items.logistics.map((item) => ({ ...item, bucket: "logistics" as const })),
+    ...addBucket("dates", items.dates),
+    ...addBucket("policies", items.policies),
+    ...addBucket("contacts", items.contacts),
+    ...addBucket("logistics", items.logistics),
   ];
 }
 
@@ -1242,7 +1258,7 @@ export default function DocumentPage() {
 
                   return (
                     <div
-                      key={item.id}
+                      key={item.stableKey}
                       className={`rounded-3xl border px-6 py-6 ${
                         highlighted
                           ? "border-amber-200 bg-amber-50"

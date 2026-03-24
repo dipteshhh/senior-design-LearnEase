@@ -94,7 +94,7 @@ function getStatusDescription(status: GenerationStatus | undefined): string {
       return "We’re analyzing your document and organizing it into structured study materials. This may take a little longer for larger files.";
     case "idle":
     default:
-      return "Your document is uploaded and ready. Study guide generation starts only after you click Create Study Guide.";
+      return "Your document is uploaded and ready. Study guide generation starts after you click Create Study Guide, and lecture quizzes start automatically with it.";
   }
 }
 
@@ -857,7 +857,7 @@ export default function ProcessingPage() {
                 Processing can take longer when the document is large or when the response must match a strict structured format.
               </p>
               <p className="mt-3 text-sm leading-7 text-gray-500">
-                Generation begins only when you trigger it. Once it is processing, you can leave this page and return from the dashboard at any time.
+                Generation begins only when you trigger it. For lecture documents, quiz generation starts automatically alongside the study guide. Once processing begins, you can leave this page and return from the dashboard at any time.
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">

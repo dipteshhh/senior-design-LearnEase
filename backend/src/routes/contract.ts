@@ -240,6 +240,98 @@ function sendAlreadyProcessingError(res: Response, message: string): void {
   sendApiError(res, 409, "ALREADY_PROCESSING", message);
 }
 
+interface QuizGenerationTaskInput {
+  extractedText: string;
+  fileType: "PDF" | "DOCX";
+  pageCount: number;
+  paragraphCount: number | null;
+}
+
+function launchQuizGenerationTask(
+  documentId: string,
+  input: QuizGenerationTaskInput,
+  logs: {
+    unhandledTaskFailure: string;
+    persistFailure: string;
+  }
+): void {
+  void (async () => {
+    try {
+      const generatedQuiz = await generateQuiz(documentId, input.extractedText, "LECTURE", {
+        fileType: input.fileType,
+        pageCount: input.pageCount,
+        paragraphCount: input.paragraphCount,
+      });
+      // Full updateDocument needed here: writes quiz content
+      updateDocument(documentId, (current) => ({
+        ...current,
+        quiz: generatedQuiz,
+        quizStatus: "ready",
+        quizErrorCode: null,
+        quizErrorMessage: null,
+      }));
+    } catch (error) {
+      const failure = toFailureCode(error);
+      updateDocumentStatus(documentId, {
+        quizStatus: "failed",
+        quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
+        quizErrorMessage: failure.message,
+      });
+    }
+  })().catch((error) => {
+    logger.error(logs.unhandledTaskFailure, { documentId, error });
+    const failure = toFailureCode(error);
+    try {
+      updateDocumentStatus(documentId, {
+        quizStatus: "failed",
+        quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
+        quizErrorMessage: failure.message,
+      });
+    } catch (updateError) {
+      logger.error(logs.persistFailure, {
+        documentId,
+        error: updateError,
+      });
+    }
+  });
+}
+
+function maybeStartLectureQuizFromStudyGuide(documentId: string, source: "create" | "retry"): void {
+  const latest = getDocument(documentId);
+  if (!latest || latest.documentType !== "LECTURE") {
+    return;
+  }
+
+  if (latest.quiz || latest.quizStatus !== "idle") {
+    return;
+  }
+
+  updateDocumentStatus(documentId, {
+    quizStatus: "processing",
+    quizErrorCode: FLOW_PROCESSING_CODE.QUIZ,
+    quizErrorMessage: null,
+  });
+
+  launchQuizGenerationTask(
+    documentId,
+    {
+      extractedText: latest.extractedText,
+      fileType: latest.fileType,
+      pageCount: latest.pageCount,
+      paragraphCount: latest.paragraphCount,
+    },
+    source === "create"
+      ? {
+          unhandledTaskFailure: "Unhandled quiz auto-generation task failure after study guide create",
+          persistFailure: "Failed to persist quiz auto-generation failure after study guide create",
+        }
+      : {
+          unhandledTaskFailure: "Unhandled quiz auto-generation task failure after study guide retry",
+          persistFailure: "Failed to persist quiz auto-generation failure after study guide retry",
+        }
+  );
+}
+
 function isValidPdfSignature(fileBuffer: Buffer): boolean {
   if (fileBuffer.length < PDF_SIGNATURE.length) {
     return false;
@@ -554,6 +646,10 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
         return;
       }
 
+      if (classification.llmDocumentType === "LECTURE") {
+        maybeStartLectureQuizFromStudyGuide(documentId, "create");
+      }
+
       // Extract due date + time for HOMEWORK documents (best-effort, never blocks generation)
       if (classification.llmDocumentType === "HOMEWORK") {
         try {
@@ -662,6 +758,10 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
         return;
       }
 
+      if (llmDocumentType === "LECTURE") {
+        maybeStartLectureQuizFromStudyGuide(documentId, "retry");
+      }
+
       const generated = await analyzeDocument(doc.extractedText, llmDocumentType, {
         fileType: doc.fileType,
         pageCount: doc.pageCount,
@@ -754,50 +854,19 @@ export async function createQuizHandler(req: Request, res: Response): Promise<vo
     quizErrorMessage: null,
   });
 
-  void (async () => {
-    try {
-      const generatedQuiz = await generateQuiz(
-        documentId,
-        doc.extractedText,
-        doc.documentType,
-        {
-          fileType: doc.fileType,
-          pageCount: doc.pageCount,
-          paragraphCount: doc.paragraphCount,
-        }
-      );
-      // Full updateDocument needed here: writes quiz content
-      updateDocument(documentId, (current) => ({
-        ...current,
-        quiz: generatedQuiz,
-        quizStatus: "ready",
-        quizErrorCode: null,
-        quizErrorMessage: null,
-      }));
-    } catch (error) {
-      const failure = toFailureCode(error);
-      updateDocumentStatus(documentId, {
-        quizStatus: "failed",
-        quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
-        quizErrorMessage: failure.message,
-      });
+  launchQuizGenerationTask(
+    documentId,
+    {
+      extractedText: doc.extractedText,
+      fileType: doc.fileType,
+      pageCount: doc.pageCount,
+      paragraphCount: doc.paragraphCount,
+    },
+    {
+      unhandledTaskFailure: "Unhandled quiz generation task failure",
+      persistFailure: "Failed to persist quiz task failure",
     }
-  })().catch((error) => {
-    logger.error("Unhandled quiz generation task failure", { documentId, error });
-    const failure = toFailureCode(error);
-    try {
-      updateDocumentStatus(documentId, {
-        quizStatus: "failed",
-        quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
-        quizErrorMessage: failure.message,
-      });
-    } catch (updateError) {
-      logger.error("Failed to persist quiz task failure", {
-        documentId,
-        error: updateError,
-      });
-    }
-  });
+  );
 
   res.status(202).json({ status: "processing" });
 }
@@ -827,50 +896,19 @@ export async function retryQuizHandler(req: Request, res: Response): Promise<voi
     quizErrorMessage: null,
   });
 
-  void (async () => {
-    try {
-      const generatedQuiz = await generateQuiz(
-        documentId,
-        doc.extractedText,
-        doc.documentType,
-        {
-          fileType: doc.fileType,
-          pageCount: doc.pageCount,
-          paragraphCount: doc.paragraphCount,
-        }
-      );
-      // Full updateDocument needed here: writes quiz content
-      updateDocument(documentId, (current) => ({
-        ...current,
-        quiz: generatedQuiz,
-        quizStatus: "ready",
-        quizErrorCode: null,
-        quizErrorMessage: null,
-      }));
-    } catch (error) {
-      const failure = toFailureCode(error);
-      updateDocumentStatus(documentId, {
-        quizStatus: "failed",
-        quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
-        quizErrorMessage: failure.message,
-      });
+  launchQuizGenerationTask(
+    documentId,
+    {
+      extractedText: doc.extractedText,
+      fileType: doc.fileType,
+      pageCount: doc.pageCount,
+      paragraphCount: doc.paragraphCount,
+    },
+    {
+      unhandledTaskFailure: "Unhandled quiz retry task failure",
+      persistFailure: "Failed to persist quiz retry task failure",
     }
-  })().catch((error) => {
-    logger.error("Unhandled quiz retry task failure", { documentId, error });
-    const failure = toFailureCode(error);
-    try {
-      updateDocumentStatus(documentId, {
-        quizStatus: "failed",
-        quizErrorCode: makeFlowFailureCode("QUIZ", failure.code),
-        quizErrorMessage: failure.message,
-      });
-    } catch (updateError) {
-      logger.error("Failed to persist quiz retry task failure", {
-        documentId,
-        error: updateError,
-      });
-    }
-  });
+  );
 
   res.status(202).json({ status: "processing", retry: true });
 }
