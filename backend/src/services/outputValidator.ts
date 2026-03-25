@@ -33,6 +33,7 @@ interface ValidationContext {
   paragraphCount: number | null;
   normalizedText: string;
   groundingTextLoose: string;
+  docTokensLoose: string[] | null;
 }
 
 const MIN_SECTION_COUNT_FOR_STRUCTURED_DOC = 3;
@@ -171,9 +172,12 @@ function hasTokenOverlapWithDocument(
     return false;
   }
 
-  const docTokens = normalizeForLooseGroundingMatch(context.normalizedText)
-    .split(" ")
-    .filter(Boolean);
+  if (!context.docTokensLoose) {
+    context.docTokensLoose = normalizeForLooseGroundingMatch(context.normalizedText)
+      .split(" ")
+      .filter(Boolean);
+  }
+  const docTokens = context.docTokensLoose;
   if (docTokens.length === 0) {
     return false;
   }
@@ -248,6 +252,7 @@ function createValidationContext(input: ValidationInput): ValidationContext {
     paragraphCount: input.paragraphCount,
     normalizedText,
     groundingTextLoose: normalizeForLooseGroundingMatch(normalizedText),
+    docTokensLoose: null,
   };
 }
 

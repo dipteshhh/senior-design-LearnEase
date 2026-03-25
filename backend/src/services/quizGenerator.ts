@@ -112,6 +112,48 @@ Return JSON in this shape:
 }`;
 }
 
+function getRepairFailureSignature(error: unknown): string {
+  if (error instanceof ContractValidationError) {
+    const issues = Array.isArray(error.details.issues)
+      ? error.details.issues.map((issue) => {
+          if (issue && typeof issue === "object") {
+            const obj = issue as Record<string, unknown>;
+            return {
+              code: typeof obj.code === "string" ? obj.code : null,
+              message: typeof obj.message === "string" ? obj.message : null,
+              path: Array.isArray(obj.path) ? obj.path.join(".") : null,
+            };
+          }
+          return issue;
+        })
+      : [];
+    const details = error.details;
+    return JSON.stringify({
+      code: error.code,
+      message: error.message,
+      issues,
+      path: typeof details.path === "string" ? details.path : null,
+      reason: typeof details.reason === "string" ? details.reason : null,
+      field: typeof details.field === "string" ? details.field : null,
+      sourceType: typeof details.source_type === "string" ? details.source_type : null,
+      expectedFileType:
+        typeof details.expected_file_type === "string" ? details.expected_file_type : null,
+      page: typeof details.page === "number" ? details.page : null,
+      pageCount: typeof details.page_count === "number" ? details.page_count : null,
+      paragraph: typeof details.paragraph === "number" ? details.paragraph : null,
+      paragraphCount:
+        typeof details.paragraph_count === "number" ? details.paragraph_count : null,
+      minSections: typeof details.min_sections === "number" ? details.min_sections : null,
+      actualSections:
+        typeof details.actual_sections === "number" ? details.actual_sections : null,
+    });
+  }
+  if (error instanceof Error) {
+    return `${error.name}:${error.message}`;
+  }
+  return String(error);
+}
+
 export async function generateQuiz(
   documentId: string,
   text: string,
@@ -135,6 +177,8 @@ export async function generateQuiz(
   let lastError: unknown = null;
   let repairHint = "";
   let previousFailureBucket: "transient" | "repairable" | "terminal" | null = null;
+  let repeatedRepairSignature: string | null = null;
+  let repeatedRepairCount = 0;
 
   for (let attempt = 1; attempt <= generationPolicy.maxAttempts; attempt += 1) {
     const model = selectModelForAttempt(generationPolicy, attempt, previousFailureBucket);
@@ -145,29 +189,42 @@ export async function generateQuiz(
       OPENAI_RETRY_TIMEOUT_CAP_MS
     );
     const startedAt = Date.now();
+    let queueWaitMs = 0;
+    let openAiDurationMs = 0;
+    let validationDurationMs = 0;
     try {
       assertCircuitBreakerAllowsGeneration();
 
-      const response = await withOpenAiConcurrency(() =>
-        openAiClient.chat.completions.create({
-          model,
-          messages: [
-            {
-              role: "system",
-              content: [quizPrompt, citationRequirements, repairHint].filter(Boolean).join("\n\n"),
-            },
-            {
-              role: "user",
-              content:
-                `Document ID: ${documentId}\n` +
-                `Document file type: ${metadata.fileType}\n\n` +
-                `Lecture text:\n${text}`,
-            },
-          ],
-          response_format: QUIZ_RESPONSE_FORMAT,
-          max_tokens: 4096,
-          temperature: 0,
-        }, { timeout: requestTimeoutMs })
+      const response = await withOpenAiConcurrency(
+        async () => {
+          const openAiStartedAt = Date.now();
+          const result = await openAiClient.chat.completions.create({
+            model,
+            messages: [
+              {
+                role: "system",
+                content: [quizPrompt, citationRequirements, repairHint].filter(Boolean).join("\n\n"),
+              },
+              {
+                role: "user",
+                content:
+                  `Document ID: ${documentId}\n` +
+                  `Document file type: ${metadata.fileType}\n\n` +
+                  `Lecture text:\n${text}`,
+              },
+            ],
+            response_format: QUIZ_RESPONSE_FORMAT,
+            max_tokens: 4096,
+            temperature: 0,
+          }, { timeout: requestTimeoutMs });
+          openAiDurationMs = Date.now() - openAiStartedAt;
+          return result;
+        },
+        {
+          onSlotAcquired: (waitMs) => {
+            queueWaitMs = waitMs;
+          },
+        }
       );
 
       const content = response.choices[0]?.message?.content ?? "{}";
@@ -196,6 +253,7 @@ export async function generateQuiz(
         document_id: documentId,
       };
 
+      const validationStartedAt = Date.now();
       validateQuizAgainstDocument(
         result,
         {
@@ -206,14 +264,19 @@ export async function generateQuiz(
         },
         documentType
       );
+      validationDurationMs = Date.now() - validationStartedAt;
       recordGenerationOutcome("success");
+      const durationMs = Date.now() - startedAt;
 
       logger.info("Quiz generation attempt succeeded", {
         attempt,
         maxAttempts: generationPolicy.maxAttempts,
         model,
         timeoutMs: requestTimeoutMs,
-        durationMs: Date.now() - startedAt,
+        durationMs,
+        queueWaitMs,
+        openAiDurationMs,
+        validationDurationMs,
       });
 
       return result;
@@ -237,6 +300,9 @@ export async function generateQuiz(
         failureBucket,
         errorCode: contractCode,
         durationMs,
+        queueWaitMs,
+        openAiDurationMs,
+        validationDurationMs,
         error: normalizedError,
       });
 
@@ -252,9 +318,27 @@ export async function generateQuiz(
       }
 
       if (failureBucket === "repairable") {
+        const signature = getRepairFailureSignature(normalizedError);
+        if (signature === repeatedRepairSignature) {
+          repeatedRepairCount += 1;
+        } else {
+          repeatedRepairSignature = signature;
+          repeatedRepairCount = 1;
+        }
+        if (repeatedRepairCount >= 3) {
+          logger.warn("Quiz retries short-circuited after repeated repair failure signature", {
+            attempt,
+            signature,
+            repeatedRepairCount,
+          });
+          break;
+        }
         repairHint = buildRepairHint(normalizedError);
         continue;
       }
+
+      repeatedRepairSignature = null;
+      repeatedRepairCount = 0;
 
       const backoffMs = computeTransientBackoffMs(attempt, generationPolicy);
       await sleepMs(backoffMs);

@@ -284,10 +284,19 @@ const openaiConcurrencyLimit = readEnvInt(
 let openaiInFlight = 0;
 const openaiWaitQueue: Array<() => void> = [];
 
-export async function withOpenAiConcurrency<T>(fn: () => Promise<T>): Promise<T> {
+interface OpenAiConcurrencyOptions {
+  onSlotAcquired?: (queueWaitMs: number) => void;
+}
+
+export async function withOpenAiConcurrency<T>(
+  fn: () => Promise<T>,
+  options: OpenAiConcurrencyOptions = {}
+): Promise<T> {
+  const waitStartedAt = Date.now();
   if (openaiInFlight >= openaiConcurrencyLimit) {
     await new Promise<void>((resolve) => openaiWaitQueue.push(resolve));
   }
+  options.onSlotAcquired?.(Date.now() - waitStartedAt);
   openaiInFlight += 1;
   try {
     return await fn();

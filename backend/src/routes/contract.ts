@@ -296,42 +296,6 @@ function launchQuizGenerationTask(
   });
 }
 
-function maybeStartLectureQuizFromStudyGuide(documentId: string, source: "create" | "retry"): void {
-  const latest = getDocument(documentId);
-  if (!latest || latest.documentType !== "LECTURE") {
-    return;
-  }
-
-  if (latest.quiz || latest.quizStatus !== "idle") {
-    return;
-  }
-
-  updateDocumentStatus(documentId, {
-    quizStatus: "processing",
-    quizErrorCode: FLOW_PROCESSING_CODE.QUIZ,
-    quizErrorMessage: null,
-  });
-
-  launchQuizGenerationTask(
-    documentId,
-    {
-      extractedText: latest.extractedText,
-      fileType: latest.fileType,
-      pageCount: latest.pageCount,
-      paragraphCount: latest.paragraphCount,
-    },
-    source === "create"
-      ? {
-          unhandledTaskFailure: "Unhandled quiz auto-generation task failure after study guide create",
-          persistFailure: "Failed to persist quiz auto-generation failure after study guide create",
-        }
-      : {
-          unhandledTaskFailure: "Unhandled quiz auto-generation task failure after study guide retry",
-          persistFailure: "Failed to persist quiz auto-generation failure after study guide retry",
-        }
-  );
-}
-
 function isValidPdfSignature(fileBuffer: Buffer): boolean {
   if (fileBuffer.length < PDF_SIGNATURE.length) {
     return false;
@@ -629,7 +593,14 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
   void (async () => {
     try {
       // LLM pre-classification: gate generation on semantic document type check
+      const classificationStartedAt = Date.now();
       const classification = await classifyWithLlm(doc.extractedText);
+      logger.info("Study guide classifier completed", {
+        documentId,
+        llmDocumentType: classification.llmDocumentType,
+        disagreement: classification.disagreement,
+        classifierDurationMs: Date.now() - classificationStartedAt,
+      });
 
       // Persist the LLM-determined type so all downstream flows
       // (list, detail, quiz, checklist) use the authoritative type.
@@ -644,10 +615,6 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
           studyGuideErrorMessage: "This document type is not supported for study guide generation.",
         });
         return;
-      }
-
-      if (classification.llmDocumentType === "LECTURE") {
-        maybeStartLectureQuizFromStudyGuide(documentId, "create");
       }
 
       // Extract due date + time for HOMEWORK documents (best-effort, never blocks generation)
@@ -741,8 +708,15 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
           documentType: llmDocumentType,
         });
       } else {
+        const classificationStartedAt = Date.now();
         const classification = await classifyWithLlm(doc.extractedText);
         llmDocumentType = classification.llmDocumentType;
+        logger.info("Study guide retry classifier completed", {
+          documentId,
+          llmDocumentType,
+          disagreement: classification.disagreement,
+          classifierDurationMs: Date.now() - classificationStartedAt,
+        });
 
         updateDocumentStatus(documentId, {
           documentType: llmDocumentType,
@@ -756,10 +730,6 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
           studyGuideErrorMessage: "This document type is not supported for study guide generation.",
         });
         return;
-      }
-
-      if (llmDocumentType === "LECTURE") {
-        maybeStartLectureQuizFromStudyGuide(documentId, "retry");
       }
 
       const generated = await analyzeDocument(doc.extractedText, llmDocumentType, {

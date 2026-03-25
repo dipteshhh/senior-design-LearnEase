@@ -64,17 +64,30 @@ export async function classifyWithLlm(
   const truncated = text.slice(0, 2000);
 
   let response;
+  let queueWaitMs = 0;
+  const startedAt = Date.now();
+  let openAiDurationMs = 0;
   try {
-    response = await withOpenAiConcurrency(() =>
-      openAiClient.chat.completions.create({
-        model: CLASSIFIER_MODEL,
-        messages: [
-          { role: "system", content: CLASSIFIER_PROMPT },
-          { role: "user", content: truncated },
-        ],
-        max_tokens: 10,
-        temperature: 0,
-      })
+    response = await withOpenAiConcurrency(
+      async () => {
+        const openAiStartedAt = Date.now();
+        const result = await openAiClient.chat.completions.create({
+          model: CLASSIFIER_MODEL,
+          messages: [
+            { role: "system", content: CLASSIFIER_PROMPT },
+            { role: "user", content: truncated },
+          ],
+          max_tokens: 10,
+          temperature: 0,
+        });
+        openAiDurationMs = Date.now() - openAiStartedAt;
+        return result;
+      },
+      {
+        onSlotAcquired: (waitMs) => {
+          queueWaitMs = waitMs;
+        },
+      }
     );
   } catch (error) {
     // Fail closed: do not fall back to the local classifier because it is
@@ -108,6 +121,9 @@ export async function classifyWithLlm(
     localDocumentType: localDetection.documentType,
     llmDocumentType,
     disagreement,
+    queueWaitMs,
+    openAiDurationMs,
+    durationMs: Date.now() - startedAt,
   });
 
   return {
