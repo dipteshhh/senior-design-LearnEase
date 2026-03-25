@@ -59,7 +59,7 @@ Default local URL: `http://localhost:3001`
 - `PORT` (default `3001`)
 - `OPENAI_API_KEY` (required)
 - `OPENAI_TIMEOUT_MS` (OpenAI request timeout in ms; default `30000`)
-- `OPENAI_MAX_RETRIES` (OpenAI SDK network retries; default `2`)
+- `OPENAI_MAX_RETRIES` (OpenAI SDK network retries; default `0`)
 - `OPENAI_MODEL` (primary model for generation; default `gpt-4o-mini`)
 - `OPENAI_FALLBACK_MODEL` (optional fallback model used on later attempts after retryable failures)
 - `OPENAI_FALLBACK_START_ATTEMPT` (attempt number at which fallback model becomes eligible; default `2`)

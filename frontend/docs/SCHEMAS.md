@@ -68,7 +68,7 @@ Rules:
 {
   "overview": {
     "title": "string",
-    "document_type": "HOMEWORK | LECTURE | SYLLABUS",
+    "document_type": "HOMEWORK | LECTURE",
     "summary": "string"
   },
   "key_actions": [],
@@ -99,6 +99,27 @@ Rules:
 - `sections[].content` may restructure but MUST remain faithful to source.
 - Every `sections[]` entry MUST include at least one citation.
 - Every `ExtractionItem` MUST have a quote and citations.
+
+### 3.2 StudyGuide API Response (GET /api/study-guide/:documentId)
+
+The API response extends the generated StudyGuide with server-side checklist state:
+
+```json
+{
+  "overview": { ... },
+  "key_actions": [ ... ],
+  "checklist": [ ... ],
+  "important_details": { ... },
+  "sections": [ ... ],
+  "checklist_completion": {
+    "checklist-item-id": true
+  }
+}
+```
+
+- `checklist_completion` is a `Record<string, boolean>` mapping checklist item `id` values to their completion status.
+- This field is added by the API layer, not by the AI generation pipeline.
+- Missing keys default to `false`.
 
 ---
 

@@ -4,7 +4,7 @@
 EECS 4020 — Senior Design Project II  
 University of Toledo · College of Engineering
 
-LearnEase is a desktop-focused web application that helps students **understand academic documents** (homework, lecture notes, and syllabi) by restructuring dense text into **clear, accessible, and traceable study views**.
+LearnEase is a desktop-focused web application that helps students **understand academic documents** (homework, lecture notes, and class notes) by restructuring dense text into **clear, accessible, and traceable study views**.
 
 LearnEase is **not** a homework solver. It does **not** generate answers, solutions, or step-by-step guidance for graded assignments. It is **not** a tutoring tool for cheating or academic dishonesty.
 
@@ -34,13 +34,15 @@ Academic integrity is enforced at the **prompt**, **backend**, and **UI** levels
 - Allows users to upload **PDF or DOCX** academic documents:
   - Homework
   - Lecture notes
-  - Syllabi
+  - Class notes
 - Allows users to upload documents from:
   - the Dashboard (via the **Upload Document** action), or
   - the **Upload** page in the left navigation  
   Both entry points route to the **same Upload flow**
 - Automatically detects document type
-- Uses a local, deterministic **first-match-wins** classifier (no OpenAI classification)
+- Uses a two-stage document classification flow:
+  - deterministic local detection at upload time
+  - LLM pre-classification before study-guide generation
 - Enables the **Create Study Guide** action only for supported academic documents
 - Includes a **Settings** page where users can:
   - View privacy and encryption status
@@ -84,7 +86,7 @@ Tabs are shown or hidden based on document type and extracted content.
 - Generated **only when explicitly triggered by the user and never automatically**
 - Questions are answerable verbatim from the lecture document
 - No grading, analytics, or storage of attempts
-- Hidden for homework and syllabus documents
+- Hidden for non-lecture documents
 
 ---
 
@@ -142,4 +144,4 @@ For full system specifications, architecture decisions, and implementation rules
 - `docs/SCHEMAS.md` (exact JSON output shapes)
 - `docs/VALIDATION.md` (quote/citation enforcement)
 - `docs/AUTH.md` (auth contract)
-- `docs/CLASSIFICATION.md` (local document classification rules)
+- `docs/CLASSIFICATION.md` (two-stage document classification rules)

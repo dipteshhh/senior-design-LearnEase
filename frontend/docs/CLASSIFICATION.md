@@ -1,63 +1,82 @@
-# LearnEase — Document Classification (Local, No‑LLM)
+# LearnEase — Document Classification (Two-Stage)
 
-Document type classification is performed **locally** (no OpenAI call).
+Document type classification uses two stages:
+
+- Stage 1: deterministic local detection at upload time
+- Stage 2: LLM pre-classification immediately before study-guide generation
 
 Supported output values:
+
 - HOMEWORK
 - LECTURE
-- SYLLABUS
 - UNSUPPORTED
+
+Syllabi and other out-of-scope academic/admin documents are classified as `UNSUPPORTED`.
 
 ---
 
 ## 1) Inputs
 
-Classifier receives:
+The classification pipeline evaluates:
+
 - extracted_text (normalized)
 - original_filename
 - file_type (PDF | DOCX)
 
 ---
 
-## 2) Heuristics (Deterministic, First-Match-Wins)
+## 2) Stage 1 — Local Detection (Upload Time)
 
-The classifier evaluates heuristics in the order listed below.
-The **first matching category wins**, and no further checks are performed.
+The upload-time classifier is deterministic and runs without an OpenAI call.
+Its purpose is to provide fast metadata and early rejection of clearly unsupported
+documents.
 
-### 2.1 Syllabus
-If any of the following appear (case-insensitive):
-- "syllabus"
-- "course policies"
-- "grading"
-- "office hours"
-- "learning outcomes"
-Then classify as `SYLLABUS`.
+Implementation notes:
 
-### 2.2 Homework
-If any of the following appear:
-- "homework"
-- "assignment"
-- "problem set"
-- "due date"
-- "submit"
-Then classify as `HOMEWORK`.
+- It uses weighted heuristics and priority rules from `backend/src/services/documentDetector.ts`.
+- It distinguishes supported study-material documents (`HOMEWORK`, `LECTURE`) from out-of-scope documents (`UNSUPPORTED`).
+- It is intentionally conservative and does not generate content.
 
-### 2.3 Lecture
-If any of the following appear:
-- "lecture"
-- "slides"
-- "topic:"
-- "learning objectives"
-- repeated header patterns like "Week", "Module", "Chapter"
-Then classify as `LECTURE`.
-
-
-### 2.4 Unsupported
-If extracted_text is empty OR none of the above triggers match, classify as `UNSUPPORTED`.
+This local result is useful for upload-time UX, but it is **not** the final
+generation safety gate.
 
 ---
-## 3) Notes
 
-- Classifier MUST NOT infer intent; only keyword/structure triggers above.
-- There is **no tie-breaking logic**.
-- Classification stops at the first matching heuristic.
+## 3) Stage 2 — LLM Pre-Classifier (Generation Time)
+
+Immediately before study-guide generation, the backend runs a lightweight LLM
+classification call on a truncated portion of the extracted text.
+
+Current behavior:
+
+- model: `gpt-4o-mini`
+- input: approximately the first 2000 characters
+- `max_tokens: 10`
+- `temperature: 0`
+
+The LLM classifies the document by **primary purpose**, not incidental keywords.
+
+- If the LLM returns `HOMEWORK` or `LECTURE`, study-guide generation may proceed.
+- If the LLM returns `UNSUPPORTED`, generation is blocked and the document is marked failed with `DOCUMENT_UNSUPPORTED`.
+- If the LLM call fails or returns an unexpected value, generation **fails closed**.
+- The backend does **not** fall back to the local classifier for final generation gating.
+- Local and LLM outcomes are logged for disagreement tracking.
+
+The LLM pre-classifier runs only inside explicit user-triggered study-guide
+create/retry flows. It does not run at upload time and it does not run on page load.
+
+---
+
+## 4) Classification Intent
+
+The classifier is intended to support:
+
+- HOMEWORK documents
+- LECTURE documents, including class notes and course notes
+
+Examples of `UNSUPPORTED` documents include:
+
+- syllabi and course schedules
+- project reports, research papers, and lab reports
+- resumes, portfolios, and transcripts
+- administrative, transactional, insurance, or review forms

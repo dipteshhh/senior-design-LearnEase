@@ -68,7 +68,7 @@ Rules:
 {
   "overview": {
     "title": "string",
-    "document_type": "HOMEWORK | LECTURE | SYLLABUS",
+    "document_type": "HOMEWORK | LECTURE",
     "summary": "string"
   },
   "key_actions": [],

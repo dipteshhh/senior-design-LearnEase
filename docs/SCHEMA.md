@@ -24,7 +24,7 @@ Uploaded files and derived artifacts are stored **encrypted on disk** (paths ref
 - file_type (PDF | DOCX)
 - page_count (pdf only; nullable)
 - paragraph_count (docx only; nullable)
-- document_type (HOMEWORK | LECTURE | SYLLABUS | UNSUPPORTED)
+- document_type (HOMEWORK | LECTURE | UNSUPPORTED)
 - status (uploaded | processing | ready | failed)
 - uploaded_at
 - processed_at (nullable)

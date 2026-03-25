@@ -105,7 +105,7 @@ Responses:
 ```json
 {
   "document_id": "uuid",
-  "document_type": "HOMEWORK | LECTURE | SYLLABUS | UNSUPPORTED",
+  "document_type": "HOMEWORK | LECTURE | UNSUPPORTED",
   "status": "uploaded"
 }
 ```
@@ -130,7 +130,7 @@ Response:
   {
     "id": "uuid",
     "filename": "hw1.pdf",
-    "document_type": "HOMEWORK | LECTURE | SYLLABUS | UNSUPPORTED",
+    "document_type": "HOMEWORK | LECTURE | UNSUPPORTED",
     "status": "uploaded | processing | ready | failed",
     "study_guide_status": "idle | processing | ready | failed",
     "quiz_status": "idle | processing | ready | failed",
@@ -165,7 +165,7 @@ Response:
 {
   "id": "uuid",
   "filename": "hw1.pdf",
-  "document_type": "HOMEWORK | LECTURE | SYLLABUS | UNSUPPORTED",
+  "document_type": "HOMEWORK | LECTURE | UNSUPPORTED",
   "status": "uploaded | processing | ready | failed",
   "study_guide_status": "idle | processing | ready | failed",
   "quiz_status": "idle | processing | ready | failed",

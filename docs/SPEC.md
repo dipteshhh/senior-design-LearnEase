@@ -37,22 +37,23 @@ If anything is ambiguous, follow:
 Document types:
 - HOMEWORK
 - LECTURE
-- SYLLABUS
 - UNSUPPORTED
 
-Classification is local (no OpenAI) and deterministic.
-Classification uses first-match-wins heuristics as defined in `docs/CLASSIFICATION.md`.
+Classification uses two stages:
+- deterministic local detection at upload time
+- an LLM pre-classifier gate immediately before study-guide generation
+
 See `docs/CLASSIFICATION.md`.
 
 ---
 
 ## 3) Feature Gating Matrix (Hard Rules)
 
-| Feature | HOMEWORK | LECTURE | SYLLABUS | UNSUPPORTED |
-|---|---:|---:|---:|---:|
-| Study Guide | ✅ Allowed (no solving) | ✅ Allowed | ✅ Allowed | ❌ |
-| Quiz (Test Your Knowledge) | ❌ | ✅ Allowed | ❌ | ❌ |
-| Checklist Completion | ✅ | ✅ | ✅ | ❌ |
+| Feature | HOMEWORK | LECTURE | UNSUPPORTED |
+|---|---:|---:|---:|
+| Study Guide | ✅ Allowed (no solving) | ✅ Allowed | ❌ |
+| Quiz (Test Your Knowledge) | ❌ | ✅ Allowed | ❌ |
+| Checklist Completion | ✅ | ✅ | ❌ |
 
 Additional rules:
 - Quiz is lecture-only, user-triggered only (see `docs/SCHEMAS.md` + `docs/AI_contract.md`)
@@ -86,6 +87,8 @@ OpenAI calls may occur ONLY when the user explicitly triggers:
 - Create Study Guide
 - Test Your Knowledge (Quiz)
 
+For study guides, this includes the lightweight LLM pre-classifier gate that runs inside the explicit create/retry flow.
+
 In-process async continuation after a user-triggered `POST /create` or `POST /retry` is allowed.
 For example, returning `202` and continuing generation in the same running API process is valid.
 No autonomous/background schedulers are allowed for generation (no cron, queue workers, daemons, or page-load-triggered generation).
@@ -112,21 +115,23 @@ See `docs/API_ERRORS.md` for idempotency rules.
 3. Store metadata in SQLite
 4. Extract text locally
 5. Store extracted+normalized text encrypted on disk (for validation)
-6. Classify document type locally
+6. Classify document type locally for upload-time metadata
 
 ### 7.2 Study Guide
 1. User clicks Create Study Guide
 2. Document status → processing
-3. Call OpenAI once
-4. Validate output schema (`docs/SCHEMAS.md`)
-5. Validate quotes/citations against extracted text (`docs/VALIDATION.md`)
-6. Cache Study Guide JSON in DB
-7. Document status → ready
+3. Run LLM pre-classifier gate
+4. If supported, call OpenAI for Study Guide generation
+5. Validate output schema (`docs/SCHEMAS.md`)
+6. Validate quotes/citations against extracted text (`docs/VALIDATION.md`)
+7. Cache Study Guide JSON in DB
+8. Document status → ready
 
 ### 7.3 Quiz (Lecture Only)
 Same as Study Guide, but:
 - Document_type must be LECTURE
 - Output must follow Quiz schema
+- Quiz generation remains explicit and user-triggered
 
 ---
 
