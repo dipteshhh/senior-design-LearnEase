@@ -40,6 +40,31 @@ const DEFAULT_SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const DEFAULT_GOOGLE_TOKENINFO_TIMEOUT_MS = 8000;
 const DEFAULT_GOOGLE_TOKENINFO_MAX_RETRIES = 1;
 
+/**
+ * Determine the correct SameSite attribute for session cookies.
+ *
+ * When the frontend and backend live on different origins (e.g. Railway
+ * subdomains), the browser treats cross-origin fetch() requests as
+ * cross-site. SameSite=Lax cookies are NOT sent on cross-origin POST or
+ * even GET fetch requests with credentials, so the session cookie never
+ * reaches the backend.
+ *
+ * Returns "none" (requires Secure) when CORS_ORIGINS indicates a
+ * cross-origin deployment, otherwise "lax" for same-origin / local dev.
+ */
+function getSessionCookieSameSite(): "lax" | "none" {
+  if (process.env.NODE_ENV !== "production") {
+    return "lax";
+  }
+  const corsOrigins = process.env.CORS_ORIGINS?.trim();
+  if (!corsOrigins) {
+    return "lax";
+  }
+  // If any configured CORS origin differs from the backend's own origin,
+  // we need SameSite=None so the cookie is sent cross-origin.
+  return "none";
+}
+
 function getGoogleClientId(): string {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
   if (!clientId) {
@@ -231,10 +256,11 @@ export async function googleAuthHandler(req: Request, res: Response): Promise<vo
     };
 
     const sessionCookie = createSignedSession(sessionPayload);
+    const sameSite = getSessionCookieSameSite();
     res.cookie(SESSION_COOKIE_NAME, sessionCookie, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite,
       maxAge: maxAgeSeconds * 1000,
       path: "/",
     });
@@ -284,7 +310,7 @@ export function logoutHandler(_req: Request, res: Response): void {
   res.clearCookie(SESSION_COOKIE_NAME, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: getSessionCookieSameSite(),
     path: "/",
   });
   res.status(200).json({ success: true });

@@ -57,6 +57,7 @@ function SignInPageContent() {
   );
 
   const buttonRef = useRef<HTMLDivElement | null>(null);
+  const completeSignInRef = useRef<(credential: string) => Promise<void>>(undefined);
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -92,13 +93,18 @@ function SignInPageContent() {
     [returnTo, router]
   );
 
+  // Keep the ref in sync so the stable Google callback always calls the latest version.
+  completeSignInRef.current = completeSignIn;
+
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) {
       setError("Missing NEXT_PUBLIC_GOOGLE_CLIENT_ID configuration.");
       return;
     }
 
-    const renderGoogleButton = () => {
+    let resizeHandler: (() => void) | null = null;
+
+    const initializeGoogleButton = () => {
       if (!window.google || !buttonRef.current) return;
 
       window.google.accounts.id.initialize({
@@ -109,7 +115,7 @@ function SignInPageContent() {
             setError("Google sign-in did not return a credential.");
             return;
           }
-          void completeSignIn(credential);
+          void completeSignInRef.current?.(credential);
         },
       });
 
@@ -122,10 +128,22 @@ function SignInPageContent() {
       });
     };
 
+    const handleResize = () => {
+      if (!window.google || !buttonRef.current) return;
+      buttonRef.current.innerHTML = "";
+      window.google.accounts.id.renderButton(buttonRef.current, {
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        width: Math.min(380, Math.max(280, buttonRef.current.offsetWidth || 340)),
+      });
+    };
+
     if (window.google) {
-      renderGoogleButton();
-      window.addEventListener("resize", renderGoogleButton);
-      return () => window.removeEventListener("resize", renderGoogleButton);
+      initializeGoogleButton();
+      resizeHandler = handleResize;
+      window.addEventListener("resize", resizeHandler);
+      return () => window.removeEventListener("resize", handleResize);
     }
 
     const script = document.createElement("script");
@@ -133,8 +151,9 @@ function SignInPageContent() {
     script.async = true;
     script.defer = true;
     script.onload = () => {
-      renderGoogleButton();
-      window.addEventListener("resize", renderGoogleButton);
+      initializeGoogleButton();
+      resizeHandler = handleResize;
+      window.addEventListener("resize", handleResize);
     };
     script.onerror = () => {
       setError("Failed to load Google sign-in script. Please refresh and try again.");
@@ -143,10 +162,11 @@ function SignInPageContent() {
     document.head.appendChild(script);
 
     return () => {
-      window.removeEventListener("resize", renderGoogleButton);
+      if (resizeHandler) window.removeEventListener("resize", resizeHandler);
       script.remove();
     };
-  }, [completeSignIn]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
