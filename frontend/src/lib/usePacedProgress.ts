@@ -36,7 +36,7 @@ export function usePacedProgress(
 ): UsePacedProgressReturn {
   const { isProcessing, isReady, isFailed, ...config } = options;
 
-  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const startedAtRef = useRef<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const isMountedRef = useRef(true);
 
@@ -47,42 +47,36 @@ export function usePacedProgress(
     };
   }, []);
 
-  // Auto-start the timer when backend is already processing or already ready
-  // and we haven't started yet. This covers page reloads while generation is
-  // running and direct loads of a ready document into the processing page.
+  // Auto-start + tick in one effect.  When isProcessing or isReady
+  // becomes true, we lazily stamp startedAtRef so the pacing curve
+  // begins.  The interval reads from the ref on every tick so that
+  // start() / reset() take effect immediately without re-creating
+  // the interval.
   useEffect(() => {
-    if ((isProcessing || isReady) && startedAt == null) {
-      setStartedAt(Date.now());
+    if (!isProcessing && !isReady) return;
+
+    if (startedAtRef.current == null) {
+      startedAtRef.current = Date.now();
     }
-  }, [isProcessing, isReady, startedAt]);
-
-  // Tick the elapsed counter while the sequence is running.
-  useEffect(() => {
-    if (startedAt == null) return;
-
-    // Keep ticking while processing, or while holding for min-sequence.
-    const shouldTick = isProcessing || isReady;
-    if (!shouldTick) return;
 
     const interval = window.setInterval(() => {
-      if (isMountedRef.current) {
-        setElapsedMs(Date.now() - startedAt);
+      if (isMountedRef.current && startedAtRef.current != null) {
+        setElapsedMs(Date.now() - startedAtRef.current);
       }
     }, TICK_INTERVAL_MS);
 
     return () => window.clearInterval(interval);
-  }, [isProcessing, isReady, startedAt]);
+  }, [isProcessing, isReady]);
 
-  // Stop ticking once visually ready or failed.
   const result = computePacedProgress(elapsedMs, isReady, isFailed, config);
 
   const start = () => {
-    setStartedAt(Date.now());
+    startedAtRef.current = Date.now();
     setElapsedMs(0);
   };
 
   const reset = () => {
-    setStartedAt(Date.now());
+    startedAtRef.current = Date.now();
     setElapsedMs(0);
   };
 

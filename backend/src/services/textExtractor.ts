@@ -31,7 +31,7 @@ export async function extractTextFromBuffer(
   mimetype: string,
   filename: string
 ): Promise<ExtractionResult> {
-  let text = "";
+  let text: string;
   let fileType: "PDF" | "DOCX";
   let pageCount: number | null = null;
   let paragraphCount: number | null = null;
