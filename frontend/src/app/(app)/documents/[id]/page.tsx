@@ -683,18 +683,19 @@ export default function DocumentPage() {
 
     try {
       const result = await updateDueDate(document.id, dueDateInput.trim());
-      if (detail) {
-        setDetail({
-          ...detail,
+      setDetail((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
           document: {
-            ...detail.document,
+            ...prev.document,
             assignment_due_date: result.assignment_due_date,
             assignment_due_time: result.assignment_due_time,
             reminder_opt_in: result.reminder_opt_in,
             reminder_status: result.reminder_status as DocumentListItem["reminder_status"],
           },
-        });
-      }
+        };
+      });
       return true;
     } catch (err) {
       setError(getErrorMessage(err, "Unable to save due date."));
@@ -713,17 +714,18 @@ export default function DocumentPage() {
     try {
       const result = await updateDueTime(document.id, dueTimeInput.trim());
       setSavedDueTime(result.assignment_due_time);
-      if (detail) {
-        setDetail({
-          ...detail,
+      setDetail((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
           document: {
-            ...detail.document,
+            ...prev.document,
             assignment_due_time: result.assignment_due_time,
             reminder_opt_in: result.reminder_opt_in,
             reminder_status: result.reminder_status as DocumentListItem["reminder_status"],
           },
-        });
-      }
+        };
+      });
       return true;
     } catch (err) {
       setError(getErrorMessage(err, "Unable to save due time."));
@@ -758,16 +760,17 @@ export default function DocumentPage() {
 
     try {
       const result = await updateReminderOptIn(document.id, optIn);
-      if (detail) {
-        setDetail({
-          ...detail,
+      setDetail((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
           document: {
-            ...detail.document,
+            ...prev.document,
             reminder_opt_in: result.reminder_opt_in,
             reminder_status: result.reminder_status as DocumentListItem["reminder_status"],
           },
-        });
-      }
+        };
+      });
     } catch (err) {
       setError(getErrorMessage(err, "Unable to update reminder preference."));
     } finally {
