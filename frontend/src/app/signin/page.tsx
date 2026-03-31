@@ -165,7 +165,6 @@ function SignInPageContent() {
       if (resizeHandler) window.removeEventListener("resize", resizeHandler);
       script.remove();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
