@@ -7,12 +7,14 @@ import { ApiClientError, api } from "@/lib/api";
 import type { DocumentListItem, DocumentType, GenerationStatus } from "@/lib/contracts";
 import { getDocumentStatus } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
+import type { StepState } from "@/lib/pacedProgress";
 import {
   DEFAULT_POLL_DELAY_MS,
   getTransientDelayMs,
   shouldRunPolling,
 } from "@/lib/polling";
 import { usePageVisible } from "@/lib/usePageVisible";
+import { usePacedProgress } from "@/lib/usePacedProgress";
 
 function isAbortError(error: unknown): boolean {
   return (
@@ -80,7 +82,7 @@ function getStatusHeading(status: GenerationStatus | undefined): string {
       return "Creating your study guide";
     case "idle":
     default:
-      return "Ready to create your study guide";
+      return "Starting your study guide";
   }
 }
 
@@ -94,7 +96,7 @@ function getStatusDescription(status: GenerationStatus | undefined): string {
       return "We’re analyzing your document and organizing it into structured study materials. This may take a little longer for larger files.";
     case "idle":
     default:
-      return "Your document is uploaded and ready. Study guide generation starts only after you click Create Study Guide.";
+      return "Your document is uploaded and ready. Study guide generation will begin momentarily.";
   }
 }
 
@@ -110,17 +112,15 @@ function getStudyGuideFailureMessage(document: DocumentListItem | null): string 
   return document.error_message ?? "Study guide generation failed.";
 }
 
-type StepState = "complete" | "active" | "pending" | "halted";
-
-type StepItem = {
-  key: string;
-  label: string;
-  state: StepState;
-};
-
-const STEP_SEQUENCE_THRESHOLDS_MS = [900, 1_800, 2_800, 3_900] as const;
-const STEP_SEQUENCE_MIN_MS = 5_200;
 const READY_REDIRECT_DELAY_MS = 450;
+
+const STUDY_GUIDE_STEP_LABELS = [
+  "Extracting text from document",
+  "Analyzing structure and sections",
+  "Identifying key concepts",
+  "Generating action items",
+  "Creating study materials",
+] as const;
 
 function ProcessingGlyph({ failed = false }: { failed?: boolean }) {
   return (
@@ -273,12 +273,10 @@ export default function ProcessingPage() {
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
-  const [processingStartedAt, setProcessingStartedAt] = useState<number | null>(null);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [isHoldingReadyTransition, setIsHoldingReadyTransition] = useState(false);
 
   const isPageVisible = usePageVisible();
   const isMountedRef = useRef(true);
+  const autoStartFiredRef = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -291,25 +289,6 @@ export default function ProcessingPage() {
   // without waiting for the API round-trip + poll cycle to confirm status.
   const [optimisticProcessing, setOptimisticProcessing] = useState(false);
 
-  const beginVisualSequence = useCallback(() => {
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    setProcessingStartedAt(Date.now());
-    setElapsedMs(0);
-    setIsHoldingReadyTransition(false);
-  }, []);
-
-  const holdReadyTransition = useCallback(() => {
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    setIsHoldingReadyTransition(true);
-    setProcessingStartedAt((current) => current ?? Date.now());
-  }, []);
-
   const isFailed = !optimisticProcessing && document?.study_guide_status === "failed";
   const isReady = document?.study_guide_status === "ready";
   const isUnsupported =
@@ -318,6 +297,22 @@ export default function ProcessingPage() {
       document?.error_code === "DOCUMENT_UNSUPPORTED");
   const isProcessing = optimisticProcessing || document?.study_guide_status === "processing";
   const isIdle = !optimisticProcessing && (document?.study_guide_status === "idle" || document?.study_guide_status == null);
+
+  const paced = usePacedProgress({
+    stepLabels: STUDY_GUIDE_STEP_LABELS,
+    isProcessing,
+    isReady,
+    isFailed,
+  });
+  const idleSteps = useMemo(
+    () =>
+      STUDY_GUIDE_STEP_LABELS.map((label) => ({
+        key: label,
+        label,
+        state: "pending" as const,
+      })),
+    []
+  );
 
   const refreshDocument = useCallback(
     async (signal?: AbortSignal) => {
@@ -348,12 +343,6 @@ export default function ProcessingPage() {
           return;
         }
 
-        if (next.study_guide_status === "ready") {
-          holdReadyTransition();
-          setError(null);
-          return;
-        }
-
         setError(getStudyGuideFailureMessage(next));
       } catch (err) {
         if (cancelled || !isMountedRef.current || isAbortError(err)) {
@@ -370,7 +359,7 @@ export default function ProcessingPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [holdReadyTransition, id, refreshDocument]);
+  }, [id, refreshDocument]);
 
   const startGeneration = useCallback(
     async () => {
@@ -380,7 +369,7 @@ export default function ProcessingPage() {
         setIsStarting(true);
         setError(null);
         setOptimisticProcessing(true);
-        beginVisualSequence();
+        paced.start();
       }
 
       try {
@@ -395,11 +384,6 @@ export default function ProcessingPage() {
 
         const next = await refreshDocument();
         if (!isMountedRef.current) {
-          return;
-        }
-
-        if (next?.study_guide_status === "ready") {
-          holdReadyTransition();
           return;
         }
 
@@ -431,7 +415,7 @@ export default function ProcessingPage() {
         }
       }
     },
-    [beginVisualSequence, holdReadyTransition, id, isStarting, refreshDocument]
+    [id, isStarting, paced, refreshDocument]
   );
 
   const retryGeneration = useCallback(async () => {
@@ -441,7 +425,7 @@ export default function ProcessingPage() {
       setIsRetrying(true);
       setOptimisticProcessing(true);
       setError(null);
-      beginVisualSequence();
+      paced.reset();
     }
 
     try {
@@ -477,53 +461,24 @@ export default function ProcessingPage() {
         setIsRetrying(false);
       }
     }
-  }, [beginVisualSequence, id, refreshDocument]);
+  }, [id, paced, refreshDocument]);
 
+  // Clear optimistic flag once the real server state confirms processing (or any terminal state)
   useEffect(() => {
-    if (document?.study_guide_status === "processing" && processingStartedAt == null) {
-      setProcessingStartedAt(Date.now());
-    }
-
-    if (document?.study_guide_status === "ready") {
-      holdReadyTransition();
-    }
-
-    // Clear optimistic flag once the real server state confirms processing (or any terminal state)
     if (optimisticProcessing && document?.study_guide_status != null && document.study_guide_status !== "idle") {
       setOptimisticProcessing(false);
     }
+  }, [document?.study_guide_status, optimisticProcessing]);
 
-    if (
-      document?.study_guide_status !== "processing" &&
-      !isRetrying &&
-      !optimisticProcessing &&
-      !isHoldingReadyTransition
-    ) {
-      setElapsedMs(0);
-    }
-  }, [
-    document?.study_guide_status,
-    holdReadyTransition,
-    isHoldingReadyTransition,
-    isRetrying,
-    optimisticProcessing,
-    processingStartedAt,
-  ]);
-
+  // Auto-start generation when the page loads with idle status.
+  // The upload page fires study-guide/create before navigating here, but
+  // this is a safety net in case that fire-and-forget request didn't land.
   useEffect(() => {
-    const shouldTick =
-      (optimisticProcessing || document?.study_guide_status === "processing" || isHoldingReadyTransition) &&
-      processingStartedAt != null;
-    if (!shouldTick) return;
-
-    const interval = window.setInterval(() => {
-      setElapsedMs(Date.now() - processingStartedAt!);
-    }, 800);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [document?.study_guide_status, isHoldingReadyTransition, optimisticProcessing, processingStartedAt]);
+    if (isIdle && document && !autoStartFiredRef.current) {
+      autoStartFiredRef.current = true;
+      void startGeneration();
+    }
+  }, [isIdle, document, startGeneration]);
 
   useEffect(() => {
     if (!shouldRunPolling(id, isPageVisible, isProcessing)) return;
@@ -553,21 +508,18 @@ export default function ProcessingPage() {
           return;
         }
 
-        if (next.study_guide_status === "processing" && processingStartedAt == null) {
-          setProcessingStartedAt(Date.now());
-        }
-
-        if (next.study_guide_status === "ready") {
-          holdReadyTransition();
-          return;
-        }
-
         if (next.study_guide_status === "failed") {
           if (next.error_code === "DOCUMENT_UNSUPPORTED") {
             setError("This document type is not supported for study guide generation.");
           } else {
             setError(next.error_message ?? "Study guide generation failed.");
           }
+          return;
+        }
+
+        if (next.study_guide_status === "ready") {
+          // The hook's isReady input will flip to true on the next render,
+          // triggering the visual "ready" transition after minSequenceMs.
           return;
         }
 
@@ -610,23 +562,24 @@ export default function ProcessingPage() {
       if (timer) clearTimeout(timer);
       requestController?.abort();
     };
-  }, [holdReadyTransition, id, isPageVisible, isProcessing, processingStartedAt, refreshDocument]);
+  }, [id, isPageVisible, isProcessing, refreshDocument]);
 
-  const hasCompletedVisualSequence =
-    processingStartedAt != null && elapsedMs >= STEP_SEQUENCE_MIN_MS;
-  const isVisuallyReady = isReady && hasCompletedVisualSequence;
+  const isVisuallyReady = paced.isVisuallyReady;
+  const steps = isIdle ? idleSteps : paced.steps;
+  const completionPercent = isIdle ? 0 : paced.percent;
+
   const visualStatus: GenerationStatus | undefined = isUnsupported
     ? document?.study_guide_status
     : isVisuallyReady
       ? "ready"
       : isFailed
         ? "failed"
-        : isProcessing || isHoldingReadyTransition
+        : isProcessing || (isReady && !isVisuallyReady)
           ? "processing"
           : document?.study_guide_status;
 
   useEffect(() => {
-    if (!isReady || !hasCompletedVisualSequence) {
+    if (!paced.isVisuallyReady) {
       return;
     }
 
@@ -641,98 +594,32 @@ export default function ProcessingPage() {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [hasCompletedVisualSequence, id, isReady, router]);
+  }, [id, paced.isVisuallyReady, router]);
 
   const statusLine = useMemo(() => {
     if (isUnsupported) return "This document type is not supported.";
     if (!document) return "Waiting for document status...";
     if (isVisuallyReady) return "Study guide is ready.";
     if (document.study_guide_status === "failed") return "Study guide generation failed.";
-    if (isHoldingReadyTransition) return "Finalizing study guide...";
+    if (isReady && !isVisuallyReady) return "Finalizing study guide...";
     if (document.study_guide_status === "processing") return "Generating study guide...";
     return "Queued for generation...";
-  }, [document, isHoldingReadyTransition, isUnsupported, isVisuallyReady]);
+  }, [document, isReady, isUnsupported, isVisuallyReady]);
 
   const progressLabel = useMemo(() => {
     if (isVisuallyReady) return "100% complete";
     if (document?.error_code === "DOCUMENT_UNSUPPORTED") return "Unsupported document";
     if (isFailed) return "Generation interrupted";
     if (!document) return "Preparing…";
-    if (document.study_guide_status === "idle") return "Waiting for your action";
+    if (document.study_guide_status === "idle") return "Starting generation…";
     return "Usually takes around 30–60 seconds";
   }, [document, isFailed, isVisuallyReady]);
-
-  const visualStepIndex = useMemo(() => {
-    if (isVisuallyReady) return 5;
-    if (isFailed) return 3;
-    if (!document || document.study_guide_status === "idle") return 0;
-    if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[0]) return 1;
-    if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[1]) return 2;
-    if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[2]) return 3;
-    if (elapsedMs < STEP_SEQUENCE_THRESHOLDS_MS[3]) return 4;
-    return 5;
-  }, [document, elapsedMs, isFailed, isVisuallyReady]);
-
-  const steps = useMemo<StepItem[]>(() => {
-    const labels = [
-      "Extracting text from document",
-      "Analyzing structure and sections",
-      "Identifying key concepts",
-      "Generating action items",
-      "Creating study materials",
-    ];
-
-    if (isFailed) {
-      return labels.map((label, index) => {
-        if (index < 2) return { key: label, label, state: "complete" as const };
-        if (index === 2) return { key: label, label, state: "halted" as const };
-        return { key: label, label, state: "pending" as const };
-      });
-    }
-
-    return labels.map((label, index) => {
-      const stepNumber = index + 1;
-      let state: StepState = "pending";
-
-      if (isVisuallyReady || visualStepIndex > stepNumber) {
-        state = "complete";
-      } else if (visualStepIndex === stepNumber) {
-        state = "active";
-      }
-
-      return {
-        key: label,
-        label,
-        state,
-      };
-    });
-  }, [isFailed, isVisuallyReady, visualStepIndex]);
-
-	 const completionPercent = useMemo(() => {
-	  if (isVisuallyReady) return 100;
-	  if (isFailed) return 60;
-
-	  switch (visualStepIndex) {
-	    case 0:
-	      return 8;
-    case 1:
-      return 20;
-    case 2:
-      return 40;
-    case 3:
-      return 60;
-    case 4:
-      return 80;
-	    default:
-	      return 92;
-	  }
-	}, [isFailed, isVisuallyReady, visualStepIndex]);
 
   const statusPill = useMemo(() => {
     if (isUnsupported) return { label: "Unsupported", tone: "danger" as const };
     if (isFailed) return { label: "Failed", tone: "danger" as const };
     if (isVisuallyReady) return { label: "Ready", tone: "success" as const };
-    if (document?.study_guide_status === "idle") return { label: "Not started", tone: "neutral" as const };
+    if (document?.study_guide_status === "idle") return { label: "Starting", tone: "neutral" as const };
     return { label: "Processing", tone: "neutral" as const };
   }, [document?.study_guide_status, isFailed, isUnsupported, isVisuallyReady]);
 
@@ -857,7 +744,7 @@ export default function ProcessingPage() {
                 Processing can take longer when the document is large or when the response must match a strict structured format.
               </p>
               <p className="mt-3 text-sm leading-7 text-gray-500">
-                Generation begins only when you trigger it. Once it is processing, you can leave this page and return from the dashboard at any time.
+                Once processing begins, you can leave this page and return from the dashboard at any time.
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">
@@ -868,17 +755,6 @@ export default function ProcessingPage() {
                   >
                     Upload a different document
                   </Link>
-                ) : isIdle ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void startGeneration();
-                    }}
-                    disabled={isStarting}
-                    className="inline-flex w-full items-center justify-center rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                  >
-                    {isStarting ? "Starting..." : "Create Study Guide"}
-                  </button>
                 ) : isFailed ? (
                   <button
                     type="button"
