@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   computePacedProgress,
   type PacedProgressConfig,
@@ -76,15 +76,15 @@ export function usePacedProgress(
   // Stop ticking once visually ready or failed.
   const result = computePacedProgress(elapsedMs, isReady, isFailed, config);
 
-  const start = useCallback(() => {
+  const start = () => {
     setStartedAt(Date.now());
     setElapsedMs(0);
-  }, []);
+  };
 
-  const reset = useCallback(() => {
+  const reset = () => {
     setStartedAt(Date.now());
     setElapsedMs(0);
-  }, []);
+  };
 
   return { ...result, start, reset };
 }

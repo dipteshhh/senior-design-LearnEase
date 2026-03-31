@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { ApiClientError, api } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errorUx";
 import {
   getDuplicateReuseMessage,
@@ -120,12 +120,22 @@ export default function UploadPage() {
       }
 
       if (shouldTriggerStudyGuideCreate(payload)) {
-        // Fire study guide generation immediately (best-effort).
-        // The processing page will auto-start if this doesn't land.
-        api("/api/study-guide/create", {
-          method: "POST",
-          body: JSON.stringify({ document_id: documentId }),
-        }).catch(() => { /* processing page will handle retry */ });
+        try {
+          await api("/api/study-guide/create", {
+            method: "POST",
+            body: JSON.stringify({ document_id: documentId }),
+          });
+        } catch (startError) {
+          // Keep the one-click flow moving even if the handoff request fails.
+          // The processing page has an idle-state auto-start safety net.
+          if (
+            !(startError instanceof ApiClientError) ||
+            (startError.code !== "ALREADY_PROCESSING" &&
+              startError.code !== "ILLEGAL_RETRY_STATE")
+          ) {
+            console.warn("Study guide start handoff failed; processing page will retry.", startError);
+          }
+        }
       }
 
       if (duplicateReuseMessage) {
