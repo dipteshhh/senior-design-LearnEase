@@ -424,6 +424,7 @@ export default function DocumentPage() {
   const [manualReminderOpen, setManualReminderOpen] = useState(false);
   const [dueDateInput, setDueDateInput] = useState("");
   const [dueDateSaving, setDueDateSaving] = useState(false);
+  const [isEditingDeadline, setIsEditingDeadline] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -473,6 +474,7 @@ export default function DocumentPage() {
     }
     setManualReminderOpen(false);
     setDueDateInput("");
+    setIsEditingDeadline(false);
   }, [detail]);
 
   useEffect(() => {
@@ -666,8 +668,15 @@ export default function DocumentPage() {
     }
   }
 
-  async function handleSaveDueDate() {
-    if (!document || dueDateSaving || !dueDateInput.trim()) return;
+  function enterDeadlineEdit() {
+    if (!document) return;
+    setDueDateInput(document.assignment_due_date ?? "");
+    setDueTimeInput(savedDueTime ?? "");
+    setIsEditingDeadline(true);
+  }
+
+  async function handleSaveDueDate(): Promise<boolean> {
+    if (!document || dueDateSaving || !dueDateInput.trim()) return false;
 
     setDueDateSaving(true);
     setError(null);
@@ -686,15 +695,17 @@ export default function DocumentPage() {
           },
         });
       }
+      return true;
     } catch (err) {
       setError(getErrorMessage(err, "Unable to save due date."));
+      return false;
     } finally {
       setDueDateSaving(false);
     }
   }
 
-  async function handleSaveDueTime() {
-    if (!document || dueTimeSaving || !dueTimeInput.trim()) return;
+  async function handleSaveDueTime(): Promise<boolean> {
+    if (!document || dueTimeSaving || !dueTimeInput.trim()) return false;
 
     setDueTimeSaving(true);
     setError(null);
@@ -713,11 +724,30 @@ export default function DocumentPage() {
           },
         });
       }
+      return true;
     } catch (err) {
       setError(getErrorMessage(err, "Unable to save due time."));
+      return false;
     } finally {
       setDueTimeSaving(false);
     }
+  }
+
+  async function handleSaveDeadlineEdits(): Promise<void> {
+    const dateSaved = await handleSaveDueDate();
+    if (!dateSaved) {
+      return;
+    }
+
+    if (dueTimeInput.trim()) {
+      const timeSaved = await handleSaveDueTime();
+      if (!timeSaved) {
+        return;
+      }
+    }
+
+    setIsEditingDeadline(false);
+    setManualReminderOpen(false);
   }
 
   async function handleReminderOptIn(optIn: boolean) {
@@ -1005,18 +1035,52 @@ export default function DocumentPage() {
               <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 space-y-4">
                 <h3 className="text-base font-semibold text-gray-950">Assignment Deadline</h3>
 
-                {document.assignment_due_date && savedDueTime ? (
-                  /* ── Case 1: due date + due time both present ── */
+                {document.assignment_due_date && !isEditingDeadline ? (
+                  /* ── Display mode: due date exists (with or without time) ── */
                   <div className="space-y-3">
-                    <p className="text-[17px] font-semibold text-gray-900">
-                      Due: {formatDate(document.assignment_due_date)} — {formatTime(savedDueTime)}
-                    </p>
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <p className="text-[17px] font-semibold text-gray-900">
+                        Due: {formatDate(document.assignment_due_date)}
+                        {savedDueTime ? ` — ${formatTime(savedDueTime)}` : ""}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={enterDeadlineEdit}
+                        className="text-sm font-medium text-gray-500 underline hover:text-gray-800"
+                      >
+                        Change
+                      </button>
+                    </div>
+
+                    {!savedDueTime && document.reminder_status !== "past_due" ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-amber-700">
+                          Due time was not detected. Enter the time to enable a reminder.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <input
+                            type="time"
+                            value={dueTimeInput}
+                            onChange={(e) => setDueTimeInput(e.target.value)}
+                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { void handleSaveDueTime(); }}
+                            disabled={dueTimeSaving || !dueTimeInput.trim()}
+                            className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {dueTimeSaving ? "Saving..." : "Set Due Time"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
 
                     {document.reminder_status === "past_due" ? (
                       <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
                         Past due
                       </span>
-                    ) : (
+                    ) : savedDueTime ? (
                       <div className="space-y-2">
                         {document.reminder_opt_in ? (
                           <div className="flex items-center gap-2 flex-wrap">
@@ -1053,42 +1117,47 @@ export default function DocumentPage() {
                           </button>
                         )}
                       </div>
-                    )}
+                    ) : null}
                   </div>
-                ) : document.assignment_due_date && !savedDueTime ? (
-                  /* ── Case 2: due date detected, due time missing ── */
-                  <div className="space-y-3">
-                    <p className="text-[17px] font-semibold text-gray-900">
-                      Due: {formatDate(document.assignment_due_date)}
+                ) : (document.assignment_due_date || manualReminderOpen) && isEditingDeadline ? (
+                  /* ── Edit mode: modify existing due date and/or time ── */
+                  <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+                    <p className="text-sm font-medium text-gray-700">
+                      Update the due date and time for this assignment.
                     </p>
-
-                    {document.reminder_status === "past_due" ? (
-                      <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-                        Past due
-                      </span>
-                    ) : (
-                      <div className="space-y-2">
-                        <p className="text-sm text-amber-700">
-                          Due time was not detected. Enter the time to enable a reminder.
-                        </p>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <input
-                            type="time"
-                            value={dueTimeInput}
-                            onChange={(e) => setDueTimeInput(e.target.value)}
-                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => { void handleSaveDueTime(); }}
-                            disabled={dueTimeSaving || !dueTimeInput.trim()}
-                            className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {dueTimeSaving ? "Saving..." : "Set Due Time"}
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <input
+                        type="date"
+                        value={dueDateInput}
+                        onChange={(e) => setDueDateInput(e.target.value)}
+                        className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                      />
+                      <input
+                        type="time"
+                        value={dueTimeInput}
+                        onChange={(e) => setDueTimeInput(e.target.value)}
+                        className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleSaveDeadlineEdits();
+                        }}
+                        disabled={dueDateSaving || dueTimeSaving || !dueDateInput.trim()}
+                        className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {dueDateSaving || dueTimeSaving ? "Saving..." : "Save"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingDeadline(false)}
+                        className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   /* ── Case 3: no due date detected ── */
@@ -1099,10 +1168,21 @@ export default function DocumentPage() {
                     {!manualReminderOpen ? (
                       <button
                         type="button"
-                        onClick={() => setManualReminderOpen(true)}
+                        onClick={() => {
+                          setManualReminderOpen(true);
+                          setIsEditingDeadline(true);
+                        }}
                         className="text-sm font-medium text-gray-700 underline hover:text-gray-900"
                       >
                         I want to set a reminder for this assignment
+                      </button>
+                    ) : !isEditingDeadline ? (
+                      <button
+                        type="button"
+                        onClick={enterDeadlineEdit}
+                        className="text-sm font-medium text-gray-700 underline hover:text-gray-900"
+                      >
+                        Change deadline
                       </button>
                     ) : (
                       <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
@@ -1116,13 +1196,33 @@ export default function DocumentPage() {
                             onChange={(e) => setDueDateInput(e.target.value)}
                             className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
                           />
+                          <input
+                            type="time"
+                            value={dueTimeInput}
+                            onChange={(e) => setDueTimeInput(e.target.value)}
+                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                          />
+                        </div>
+                        <div className="flex items-center gap-3">
                           <button
                             type="button"
-                            onClick={() => { void handleSaveDueDate(); }}
-                            disabled={dueDateSaving || !dueDateInput.trim()}
+                            onClick={() => {
+                              void handleSaveDeadlineEdits();
+                            }}
+                            disabled={dueDateSaving || dueTimeSaving || !dueDateInput.trim()}
                             className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {dueDateSaving ? "Saving..." : "Set Due Date"}
+                            {dueDateSaving || dueTimeSaving ? "Saving..." : "Set Due Date"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsEditingDeadline(false);
+                              setManualReminderOpen(false);
+                            }}
+                            className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                          >
+                            Cancel
                           </button>
                         </div>
                       </div>
