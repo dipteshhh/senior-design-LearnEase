@@ -9,13 +9,13 @@ This repo should be deployed to Railway as two services from the same GitHub rep
 
 - The backend persists SQLite data and encrypted document artifacts to disk.
 - The backend also runs in-process cleanup and reminder schedulers on startup.
-- The frontend talks to the backend with cookie-based auth and `credentials: "include"`.
+- The frontend proxies backend API calls through Next route handlers and uses cookie-based auth with `credentials: "include"`.
 
 Because of that:
 
 - keep the backend at **one replica**
 - attach a **persistent volume** to the backend
-- use the same parent domain for frontend and backend, e.g. `app.example.com` and `api.example.com`
+- prefer stable frontend/backend URLs, but same-parent custom domains are optional because the browser now talks only to the frontend origin
 
 ## Service Setup
 
@@ -36,6 +36,7 @@ Recommended environment variables:
 - `SESSION_SECRET=...`
 - `FILE_ENCRYPTION_KEY=...`
 - `SESSION_MAX_AGE_SECONDS=604800`
+- `SESSION_COOKIE_SAMESITE=lax`
 - `CORS_ORIGINS=https://app.example.com`
 - `TRUST_PROXY=true`
 - `DATABASE_PATH=/app/data/learnease.sqlite`
@@ -67,7 +68,7 @@ Use the same GitHub repo as the source and configure:
 
 Required environment variables:
 
-- `NEXT_PUBLIC_API_BASE_URL=https://api.example.com`
+- `BACKEND_API_BASE_URL=https://api.example.com`
 - `NEXT_PUBLIC_GOOGLE_CLIENT_ID=...`
 
 ## Google Sign-In
@@ -76,17 +77,18 @@ Update the Google OAuth client used by the frontend credential flow:
 
 - Authorized JavaScript origins should include `https://app.example.com`
 
-This app posts the Google credential to the backend for token verification and session issuance; it does not use a separate backend OAuth redirect route.
+This app posts the Google credential to the frontend `/api/auth/google` route, which proxies to the backend for token verification and session issuance. It does not use a separate backend OAuth redirect route.
 
 ## Auth and Cookie Expectations
 
-The frontend sends authenticated requests with cookies included, and the backend issues an HTTP-only session cookie.
+The browser sends authenticated requests to the frontend `/api/*` routes with cookies included, and the frontend proxy forwards them to the backend.
 
 For production:
 
 - serve both apps over HTTPS
-- keep frontend and backend on the same parent domain
+- set `BACKEND_API_BASE_URL` to the backend public URL
 - set `CORS_ORIGINS` to the exact frontend origin
+- keep `SESSION_COOKIE_SAMESITE=lax` unless you intentionally need a cross-site cookie
 
 ## First Deploy Checklist
 

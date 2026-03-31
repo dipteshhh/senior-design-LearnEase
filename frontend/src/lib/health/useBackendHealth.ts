@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_BASE_URL } from "@/lib/config";
 
 type BackendHealth = "checking" | "online" | "offline";
 
@@ -14,7 +13,7 @@ export function useBackendHealth(): BackendHealth {
 
     const runCheck = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/health`, {
+        const response = await fetch("/api/backend-health", {
           method: "GET",
           cache: "no-store",
         });

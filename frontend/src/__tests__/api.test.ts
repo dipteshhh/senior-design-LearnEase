@@ -94,7 +94,7 @@ test("api does not override existing Content-Type header", async () => {
   assert.equal(headers.get("Content-Type"), "text/plain");
 });
 
-test("api prepends API_BASE_URL for relative paths", async () => {
+test("api keeps relative paths same-origin", async () => {
   mockFetch({ ok: true, json: {} });
 
   await api("/api/documents");
@@ -102,8 +102,7 @@ test("api prepends API_BASE_URL for relative paths", async () => {
   const fetchMock = globalThis.fetch as unknown as ReturnType<typeof mock.fn>;
   const call = fetchMock.mock.calls[0];
   const url = call.arguments[0] as string;
-  assert.ok(url.endsWith("/api/documents"), `expected URL to end with /api/documents, got ${url}`);
-  assert.ok(url.startsWith("http"), `expected URL to start with http, got ${url}`);
+  assert.equal(url, "/api/documents");
 });
 
 test("api passes absolute URLs through unchanged", async () => {
@@ -124,7 +123,7 @@ test("api adds leading slash for bare paths", async () => {
   const fetchMock = globalThis.fetch as unknown as ReturnType<typeof mock.fn>;
   const call = fetchMock.mock.calls[0];
   const url = call.arguments[0] as string;
-  assert.ok(url.includes("/api/health"), `expected /api/health in URL, got ${url}`);
+  assert.equal(url, "/api/health");
 });
 
 // ── api() — error path ──────────────────────────────────────────────

@@ -11,8 +11,8 @@ Authentication uses **Google OAuth**. The backend provides a token exchange endp
 1. Frontend initiates Google Sign-In (One Tap or redirect via Google Identity Services).
 2. Google returns an **ID token** (`credential`) to the frontend.
 3. Frontend sends `POST /api/auth/google` with `{ "credential": "<token>" }`.
-4. Backend verifies the token with Google, upserts the user, and returns a signed `learnease_session` HttpOnly cookie via `Set-Cookie`.
-5. All subsequent API requests include this cookie automatically (browser handles it).
+4. The frontend API proxy forwards the request to the backend, which verifies the token with Google, upserts the user, and returns a signed `learnease_session` HttpOnly cookie via `Set-Cookie`.
+5. The frontend proxy passes that cookie back to the browser, so all subsequent browser requests send it to the frontend origin automatically.
 6. To log out, frontend calls `POST /api/auth/logout` which clears the cookie.
 
 ---
@@ -30,7 +30,7 @@ Session payload shape:
 }
 ```
 
-The cookie is HMAC-SHA256 signed with `SESSION_SECRET`. It is HttpOnly, SameSite=Lax, and expires after `SESSION_MAX_AGE_SECONDS` (default 7 days).
+The cookie is HMAC-SHA256 signed with `SESSION_SECRET`. It is HttpOnly, SameSite=Lax by default, and expires after `SESSION_MAX_AGE_SECONDS` (default 7 days). Set `SESSION_COOKIE_SAMESITE=none` only for an intentional cross-site deployment.
 
 Required user fields:
 - `user.id` (Google `sub` — stable unique id)
@@ -74,7 +74,7 @@ The frontend team needs to:
 4. **On logout**, call `POST /api/auth/logout`.
 5. **Use `GET /api/auth/me`** to check session validity on page load / app init.
    Response shape: `{ "user": { "id": string, "email": string, "name": string | null } }`
-6. **Ensure `credentials: "include"`** on all `fetch()` calls to the backend so cookies are sent cross-origin.
+6. **Ensure `credentials: "include"`** on all `fetch()` calls to the frontend `/api/*` routes so the first-party session cookie is sent on every request.
 7. **Replace all mock data** in `src/lib/mock/store.ts` and `src/lib/data/documents.ts` with real API calls to the backend.
 8. **Match backend response shapes** — see `docs/SCHEMAS.md` for `StudyGuide` and `Quiz` JSON structures.
 

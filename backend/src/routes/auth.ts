@@ -41,28 +41,18 @@ const DEFAULT_GOOGLE_TOKENINFO_TIMEOUT_MS = 8000;
 const DEFAULT_GOOGLE_TOKENINFO_MAX_RETRIES = 1;
 
 /**
- * Determine the correct SameSite attribute for session cookies.
+ * Default to SameSite=Lax so the session works as a first-party cookie when
+ * the frontend proxies backend requests through its own origin.
  *
- * When the frontend and backend live on different origins (e.g. Railway
- * subdomains), the browser treats cross-origin fetch() requests as
- * cross-site. SameSite=Lax cookies are NOT sent on cross-origin POST or
- * even GET fetch requests with credentials, so the session cookie never
- * reaches the backend.
- *
- * Returns "none" (requires Secure) when CORS_ORIGINS indicates a
- * cross-origin deployment, otherwise "lax" for same-origin / local dev.
+ * Allow SameSite=None only when explicitly opted into for a deliberate
+ * cross-site deployment.
  */
 function getSessionCookieSameSite(): "lax" | "none" {
-  if (process.env.NODE_ENV !== "production") {
-    return "lax";
+  const configured = process.env.SESSION_COOKIE_SAMESITE?.trim().toLowerCase();
+  if (configured === "none") {
+    return "none";
   }
-  const corsOrigins = process.env.CORS_ORIGINS?.trim();
-  if (!corsOrigins) {
-    return "lax";
-  }
-  // If any configured CORS origin differs from the backend's own origin,
-  // we need SameSite=None so the cookie is sent cross-origin.
-  return "none";
+  return "lax";
 }
 
 function getGoogleClientId(): string {

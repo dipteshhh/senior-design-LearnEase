@@ -40,6 +40,7 @@ SESSION_SECRET=<replace_with_strong_random_secret>
 FILE_ENCRYPTION_KEY=<replace_with_64_char_hex_key>
 CORS_ORIGINS=https://app.learnease.app
 TRUST_PROXY=true
+SESSION_COOKIE_SAMESITE=lax
 DATABASE_PATH=/app/data/learnease.sqlite
 ARTIFACTS_DIR=/app/data/artifacts
 SESSION_MAX_AGE_SECONDS=604800
@@ -95,7 +96,7 @@ UPLOAD_MAX_FILE_SIZE_MB=50
 Paste into Railway → Frontend service → Variables:
 
 ```dotenv
-NEXT_PUBLIC_API_BASE_URL=https://api.learnease.app
+BACKEND_API_BASE_URL=https://api.learnease.app
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=<your_google_oauth_web_client_id>
 ```
 
@@ -155,4 +156,4 @@ Perform each step manually in the browser at `https://app.learnease.app`:
 | CORS errors in browser | `CORS_ORIGINS` must exactly match `https://app.learnease.app` (no trailing slash) |
 | Google sign-in fails | `GOOGLE_CLIENT_ID` must match `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; origins must be registered in Google Console |
 | Study guide fails immediately | Check `OPENAI_API_KEY` is valid; check logs for circuit breaker or rate limit errors |
-| Cookie not persisting | Ensure both services share parent domain `learnease.app`; `TRUST_PROXY=true` is set |
+| Cookie not persisting | Ensure `BACKEND_API_BASE_URL` points to the backend service, frontend `/api/[...path]` proxy is deployed, and `SESSION_COOKIE_SAMESITE=lax` is set |

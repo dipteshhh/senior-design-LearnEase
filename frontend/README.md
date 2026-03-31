@@ -23,8 +23,11 @@ Frontend integration must use root contract docs only:
 1) Configure env:
 ```bash
 cp .env.example .env.local
+# set BACKEND_API_BASE_URL to your backend origin
 # set NEXT_PUBLIC_GOOGLE_CLIENT_ID to your GIS client id
 ```
+
+For local Google Sign-In, add `http://localhost:3000` to the Google OAuth client's Authorized JavaScript origins. Without that, Google Identity Services will reject the sign-in request in the browser before it reaches the backend.
 
 2) Install dependencies:
 ```bash
