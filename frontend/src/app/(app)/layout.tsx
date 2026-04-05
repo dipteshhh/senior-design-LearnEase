@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
-import { useBackendHealth } from "@/lib/health/useBackendHealth";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -31,20 +30,6 @@ function ProtectedShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [q, setQ] = useState("");
   const { user, isLoading, hasSessionCheckError, refreshSession, logout } = useAuth();
-  const backendHealth = useBackendHealth();
-
-  const healthLabel =
-    backendHealth === "online"
-      ? "Backend online"
-      : backendHealth === "offline"
-      ? "Backend offline"
-      : "Checking backend";
-  const healthColor =
-    backendHealth === "online"
-      ? "bg-emerald-500"
-      : backendHealth === "offline"
-      ? "bg-rose-500"
-      : "bg-amber-500";
 
   useEffect(() => {
     const syncFromLocation = () => {
@@ -187,17 +172,6 @@ function ProtectedShell({ children }: { children: ReactNode }) {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:justify-end">
-                  <div className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] text-gray-600 sm:px-3 sm:text-xs">
-                    <span className={`h-2.5 w-2.5 rounded-full ${healthColor}`} />
-                    <span className="hidden sm:inline">{healthLabel}</span>
-                    <span className="sm:hidden">
-                      {backendHealth === "online"
-                        ? "Online"
-                        : backendHealth === "offline"
-                        ? "Offline"
-                        : "Checking"}
-                    </span>
-                  </div>
                   <div className="flex h-9 w-9 items-center justify-center rounded-full border bg-white text-sm sm:h-10 sm:w-10">
                     👤
                   </div>
