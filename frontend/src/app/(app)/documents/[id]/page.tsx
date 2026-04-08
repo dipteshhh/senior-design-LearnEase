@@ -636,12 +636,16 @@ export default function DocumentPage() {
       badgeTone: "success",
     },
     { id: "details", label: "Important Details" },
-    {
-      id: "sections",
-      label: "Sections",
-      badge: studyGuide.sections.length > 0 ? String(studyGuide.sections.length) : undefined,
-      badgeTone: "default",
-    },
+    ...(document.document_type !== "HOMEWORK"
+      ? [
+          {
+            id: "sections" as TabId,
+            label: "Sections",
+            badge: studyGuide.sections.length > 0 ? String(studyGuide.sections.length) : undefined,
+            badgeTone: "default" as const,
+          },
+        ]
+      : []),
   ];
 
   const validTabs = new Set<TabId>(tabs.map((tab) => tab.id));
@@ -902,29 +906,31 @@ export default function DocumentPage() {
           </div>
 
           <div className="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:justify-end">
-            <Link
-              href={`/documents/${document.id}/focus`}
-              className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-950 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-gray-50 sm:w-auto"
-            >
-              <span className="mr-2">
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M15 3h6v6" />
-                  <path d="M9 21H3v-6" />
-                  <path d="m21 3-7 7" />
-                  <path d="m3 21 7-7" />
-                </svg>
-              </span>
-              Focus Mode
-            </Link>
+            {document.document_type !== "HOMEWORK" && (
+              <Link
+                href={`/documents/${document.id}/focus`}
+                className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-950 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-gray-50 sm:w-auto"
+              >
+                <span className="mr-2">
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M15 3h6v6" />
+                    <path d="M9 21H3v-6" />
+                    <path d="m21 3-7 7" />
+                    <path d="m3 21 7-7" />
+                  </svg>
+                </span>
+                Focus Mode
+              </Link>
+            )}
 
             {canOpenQuiz ? (
               <Link
