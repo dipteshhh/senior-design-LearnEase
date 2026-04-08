@@ -5,8 +5,10 @@ process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
 
 const { buildAnalysisPrompt } = await import("../services/contentAnalyzer.js");
 
+const defaultMetadata = { fileType: "PDF" as const, pageCount: 5, paragraphCount: null };
+
 test("buildAnalysisPrompt keeps study-guide contract shape in prompt", () => {
-  const prompt = buildAnalysisPrompt("HOMEWORK", false, []);
+  const prompt = buildAnalysisPrompt("HOMEWORK", false, [], defaultMetadata);
 
   assert.match(prompt, /important_details: \{ dates: ExtractionItem\[], policies: ExtractionItem\[], contacts: ExtractionItem\[], logistics: ExtractionItem\[] \}/);
   assert.match(prompt, /overview: \{ title, document_type, summary, topic, due_date, estimated_time \}/);
@@ -15,7 +17,7 @@ test("buildAnalysisPrompt keeps study-guide contract shape in prompt", () => {
 });
 
 test("buildAnalysisPrompt adds homework-specific important detail priorities", () => {
-  const prompt = buildAnalysisPrompt("HOMEWORK", false, []);
+  const prompt = buildAnalysisPrompt("HOMEWORK", false, [], defaultMetadata);
 
   assert.match(prompt, /Document-type instructions: HOMEWORK/);
   assert.match(prompt, /rubric expectations, grading breakdown, late policy/);
@@ -26,7 +28,7 @@ test("buildAnalysisPrompt adds homework-specific important detail priorities", (
 });
 
 test("buildAnalysisPrompt preserves distinction between submission constraints and workflow tools", () => {
-  const prompt = buildAnalysisPrompt("HOMEWORK", false, []);
+  const prompt = buildAnalysisPrompt("HOMEWORK", false, [], defaultMetadata);
 
   assert.match(prompt, /Distinguish final submission requirements from allowed workflow tools/);
   assert.match(prompt, /describe that as a final-file\/submission constraint, NOT as a blanket ban on every other tool/);
@@ -35,7 +37,7 @@ test("buildAnalysisPrompt preserves distinction between submission constraints a
 });
 
 test("buildAnalysisPrompt adds lecture study-checklist and class-notes behavior", () => {
-  const prompt = buildAnalysisPrompt("LECTURE", false, []);
+  const prompt = buildAnalysisPrompt("LECTURE", false, [], defaultMetadata);
 
   assert.match(prompt, /Document-type instructions: LECTURE/);
   assert.match(prompt, /includes class notes\/course notes normalized to LECTURE behavior/);
@@ -43,14 +45,15 @@ test("buildAnalysisPrompt adds lecture study-checklist and class-notes behavior"
   assert.match(prompt, /Do NOT default to assignment-style checklist items for lecture output unless the document explicitly contains actionable tasks or exercises/);
   assert.match(prompt, /exam dates, quiz dates, review-session dates/);
   assert.match(prompt, /key definitions, formulas, and named concepts/);
-  assert.match(prompt, /target at least 3 sections with clear student-readable titles/);
+  assert.match(prompt, /Sections MUST be split at the sub-topic level/);
+  assert.match(prompt, /Target \d+ sections for this document/);
 });
 
 test("buildAnalysisPrompt preserves guidance mode and additional restrictions", () => {
   const prompt = buildAnalysisPrompt("LECTURE", true, [
     "No direct answers to questions",
     "No solved problems or equations",
-  ]);
+  ], defaultMetadata);
 
   assert.match(prompt, /GUIDANCE MODE IS ACTIVE/);
   assert.match(prompt, /ADDITIONAL RESTRICTIONS:/);

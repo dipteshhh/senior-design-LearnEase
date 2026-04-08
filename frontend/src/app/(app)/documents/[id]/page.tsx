@@ -870,7 +870,7 @@ export default function DocumentPage() {
 
         {isOpen ? (
           <div className="border-t border-gray-200 px-6 py-5">
-            <p className="text-[15px] leading-8 text-gray-700">{section.content}</p>
+            <p className="whitespace-pre-line text-[15px] leading-8 text-gray-700">{section.content}</p>
 
             <button
               type="button"
@@ -1442,7 +1442,7 @@ export default function DocumentPage() {
                         </div>
                       </div>
 
-                      <p className="mt-6 text-[16px] leading-8 text-gray-700">
+                      <p className="mt-6 whitespace-pre-line text-[16px] leading-8 text-gray-700">
                         {focusSection.content}
                       </p>
 

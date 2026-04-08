@@ -101,6 +101,7 @@ Sections rules:
 - Prefer concise descriptive titles (e.g. "Submission Requirements", "Key Concepts", "Exam Topics", "Project Scope").
 - When the source document has enough structure/content, produce at least 3 sections.
 - For short or sparse documents, fewer than 3 sections is acceptable if additional sections would be repetitive or low-value.
+- In section content, separate distinct concepts or list items with \n\n rather than joining them into a single run-on sentence with dashes or commas. Each distinct point, definition, or item should appear on its own line so it is readable in focus mode.
 
 IMPORTANT RULES:
 - Do NOT solve problems or provide answers
@@ -133,7 +134,20 @@ const STUDY_GUIDE_RESPONSE_FORMAT = zodResponseFormat(
   "study_guide"
 );
 
-function buildDocumentTypeInstructions(documentType: SupportedAnalysisDocumentType): string {
+function targetLectureSectionCount(metadata: AnalysisMetadata): { min: number; target: number; max: number } {
+  let estimate: number;
+  if (metadata.fileType === "PDF") {
+    // ~1 section per page, but a 1-page doc still gets at least 3
+    estimate = Math.max(3, metadata.pageCount);
+  } else {
+    // ~1 section per 3 paragraphs for DOCX
+    estimate = Math.max(3, Math.round((metadata.paragraphCount ?? 9) / 3));
+  }
+  const target = Math.min(12, estimate);
+  return { min: Math.max(3, target - 1), target, max: Math.min(12, target + 1) };
+}
+
+function buildDocumentTypeInstructions(documentType: SupportedAnalysisDocumentType, metadata: AnalysisMetadata): string {
   switch (documentType) {
     case "HOMEWORK":
       return `Document-type instructions: HOMEWORK
@@ -153,7 +167,8 @@ function buildDocumentTypeInstructions(documentType: SupportedAnalysisDocumentTy
 - Preserve overview.due_date behavior. If a due date exists, keep it in overview.due_date and also capture additional deadline context in important_details when present.
 - For sufficiently structured homework documents, target at least 3 sections with clear student-readable titles.
 - Never provide answers or solved work; only organize and extract requirements already present in the document.`;
-    case "LECTURE":
+    case "LECTURE": {
+      const { min, target, max } = targetLectureSectionCount(metadata);
       return `Document-type instructions: LECTURE
 - This includes class notes/course notes normalized to LECTURE behavior.
 - Checklist should be study-oriented, grounded in the source text, and phrased as review/comprehension goals (e.g., understand, review, compare, revisit, summarize, memorize only when terminology is explicitly present).
@@ -164,8 +179,10 @@ function buildDocumentTypeInstructions(documentType: SupportedAnalysisDocumentTy
   - logistics: study-relevant logistics such as session timing, required materials/tools, or review logistics
   - policies: class policies only when explicitly present
 - Surface key definitions, formulas, and named concepts through key_actions/checklist/sections with grounding; keep important_details focused on the four contract buckets above.
-- For sufficiently structured lecture/class-notes documents, target at least 3 sections with clear student-readable titles.
+- Sections MUST be split at the sub-topic level — one section per distinct concept, algorithm, or named topic. Do NOT collapse multiple sub-topics into one broad section (e.g. "Big-O Notation", "Arrays", "Linked Lists", "Merge Sort" should each be their own section, not grouped under "Data Structures" or "Sorting").
+- Target ${target} sections for this document (acceptable range: ${min}–${max}). Do not stop at 3 if the document covers more sub-topics.
 - Never invent teaching content; only reorganize and extract from the document.`;
+    }
     default:
       return "";
   }
@@ -174,9 +191,10 @@ function buildDocumentTypeInstructions(documentType: SupportedAnalysisDocumentTy
 export function buildAnalysisPrompt(
   documentType: SupportedAnalysisDocumentType,
   guidanceMode: boolean,
-  restrictions: string[]
+  restrictions: string[],
+  metadata: AnalysisMetadata
 ): string {
-  let prompt = `${ANALYSIS_PROMPT_BASE}\n\n${buildDocumentTypeInstructions(documentType)}`;
+  let prompt = `${ANALYSIS_PROMPT_BASE}\n\n${buildDocumentTypeInstructions(documentType, metadata)}`;
   if (guidanceMode) {
     prompt += GUIDANCE_MODE_ADDITION;
   }
@@ -286,7 +304,7 @@ export async function analyzeDocument(
     detection.isAssignment
   );
   const restrictions = getRestrictions(documentType, guidanceMode);
-  const prompt = buildAnalysisPrompt(supportedType, guidanceMode, restrictions);
+  const prompt = buildAnalysisPrompt(supportedType, guidanceMode, restrictions, metadata);
 
   const citationRequirements = buildCitationRequirements(metadata, {
     useMustLanguage: true,
