@@ -923,7 +923,7 @@ export default function DocumentPage() {
                   <path d="m3 21 7-7" />
                 </svg>
               </span>
-              {document.document_type === "HOMEWORK" ? "Problem Focus" : "Focus Mode"}
+              Focus Mode
             </Link>
 
             {canOpenQuiz ? (
@@ -1534,12 +1534,14 @@ export default function DocumentPage() {
                       : "Browse the main sections extracted from the document."
                   }
                   right={
-                    <Link
-                      href={buildTabHref(document.id, "sections", true)}
-                      className="text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800"
-                    >
-                      {document.document_type === "HOMEWORK" ? "Enter Problem Focus" : "Enter Focus Mode"}
-                    </Link>
+                    document.document_type !== "HOMEWORK" ? (
+                      <Link
+                        href={buildTabHref(document.id, "sections", true)}
+                        className="text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800"
+                      >
+                        Enter Focus Mode
+                      </Link>
+                    ) : undefined
                   }
                 />
 
