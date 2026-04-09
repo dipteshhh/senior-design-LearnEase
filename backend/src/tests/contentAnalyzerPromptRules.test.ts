@@ -23,8 +23,8 @@ test("buildAnalysisPrompt adds homework-specific important detail priorities", (
   assert.match(prompt, /rubric expectations, grading breakdown, late policy/);
   assert.match(prompt, /allowed file types, naming conventions, final submission format requirements, required tools\/software versions\/programming language\/formatting rules/);
   assert.match(prompt, /Preserve overview\.due_date behavior/);
-  assert.match(prompt, /Checklist MUST remain action-oriented and task-oriented/);
-  assert.match(prompt, /target at least 3 sections with clear student-readable titles/);
+  assert.match(prompt, /Checklist MUST be action-oriented and task-oriented/);
+  assert.match(prompt, /Sections for homework are PROBLEM GUIDES/);
 });
 
 test("buildAnalysisPrompt preserves distinction between submission constraints and workflow tools", () => {

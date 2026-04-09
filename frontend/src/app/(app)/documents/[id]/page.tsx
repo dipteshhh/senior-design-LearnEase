@@ -636,16 +636,12 @@ export default function DocumentPage() {
       badgeTone: "success",
     },
     { id: "details", label: "Important Details" },
-    ...(document.document_type !== "HOMEWORK"
-      ? [
-          {
-            id: "sections" as TabId,
-            label: "Sections",
-            badge: studyGuide.sections.length > 0 ? String(studyGuide.sections.length) : undefined,
-            badgeTone: "default" as const,
-          },
-        ]
-      : []),
+    {
+      id: "sections" as TabId,
+      label: document.document_type === "HOMEWORK" ? "Problem Guide" : "Sections",
+      badge: studyGuide.sections.length > 0 ? String(studyGuide.sections.length) : undefined,
+      badgeTone: "default" as const,
+    },
   ];
 
   const validTabs = new Set<TabId>(tabs.map((tab) => tab.id));
@@ -906,31 +902,29 @@ export default function DocumentPage() {
           </div>
 
           <div className="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:justify-end">
-            {document.document_type !== "HOMEWORK" && (
-              <Link
-                href={`/documents/${document.id}/focus`}
-                className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-950 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-gray-50 sm:w-auto"
-              >
-                <span className="mr-2">
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M15 3h6v6" />
-                    <path d="M9 21H3v-6" />
-                    <path d="m21 3-7 7" />
-                    <path d="m3 21 7-7" />
-                  </svg>
-                </span>
-                Focus Mode
-              </Link>
-            )}
+            <Link
+              href={`/documents/${document.id}/focus`}
+              className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-950 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-gray-50 sm:w-auto"
+            >
+              <span className="mr-2">
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M15 3h6v6" />
+                  <path d="M9 21H3v-6" />
+                  <path d="m21 3-7 7" />
+                  <path d="m3 21 7-7" />
+                </svg>
+              </span>
+              {document.document_type === "HOMEWORK" ? "Problem Focus" : "Focus Mode"}
+            </Link>
 
             {canOpenQuiz ? (
               <Link
@@ -1317,42 +1311,79 @@ export default function DocumentPage() {
 
             {studyGuide.checklist.length === 0 ? (
               <EmptyState text="No checklist items were generated for this document." />
-            ) : (
-              <ul className="space-y-5">
-                {studyGuide.checklist.map((item) => {
-                  const checked = checklistCompleted[item.id] ?? false;
+            ) : (() => {
+              const GROUP_ORDER = ["setup", "problems", "verify", "submit"] as const;
+              const GROUP_LABELS: Record<string, string> = {
+                setup: "Setup",
+                problems: "Problems",
+                verify: "Verify",
+                submit: "Submit",
+              };
 
-                  return (
-                    <li key={item.id}>
-                      <label className="flex cursor-pointer items-start gap-4">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(event) => {
-                            void handleChecklistToggle(item.id, event.target.checked);
-                          }}
-                          className="mt-1 h-5 w-5 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
-                        />
-                        <span className="min-w-0">
-                          <span
-                            className={`block text-lg font-semibold tracking-tight ${
-                              checked
-                                ? "text-gray-500 line-through"
-                                : "text-gray-950"
-                            }`}
-                          >
-                            {item.label}
-                          </span>
-                          <span className="mt-1 block text-sm leading-7 text-gray-500">
-                            {item.supporting_quote}
-                          </span>
+              const renderChecklistItem = (item: typeof studyGuide.checklist[number]) => {
+                const checked = checklistCompleted[item.id] ?? false;
+                return (
+                  <li key={item.id}>
+                    <label className="flex cursor-pointer items-start gap-4">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          void handleChecklistToggle(item.id, event.target.checked);
+                        }}
+                        className="mt-1 h-5 w-5 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                      />
+                      <span className="min-w-0">
+                        <span
+                          className={`block text-lg font-semibold tracking-tight ${
+                            checked ? "text-gray-500 line-through" : "text-gray-950"
+                          }`}
+                        >
+                          {item.label}
                         </span>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+                        <span className="mt-1 block text-sm leading-7 text-gray-500">
+                          {item.supporting_quote}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              };
+
+              const hasGroups =
+                document.document_type === "HOMEWORK" &&
+                studyGuide.checklist.some((item) => item.group != null);
+
+              if (hasGroups) {
+                const grouped = GROUP_ORDER.map((g) => ({
+                  key: g,
+                  label: GROUP_LABELS[g],
+                  items: studyGuide.checklist.filter((item) => item.group === g),
+                })).filter((g) => g.items.length > 0);
+
+                const ungrouped = studyGuide.checklist.filter(
+                  (item) => item.group == null || !GROUP_ORDER.includes(item.group as typeof GROUP_ORDER[number])
+                );
+
+                return (
+                  <div className="space-y-8">
+                    {grouped.map(({ key, label, items }) => (
+                      <div key={key}>
+                        <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                          {label}
+                        </p>
+                        <ul className="space-y-5">{items.map(renderChecklistItem)}</ul>
+                      </div>
+                    ))}
+                    {ungrouped.length > 0 && (
+                      <ul className="space-y-5">{ungrouped.map(renderChecklistItem)}</ul>
+                    )}
+                  </div>
+                );
+              }
+
+              return <ul className="space-y-5">{studyGuide.checklist.map(renderChecklistItem)}</ul>;
+            })()}
           </Card>
         ) : null}
 
@@ -1411,8 +1442,12 @@ export default function DocumentPage() {
               <>
                 <SectionHeading
                   icon={<SectionsIcon />}
-                  title="Focus Mode"
-                  description="Read one section at a time in a distraction-free view."
+                  title={document.document_type === "HOMEWORK" ? "Problem Focus" : "Focus Mode"}
+                  description={
+                    document.document_type === "HOMEWORK"
+                      ? "Work through one problem at a time. Each card explains what the problem requires."
+                      : "Read one section at a time in a distraction-free view."
+                  }
                   right={
                     <Link
                       href={buildTabHref(document.id, "sections", false)}
@@ -1434,7 +1469,7 @@ export default function DocumentPage() {
                         </div>
                         <div>
                           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
-                            Section {focusIndex + 1}
+                            {document.document_type === "HOMEWORK" ? "Problem" : "Section"} {focusIndex + 1}
                           </p>
                           <h3 className="mt-1 text-xl font-semibold tracking-tight text-gray-950">
                             {focusSection.title}
@@ -1465,11 +1500,11 @@ export default function DocumentPage() {
                         disabled={focusIndex <= 0}
                         className="rounded-2xl border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Previous Section
+                        {document.document_type === "HOMEWORK" ? "Previous Problem" : "Previous Section"}
                       </button>
 
                       <p className="text-sm text-gray-500">
-                        Section {focusIndex + 1} of {studyGuide.sections.length}
+                        {document.document_type === "HOMEWORK" ? "Problem" : "Section"} {focusIndex + 1} of {studyGuide.sections.length}
                       </p>
 
                       <button
@@ -1482,7 +1517,7 @@ export default function DocumentPage() {
                         disabled={focusIndex >= studyGuide.sections.length - 1}
                         className="rounded-2xl border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Next Section
+                        {document.document_type === "HOMEWORK" ? "Next Problem" : "Next Section"}
                       </button>
                     </div>
                   </div>
@@ -1492,14 +1527,18 @@ export default function DocumentPage() {
               <>
                 <SectionHeading
                   icon={<SectionsIcon />}
-                  title="Sections"
-                  description="Browse the main sections extracted from the document."
+                  title={document.document_type === "HOMEWORK" ? "Problem Guide" : "Sections"}
+                  description={
+                    document.document_type === "HOMEWORK"
+                      ? "Each card breaks down what a problem requires — requirements, constraints, and context — without giving answers."
+                      : "Browse the main sections extracted from the document."
+                  }
                   right={
                     <Link
                       href={buildTabHref(document.id, "sections", true)}
                       className="text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800"
                     >
-                      Enter Focus Mode
+                      {document.document_type === "HOMEWORK" ? "Enter Problem Focus" : "Enter Focus Mode"}
                     </Link>
                   }
                 />

@@ -78,6 +78,7 @@ ExtractionItem schema:
 - label: string
 - supporting_quote: an EXACT substring copied verbatim from the document text (must appear character-for-character in the input)
 - citations: a JSON array with at least one citation object, e.g. [{...}]
+- group: always required — set to null for all key_actions, important_details, and lecture checklist items. For HOMEWORK checklist items only, set to one of: "setup", "problems", "verify", "submit"
 
 Citations (MUST always be a JSON array, even for a single citation):
 - For pdf: { source_type: "pdf", page: number, excerpt: string }
@@ -151,9 +152,11 @@ function buildDocumentTypeInstructions(documentType: SupportedAnalysisDocumentTy
   switch (documentType) {
     case "HOMEWORK":
       return `Document-type instructions: HOMEWORK
-- Checklist MUST remain action-oriented and task-oriented and MUST contain two groups of items in this order:
-  1. Problem items: EVERY numbered or labeled problem, question, or task in the document MUST appear as its own checklist item, in the same order as the source document. Do not skip or merge problems. Label each with its number/label followed by a brief topic descriptor (e.g., "Problem 1: ER diagram for university database", "Question 3: Normalize to 3NF"). Never use bare labels like just "Problem 1" with no descriptor.
-  2. General items: Include actionable homework logistics items grounded in the document such as submission prep, formatting checks, file naming conventions, deadline reminders, and any other explicit requirements. These MUST appear after the problem items but MUST NOT be omitted.
+- Checklist MUST be action-oriented and task-oriented. Assign every checklist item a "group" field using exactly one of these four values, in this order:
+  1. group "setup" — Pre-work before solving: read submission rules in full, download/clone starter code or templates if the document provides them, install or configure any required tools or software. Only include this group if the document explicitly provides setup steps, starter files, or required tooling. Omit entirely if there is nothing to set up.
+  2. group "problems" — One item per distinct deliverable. EVERY numbered or labeled problem, question, or task MUST appear as its own item in source order. For programming assignments, decompose within a problem if multiple named components are listed (e.g., "implement FCFS, SJF, Priority, and Round-Robin" → four separate items labeled "Implement FCFS algorithm", "Implement SJF algorithm", etc., NOT one item). For math/SQL problems, one item per problem number. Label each with its number/identifier and a brief descriptor. Never use bare labels like "Problem 1" with no descriptor.
+  3. group "verify" — Checks to perform after finishing the work, grounded in explicit document requirements or examples: run code against provided sample input/output, verify output format matches requirements, re-read rubric, check units on answers, etc. Add one verify item per major deliverable if the document provides testable examples or output specifications.
+  4. group "submit" — Specific submission steps extracted from the document. Each distinct requirement is its own item: exact filename(s) required, exact file format, submission platform/location if named, deadline with time and timezone. Be specific (e.g., "Name file schedule_fcfs.c exactly as specified" not "submit files").
 - Prioritize high-value important_details for homework:
   - dates: due dates, submission deadlines, milestone dates
   - policies: rubric expectations, grading breakdown, late policy, collaboration/academic-integrity constraints
@@ -165,8 +168,12 @@ function buildDocumentTypeInstructions(documentType: SupportedAnalysisDocumentTy
   - If the document explicitly allows another tool for part of the workflow (for example ADS / SSMS for query text or screenshots), keep that allowance visible in checklist and/or important_details.logistics.
   - Do NOT collapse a qualified submission-format rule into a global software prohibition unless the document explicitly states a global prohibition.
 - Preserve overview.due_date behavior. If a due date exists, keep it in overview.due_date and also capture additional deadline context in important_details when present.
-- For sufficiently structured homework documents, target at least 3 sections with clear student-readable titles.
-- Never provide answers or solved work; only organize and extract requirements already present in the document.`;
+- Sections for homework are PROBLEM GUIDES — one section per distinct problem, question, or major deliverable. Students use these in focus mode to understand exactly what each problem requires before attempting it.
+  - Title: problem identifier + brief descriptor (e.g., "Problem 1: Nested Subquery", "Question 3: Normalize to 3NF", "FCFS Algorithm Implementation").
+  - Content: a structured restatement of what this problem requires. Include: what to produce (output/deliverable), key constraints and requirements, any relevant context provided in the document (schema, formula, sample data, starter code details), and any problem-specific notes. Separate each distinct point with \n\n so it is readable. Do NOT group multiple problems into one section.
+  - For programming assignments with multiple named components (e.g., implement FCFS, SJF, Priority, Round-Robin), create one section per component.
+  - Target one section per problem/deliverable — do not artificially merge or reduce.
+- Never provide answers, solved work, or code; only extract and restructure the requirements already present in the document.`;
     case "LECTURE": {
       const { min, target, max } = targetLectureSectionCount(metadata);
       return `Document-type instructions: LECTURE

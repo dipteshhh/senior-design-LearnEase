@@ -35,6 +35,7 @@ export const ExtractionItem = z.object({
   label: z.string().min(1),
   supporting_quote: z.string().min(1),
   citations: z.array(Citation).min(1),
+  group: z.string().nullable(),
 });
 export type ExtractionItem = z.infer<typeof ExtractionItem>;
 

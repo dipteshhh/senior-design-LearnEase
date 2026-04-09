@@ -41,6 +41,7 @@ export interface ExtractionItem {
   label: string;
   supporting_quote: string;
   citations: Citation[];
+  group?: string | null;
 }
 
 export interface StudyGuideSection {

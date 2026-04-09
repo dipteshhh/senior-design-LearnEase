@@ -72,6 +72,7 @@ test("ExtractionItem requires at least one citation", () => {
     label: "Item",
     supporting_quote: "quote",
     citations: [{ source_type: "pdf", page: 1, excerpt: "text" }],
+    group: null,
   };
   assert.equal(ExtractionItem.safeParse(valid).success, true);
 
