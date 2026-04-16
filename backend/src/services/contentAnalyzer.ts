@@ -33,10 +33,10 @@ import {
   normalizeUpstreamError,
 } from "./generationServiceUtils.js";
 
-const DEFAULT_OPENAI_TIMEOUT_MS = 30000;
+const DEFAULT_OPENAI_TIMEOUT_MS = 60000;
 const DEFAULT_OPENAI_MAX_RETRIES = 0;
 const OPENAI_RETRY_TIMEOUT_MULTIPLIER = 1.5;
-const OPENAI_RETRY_TIMEOUT_CAP_MS = 60000;
+const OPENAI_RETRY_TIMEOUT_CAP_MS = 120000;
 
 function getOpenAiTimeoutMs(): number {
   return readEnvInt("OPENAI_TIMEOUT_MS", DEFAULT_OPENAI_TIMEOUT_MS, 1000);

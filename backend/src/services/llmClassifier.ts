@@ -4,9 +4,13 @@ import { logger } from "../lib/logger.js";
 import { detectDocumentType } from "./documentDetector.js";
 import type { DetectionResult } from "./documentDetector.js";
 import { readEnvInt } from "../lib/env.js";
-import { withOpenAiConcurrency } from "./generationReliability.js";
+import {
+  classifyGenerationError,
+  withOpenAiConcurrency,
+} from "./generationReliability.js";
+import { normalizeUpstreamError } from "./generationServiceUtils.js";
 
-const DEFAULT_CLASSIFIER_TIMEOUT_MS = 10000;
+const DEFAULT_CLASSIFIER_TIMEOUT_MS = 30000;
 // Default 0: route-level retry handles failures; SDK retries would multiply tail latency.
 const DEFAULT_CLASSIFIER_MAX_RETRIES = 0;
 
@@ -44,6 +48,29 @@ Respond with ONLY the category name, nothing else.`;
 
 const CLASSIFIER_MODEL = "gpt-4o-mini";
 
+function isLocalFallbackEnabled(): boolean {
+  const configured = process.env.LLM_CLASSIFIER_ALLOW_LOCAL_FALLBACK?.trim().toLowerCase();
+  if (configured === "true") return true;
+  if (configured === "false") return false;
+  return process.env.NODE_ENV === "production";
+}
+
+function canFallbackToLocalDetection(
+  error: unknown,
+  localDetection: DetectionResult
+): boolean {
+  if (!isLocalFallbackEnabled()) {
+    return false;
+  }
+
+  if (localDetection.documentType === "UNSUPPORTED") {
+    return false;
+  }
+
+  const normalizedError = normalizeUpstreamError(error);
+  return classifyGenerationError(error, normalizedError) === "transient";
+}
+
 export interface LlmClassificationResult {
   /** The LLM-determined document type. */
   llmDocumentType: DocumentType;
@@ -51,6 +78,8 @@ export interface LlmClassificationResult {
   localDetection: DetectionResult;
   /** Whether the two classifiers disagreed. */
   disagreement: boolean;
+  /** Whether the LLM classifier was bypassed after a transient upstream failure. */
+  usedLocalFallback: boolean;
 }
 
 export async function classifyWithLlm(
@@ -90,6 +119,19 @@ export async function classifyWithLlm(
       }
     );
   } catch (error) {
+    if (canFallbackToLocalDetection(error, localDetection)) {
+      logger.warn("LLM classifier failed transiently; using local document type fallback", {
+        error: error instanceof Error ? error.message : String(error),
+        localDocumentType: localDetection.documentType,
+      });
+      return {
+        llmDocumentType: localDetection.documentType,
+        localDetection,
+        disagreement: false,
+        usedLocalFallback: true,
+      };
+    }
+
     // Fail closed: do not fall back to the local classifier because it is
     // known to produce false positives for out-of-scope documents. Let the
     // error propagate so the route marks generation as failed (retriable).
@@ -130,5 +172,6 @@ export async function classifyWithLlm(
     llmDocumentType,
     localDetection,
     disagreement,
+    usedLocalFallback: false,
   };
 }

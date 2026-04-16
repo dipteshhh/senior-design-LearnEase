@@ -599,6 +599,7 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
         documentId,
         llmDocumentType: classification.llmDocumentType,
         disagreement: classification.disagreement,
+        usedLocalFallback: classification.usedLocalFallback,
         classifierDurationMs: Date.now() - classificationStartedAt,
       });
 
@@ -715,6 +716,7 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
           documentId,
           llmDocumentType,
           disagreement: classification.disagreement,
+          usedLocalFallback: classification.usedLocalFallback,
           classifierDurationMs: Date.now() - classificationStartedAt,
         });
 
