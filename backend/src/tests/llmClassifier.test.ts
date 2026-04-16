@@ -1,6 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { APIConnectionTimeoutError } from "openai/error";
 import { classifyWithLlm } from "../services/llmClassifier.js";
+
+function withClassifierFallbackEnabled<T>(fn: () => Promise<T>): Promise<T> {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousFallback = process.env.LLM_CLASSIFIER_ALLOW_LOCAL_FALLBACK;
+  process.env.NODE_ENV = "production";
+  process.env.LLM_CLASSIFIER_ALLOW_LOCAL_FALLBACK = "true";
+
+  return fn().finally(() => {
+    if (previousNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+
+    if (previousFallback === undefined) {
+      delete process.env.LLM_CLASSIFIER_ALLOW_LOCAL_FALLBACK;
+    } else {
+      process.env.LLM_CLASSIFIER_ALLOW_LOCAL_FALLBACK = previousFallback;
+    }
+  });
+}
 
 // ── Mock OpenAI client ──────────────────────────────────────────────
 
@@ -132,6 +154,30 @@ test("LLM classifier throws when LLM returns empty", async () => {
     () => classifyWithLlm(text, client),
     (err: Error) => {
       assert.match(err.message, /unexpected value/i);
+      return true;
+    }
+  );
+});
+
+test("LLM classifier falls back to local supported type on transient provider failure", async () => {
+  const client = mockOpenAiClientThatThrows(new APIConnectionTimeoutError());
+  const text = "Homework assignment due date.";
+  const result = await withClassifierFallbackEnabled(() => classifyWithLlm(text, client));
+
+  assert.equal(result.llmDocumentType, "HOMEWORK");
+  assert.equal(result.localDetection.documentType, "HOMEWORK");
+  assert.equal(result.disagreement, false);
+  assert.equal(result.usedLocalFallback, true);
+});
+
+test("LLM classifier still fails closed for locally unsupported documents", async () => {
+  const client = mockOpenAiClientThatThrows(new APIConnectionTimeoutError());
+  const text = "Course syllabus with grading and office hours.";
+
+  await assert.rejects(
+    () => withClassifierFallbackEnabled(() => classifyWithLlm(text, client)),
+    (err: Error) => {
+      assert.equal(err.message, "Request timed out.");
       return true;
     }
   );

@@ -43,6 +43,9 @@ Recommended environment variables:
 - `ARTIFACTS_DIR=/app/data/artifacts`
 - `APP_TIMEZONE=America/New_York`
 - `LOG_LEVEL=info`
+- `OPENAI_TIMEOUT_MS=60000`
+- `LLM_CLASSIFIER_TIMEOUT_MS=30000`
+- `LLM_CLASSIFIER_ALLOW_LOCAL_FALLBACK=true`
 
 Optional, only if reminders are needed:
 

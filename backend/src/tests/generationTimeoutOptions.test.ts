@@ -111,7 +111,7 @@ test("analyzeDocument passes attempt-scaled timeout to OpenAI request options", 
 
     assert.equal(result.overview.document_type, "HOMEWORK");
     assert.equal(calls, 3);
-    assert.deepEqual(capturedTimeouts, [30000, 45000, 60000]);
+    assert.deepEqual(capturedTimeouts, [60000, 90000, 120000]);
     assert.deepEqual(responseFormatTypes, ["json_schema", "json_schema", "json_schema"]);
   });
 });
@@ -179,7 +179,7 @@ test("generateQuiz passes attempt-scaled timeout to OpenAI request options", asy
 
     assert.equal(result.document_id, "doc-123");
     assert.equal(calls, 3);
-    assert.deepEqual(capturedTimeouts, [30000, 45000, 60000]);
+    assert.deepEqual(capturedTimeouts, [60000, 90000, 120000]);
     assert.deepEqual(responseFormatTypes, ["json_schema", "json_schema", "json_schema"]);
   });
 });
