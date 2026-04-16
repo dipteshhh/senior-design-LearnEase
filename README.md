@@ -145,3 +145,4 @@ For full system specifications, architecture decisions, and implementation rules
 - `docs/VALIDATION.md` (quote/citation enforcement)
 - `docs/AUTH.md` (auth contract)
 - `docs/CLASSIFICATION.md` (two-stage document classification rules)
+- `docs/SYSTEM_ARCHITECTURE.md` (system topology + processing lifecycle diagram)
