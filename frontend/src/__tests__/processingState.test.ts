@@ -12,6 +12,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { DocumentListItem } from "../lib/contracts.ts";
 import { computePacedProgress } from "../lib/pacedProgress.ts";
+import {
+  getStudyGuideFailureMessage,
+  getStudyGuideFailureUi,
+} from "../lib/studyGuideFailure.ts";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -144,15 +148,10 @@ test("polling failed branch: DOCUMENT_UNSUPPORTED gets distinct message", () => 
     error_message: "Document type is not supported for generation.",
   });
 
-  // Mirrors the polling logic in ProcessingPage
-  let errorMessage: string;
-  if (doc.error_code === "DOCUMENT_UNSUPPORTED") {
-    errorMessage = "This document type is not supported for study guide generation.";
-  } else {
-    errorMessage = doc.error_message ?? "Study guide generation failed.";
-  }
-
-  assert.equal(errorMessage, "This document type is not supported for study guide generation.");
+  assert.equal(
+    getStudyGuideFailureMessage(doc),
+    "This document type is not supported for study guide generation."
+  );
 });
 
 test("polling failed branch: generic failure uses error_message from server", () => {
@@ -163,14 +162,10 @@ test("polling failed branch: generic failure uses error_message from server", ()
     error_message: "Generated output failed validation. Retry generation.",
   });
 
-  let errorMessage: string;
-  if (doc.error_code === "DOCUMENT_UNSUPPORTED") {
-    errorMessage = "This document type is not supported for study guide generation.";
-  } else {
-    errorMessage = doc.error_message ?? "Study guide generation failed.";
-  }
-
-  assert.equal(errorMessage, "Generated output failed validation. Retry generation.");
+  assert.equal(
+    getStudyGuideFailureMessage(doc),
+    "Generated output failed validation. Retry generation."
+  );
 });
 
 test("polling failed branch: null error_message falls back to generic string", () => {
@@ -181,14 +176,39 @@ test("polling failed branch: null error_message falls back to generic string", (
     error_message: null,
   });
 
-  let errorMessage: string;
-  if (doc.error_code === "DOCUMENT_UNSUPPORTED") {
-    errorMessage = "This document type is not supported for study guide generation.";
-  } else {
-    errorMessage = doc.error_message ?? "Study guide generation failed.";
-  }
+  assert.equal(getStudyGuideFailureMessage(doc), "Study guide generation failed.");
+});
 
-  assert.equal(errorMessage, "Study guide generation failed.");
+test("failure UI distinguishes backend request failures from interrupted runs", () => {
+  const providerFailure = makeDoc({
+    study_guide_status: "failed",
+    status: "failed",
+    error_code: "GENERATION_FAILED",
+    error_message: "Generation failed. Retry generation.",
+  });
+  const interruptedFailure = makeDoc({
+    study_guide_status: "failed",
+    status: "failed",
+    error_code: "GENERATION_INTERRUPTED",
+    error_message: "Generation was interrupted by server restart. Retry generation.",
+  });
+
+  assert.equal(getStudyGuideFailureUi(providerFailure)?.progressLabel, "Backend request failed");
+  assert.equal(getStudyGuideFailureUi(interruptedFailure)?.progressLabel, "Generation interrupted");
+});
+
+test("failure UI marks validation failures distinctly", () => {
+  const doc = makeDoc({
+    study_guide_status: "failed",
+    status: "failed",
+    error_code: "QUOTE_NOT_FOUND",
+    error_message: "Generated output failed validation. Retry generation.",
+  });
+
+  const ui = getStudyGuideFailureUi(doc);
+  assert.equal(ui?.heading, "We couldn’t validate the study guide");
+  assert.equal(ui?.statusLine, "Generated output failed validation.");
+  assert.equal(ui?.progressLabel, "Validation failed");
 });
 
 // ── computePacedProgress ────────────────────────────────────────────

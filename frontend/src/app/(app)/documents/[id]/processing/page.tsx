@@ -7,6 +7,10 @@ import { ApiClientError, api } from "@/lib/api";
 import type { DocumentListItem, DocumentType, GenerationStatus } from "@/lib/contracts";
 import { getDocumentStatus } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
+import {
+  getStudyGuideFailureMessage,
+  getStudyGuideFailureUi,
+} from "@/lib/studyGuideFailure";
 import type { StepState } from "@/lib/pacedProgress";
 import {
   DEFAULT_POLL_DELAY_MS,
@@ -98,18 +102,6 @@ function getStatusDescription(status: GenerationStatus | undefined): string {
     default:
       return "Your document is uploaded and ready. Study guide generation will begin momentarily.";
   }
-}
-
-function getStudyGuideFailureMessage(document: DocumentListItem | null): string | null {
-  if (!document || document.study_guide_status !== "failed") {
-    return null;
-  }
-
-  if (document.error_code === "DOCUMENT_UNSUPPORTED") {
-    return "This document type is not supported for study guide generation.";
-  }
-
-  return document.error_message ?? "Study guide generation failed.";
 }
 
 const READY_REDIRECT_DELAY_MS = 450;
@@ -578,6 +570,8 @@ export default function ProcessingPage() {
           ? "processing"
           : document?.study_guide_status;
 
+  const failureUi = useMemo(() => getStudyGuideFailureUi(document), [document]);
+
   useEffect(() => {
     if (!paced.isVisuallyReady) {
       return;
@@ -600,20 +594,22 @@ export default function ProcessingPage() {
     if (isUnsupported) return "This document type is not supported.";
     if (!document) return "Waiting for document status...";
     if (isVisuallyReady) return "Study guide is ready.";
-    if (document.study_guide_status === "failed") return "Study guide generation failed.";
+    if (document.study_guide_status === "failed") {
+      return failureUi?.statusLine ?? "Study guide generation failed.";
+    }
     if (isReady && !isVisuallyReady) return "Finalizing study guide...";
     if (document.study_guide_status === "processing") return "Generating study guide...";
     return "Queued for generation...";
-  }, [document, isReady, isUnsupported, isVisuallyReady]);
+  }, [document, failureUi?.statusLine, isReady, isUnsupported, isVisuallyReady]);
 
   const progressLabel = useMemo(() => {
     if (isVisuallyReady) return "100% complete";
     if (document?.error_code === "DOCUMENT_UNSUPPORTED") return "Unsupported document";
-    if (isFailed) return "Generation interrupted";
+    if (isFailed) return failureUi?.progressLabel ?? "Generation failed";
     if (!document) return "Preparing…";
     if (document.study_guide_status === "idle") return "Starting generation…";
     return "Usually takes around 30–60 seconds";
-  }, [document, isFailed, isVisuallyReady]);
+  }, [document, failureUi?.progressLabel, isFailed, isVisuallyReady]);
 
   const statusPill = useMemo(() => {
     if (isUnsupported) return { label: "Unsupported", tone: "danger" as const };
@@ -634,13 +630,19 @@ export default function ProcessingPage() {
           <ProcessingGlyph failed={isFailed} />
 
           <h1 className="mt-7 max-w-2xl text-3xl font-semibold tracking-tight text-gray-950 md:text-4xl">
-            {isUnsupported ? "Document not supported" : getStatusHeading(visualStatus)}
+            {isUnsupported
+              ? "Document not supported"
+              : isFailed
+                ? (failureUi?.heading ?? getStatusHeading(visualStatus))
+                : getStatusHeading(visualStatus)}
           </h1>
 
           <p className="mt-3 max-w-xl text-sm leading-7 text-gray-600 md:text-base">
             {isUnsupported
               ? "This document type is not supported for study guide generation. Please upload a different document."
-              : getStatusDescription(visualStatus)}
+              : isFailed
+                ? (failureUi?.description ?? getStatusDescription(visualStatus))
+                : getStatusDescription(visualStatus)}
           </p>
 
           <p className="mt-4 text-sm font-medium text-gray-400">{progressLabel}</p>
@@ -707,7 +709,12 @@ export default function ProcessingPage() {
 
             {error ? (
               <div className="mt-8 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {error}
+                <p>{error}</p>
+                {document?.study_guide_status === "failed" && document.error_code ? (
+                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-rose-500">
+                    Failure code: {document.error_code}
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </section>
