@@ -21,6 +21,7 @@ const BASE_STUDY_GUIDE: StudyGuide = {
       citations: [
         { source_type: "pdf", page: 1, excerpt: "Review the weekly schedule before class." },
       ],
+      group: null,
     },
   ],
   checklist: [],
@@ -579,6 +580,7 @@ test("validateStudyGuideAgainstDocument allows descriptive 'step-by-step' in che
         label: "Complete the step-by-step implementation of scaled dot-product attention",
         supporting_quote: "Review the weekly schedule before class.",
         citations: [{ source_type: "pdf", page: 1, excerpt: "Review the weekly schedule before class." }],
+        group: null,
       },
     ],
   };

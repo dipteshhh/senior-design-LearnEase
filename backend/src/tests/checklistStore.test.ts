@@ -26,6 +26,7 @@ function makeStudyGuide(itemId: string, label: string) {
             excerpt: "Submit by Friday.",
           },
         ],
+        group: null,
       },
     ],
     important_details: {
