@@ -1,7 +1,7 @@
 # Railway Deployment Checklist
 
 > Custom domains: `app.learnease.app` (frontend) · `api.learnease.app` (backend)
-> SMTP reminders: disabled on day one
+> Reminder emails: optional via Resend API
 
 ---
 
@@ -39,7 +39,7 @@ GOOGLE_CLIENT_ID=<your_google_oauth_web_client_id>
 SESSION_SECRET=<replace_with_strong_random_secret>
 FILE_ENCRYPTION_KEY=<replace_with_64_char_hex_key>
 CORS_ORIGINS=https://app.learnease.app
-TRUST_PROXY=true
+TRUST_PROXY=1
 DATABASE_PATH=/app/data/learnease.sqlite
 ARTIFACTS_DIR=/app/data/artifacts
 SESSION_MAX_AGE_SECONDS=604800
@@ -67,6 +67,8 @@ UPLOAD_MAX_FILE_SIZE_MB=50
 ```
 
 > Do **not** set `PORT` — Railway injects it automatically.
+>
+> If you want reminder emails on Railway Hobby, add `RESEND_API_KEY` and `RESEND_FROM`. SMTP is blocked on Hobby.
 
 ### 2d. Custom Domain
 
@@ -142,7 +144,7 @@ Perform each step manually in the browser at `https://app.learnease.app`:
 ## 6. Post-Deploy (Optional / Later)
 
 - [ ] Set `OPENAI_FALLBACK_MODEL=gpt-4o` if you want fallback on retries
-- [ ] Configure SMTP vars for reminder emails when ready
+- [ ] Configure `RESEND_API_KEY` and `RESEND_FROM` for reminder emails when ready
 - [ ] Consider `OPENAI_CONCURRENCY_LIMIT=3` if you see queue contention in logs
 - [ ] Monitor logs for `CITATION_EXCERPT_NOT_FOUND` frequency after real usage
 

@@ -75,45 +75,69 @@ export function getNowMs(): number {
 }
 
 /**
- * SMTP response codes in the 5xx range indicate permanent failures
- * (bad recipient, auth rejected, policy block, etc.).
- * Codes in the 4xx range and network/timeout errors are transient.
+ * Resend API errors expose:
+ *   - `code` (string): provider error name such as `invalid_api_key`
+ *   - `statusCode` (number): HTTP-ish status code when available
  *
- * Nodemailer errors from transport.sendMail expose:
- *   - `responseCode` (number): the SMTP status code, if the server replied
- *   - `code` (string): e.g. 'ECONNREFUSED', 'ETIMEDOUT', 'ESOCKET'
- *
- * When sendEmail returns false (SMTP not configured), the caller handles
- * that separately — it never reaches this classifier.
+ * Network errors from fetch/undici also commonly expose `code`
+ * (ECONNREFUSED, ETIMEDOUT, etc.). Those should be retried.
  */
-const TERMINAL_SMTP_CODES = new Set([
-  550, // mailbox unavailable / not found
-  551, // user not local
-  552, // exceeded storage allocation
-  553, // mailbox name not allowed
-  554, // transaction failed (permanent)
-  555, // syntax error in parameters
+const TRANSIENT_ERROR_CODES = new Set([
+  "application_error",
+  "concurrent_idempotent_requests",
+  "ECONNABORTED",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "ESOCKET",
+  "ETIMEDOUT",
+  "internal_server_error",
+  "rate_limit_exceeded",
+  "UND_ERR_CONNECT_TIMEOUT",
 ]);
 
 const TERMINAL_ERROR_CODES = new Set([
-  "EAUTH",       // authentication failed permanently
-  "EENVELOPE",   // bad envelope (invalid address format)
+  "daily_quota_exceeded",
+  "invalid_access",
+  "invalid_api_key",
+  "invalid_attachment",
+  "invalid_from_address",
+  "invalid_idempotency_key",
+  "invalid_idempotent_request",
+  "invalid_parameter",
+  "invalid_region",
+  "method_not_allowed",
+  "missing_api_key",
+  "missing_required_field",
+  "monthly_quota_exceeded",
+  "not_found",
+  "restricted_api_key",
+  "security_error",
+  "validation_error",
 ]);
 
 export function isTransientEmailError(error: unknown): boolean {
   if (!(error instanceof Error)) return true; // unknown → assume transient
 
-  const smtpCode = (error as { responseCode?: number }).responseCode;
-  if (typeof smtpCode === "number") {
-    return !TERMINAL_SMTP_CODES.has(smtpCode);
-  }
-
   const errorCode = (error as { code?: string }).code;
-  if (typeof errorCode === "string" && TERMINAL_ERROR_CODES.has(errorCode)) {
-    return false;
+  if (typeof errorCode === "string") {
+    if (TRANSIENT_ERROR_CODES.has(errorCode)) return true;
+    if (TERMINAL_ERROR_CODES.has(errorCode)) return false;
   }
 
-  // Network errors (ECONNREFUSED, ETIMEDOUT, ESOCKET, etc.) are transient
+  const statusCode = (error as { statusCode?: number | null }).statusCode;
+  if (typeof statusCode === "number") {
+    if (statusCode === 408 || statusCode === 429 || statusCode >= 500) {
+      return true;
+    }
+    if (statusCode >= 400) {
+      return false;
+    }
+  }
+
+  // Unknown errors are treated as transient so temporary provider/network
+  // issues can be retried on the next scheduler tick.
   return true;
 }
 
@@ -208,8 +232,9 @@ export function checkAndSendReminders(nowOverride?: Date): void {
       if (sent) {
         markReminderSent(candidate.documentId, deadlineKey);
       } else {
-        // sendEmail returns false only when SMTP is not configured — terminal
-        markReminderFailed(candidate.documentId, deadlineKey, "Email send returned false — SMTP not configured");
+        // sendEmail returns false only when Resend is not configured. Treat it
+        // as retryable so a corrected runtime config can self-heal.
+        markReminderPendingRetry(candidate.documentId, deadlineKey, "Email send returned false — Resend not configured");
       }
     }).catch((error: unknown) => {
       const errorMsg = error instanceof Error ? error.message : String(error);

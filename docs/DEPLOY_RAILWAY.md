@@ -37,7 +37,7 @@ Recommended environment variables:
 - `FILE_ENCRYPTION_KEY=...`
 - `SESSION_MAX_AGE_SECONDS=604800`
 - `CORS_ORIGINS=https://app.example.com`
-- `TRUST_PROXY=true`
+- `TRUST_PROXY=1`
 - `DATABASE_PATH=/app/data/learnease.sqlite`
 - `ARTIFACTS_DIR=/app/data/artifacts`
 - `APP_TIMEZONE=America/New_York`
@@ -48,17 +48,15 @@ Recommended environment variables:
 
 Optional, only if reminders are needed:
 
-- `SMTP_HOST=...`
-- `SMTP_PORT=587`
-- `SMTP_USER=...`
-- `SMTP_PASS=...`
-- `SMTP_FROM=noreply@example.com`
+- `RESEND_API_KEY=...`
+- `RESEND_FROM=LearnEase <onboarding@resend.dev>` for initial testing, or `LearnEase <noreply@example.com>` after you verify a sending domain in Resend
 
 Notes:
 
 - Do not scale the backend horizontally while it uses SQLite, local artifacts, and in-process schedulers.
 - Railway injects `PORT`; do not hardcode a production port override unless you have a specific reason.
 - With a volume attached, expect a small amount of redeploy downtime on Railway.
+- Railway Hobby blocks outbound SMTP, so reminder emails use the Resend HTTPS API instead of SMTP.
 
 ### Frontend service
 
