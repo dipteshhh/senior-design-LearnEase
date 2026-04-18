@@ -76,6 +76,7 @@ function validateProductionConfig(): void {
   requireEnv("FILE_ENCRYPTION_KEY");
   requireEnv("GOOGLE_CLIENT_ID");
   requireEnv("OPENAI_API_KEY");
+  requireEnv("TRUST_PROXY");
 }
 
 try {

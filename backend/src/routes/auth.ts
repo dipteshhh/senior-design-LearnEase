@@ -41,17 +41,10 @@ const DEFAULT_GOOGLE_TOKENINFO_TIMEOUT_MS = 8000;
 const DEFAULT_GOOGLE_TOKENINFO_MAX_RETRIES = 1;
 
 /**
- * Default to SameSite=Lax so the session works as a first-party cookie when
- * the frontend proxies backend requests through its own origin.
- *
- * Allow SameSite=None only when explicitly opted into for a deliberate
- * cross-site deployment.
+ * SameSite is always Lax.  The frontend proxies backend requests through its
+ * own origin, so cross-site cookie delivery is never needed.
  */
-function getSessionCookieSameSite(): "lax" | "none" {
-  const configured = process.env.SESSION_COOKIE_SAMESITE?.trim().toLowerCase();
-  if (configured === "none") {
-    return "none";
-  }
+function getSessionCookieSameSite(): "lax" {
   return "lax";
 }
 

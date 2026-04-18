@@ -30,7 +30,7 @@ Session payload shape:
 }
 ```
 
-The cookie is HMAC-SHA256 signed with `SESSION_SECRET`. It is HttpOnly, SameSite=Lax by default, and expires after `SESSION_MAX_AGE_SECONDS` (default 7 days). Set `SESSION_COOKIE_SAMESITE=none` only for an intentional cross-site deployment.
+The cookie is HMAC-SHA256 signed with `SESSION_SECRET`. It is HttpOnly, SameSite=Lax, and expires after `SESSION_MAX_AGE_SECONDS` (default 7 days). The frontend proxies backend requests through its own origin, so the session cookie is always first-party.
 
 Required user fields:
 - `user.id` (Google `sub` — stable unique id)

@@ -36,7 +36,6 @@ Recommended environment variables:
 - `SESSION_SECRET=...`
 - `FILE_ENCRYPTION_KEY=...`
 - `SESSION_MAX_AGE_SECONDS=604800`
-- `SESSION_COOKIE_SAMESITE=lax`
 - `CORS_ORIGINS=https://app.example.com`
 - `TRUST_PROXY=true`
 - `DATABASE_PATH=/app/data/learnease.sqlite`
@@ -91,7 +90,6 @@ For production:
 - serve both apps over HTTPS
 - set `BACKEND_API_BASE_URL` to the backend public URL
 - set `CORS_ORIGINS` to the exact frontend origin
-- keep `SESSION_COOKIE_SAMESITE=lax` unless you intentionally need a cross-site cookie
 
 ## First Deploy Checklist
 
