@@ -10,7 +10,7 @@ flowchart LR
     gis["Google Identity Services<br/>client-side sign-in"]
     tokeninfo["Google Token Info API<br/>verifies ID token"]
     openai["OpenAI API"]
-    smtp["SMTP Provider"]
+    emailapi["Resend Email API"]
 
     subgraph frontend["Frontend Service<br/>Next.js App Router on Railway"]
         pages["UI Pages<br/>Landing, Sign In, Dashboard,<br/>Upload, Documents, Focus, Quiz, Settings"]
@@ -55,7 +55,7 @@ flowchart LR
     authroute -->|"verify Google credential"| tokeninfo
     sgjob -->|"classify + generate"| openai
     quizjob -->|"generate quiz"| openai
-    scheduler -->|"send due-soon reminders"| smtp
+    scheduler -->|"send due-soon reminders"| emailapi
 
     repo <--> sqlite
     repo <--> files
@@ -68,7 +68,7 @@ flowchart LR
     class pages,clientauth,proxy frontend;
     class edge,authroute,docroutes,ingest,sgjob,quizjob,scheduler,repo backend;
     class sqlite,files data;
-    class browser,gis,tokeninfo,openai,smtp ext;
+    class browser,gis,tokeninfo,openai,emailapi ext;
 ```
 
 ## Processing Lifecycle

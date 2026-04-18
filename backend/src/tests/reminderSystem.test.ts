@@ -12,12 +12,10 @@ process.env.DATABASE_PATH = path.join(tmpDir, "test.sqlite");
 process.env.ARTIFACTS_DIR = path.join(tmpDir, "artifacts");
 process.env.FILE_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef";
 process.env.APP_TIMEZONE = "America/New_York";
-// Dummy SMTP config so isEmailConfigured() returns true inside scheduler tests.
-// The transport will be created but never successfully sends (no real server).
-process.env.SMTP_HOST = "localhost";
-process.env.SMTP_PORT = "2525";
-process.env.SMTP_USER = "test";
-process.env.SMTP_PASS = "test";
+// Dummy Resend config so isEmailConfigured() returns true inside scheduler
+// tests. These tests do not exercise the actual provider network call.
+process.env.RESEND_API_KEY = "re_test_dummy";
+process.env.RESEND_FROM = "LearnEase <onboarding@resend.dev>";
 
 const sqlite = await import("../db/sqlite.js");
 const store = await import("../store/memoryStore.js");
@@ -198,7 +196,7 @@ test("listPendingReminders excludes failed (terminal) reminders", () => {
     assignmentDueTime: "14:00",
     reminderStatus: "failed",
     reminderDeadlineKey: "2099-12-31T14:00",
-    reminderLastError: "550 mailbox not found",
+    reminderLastError: "invalid_from_address",
   });
   store.saveDocument(doc);
 
@@ -229,7 +227,7 @@ test("listPendingReminders includes pending reminders with deadline key from pri
     reminderOptIn: true,
     reminderStatus: "pending",
     reminderDeadlineKey: "2099-12-31T14:00",
-    reminderLastError: "ETIMEDOUT",
+    reminderLastError: "rate_limit_exceeded",
   });
   store.saveDocument(doc);
 
@@ -324,13 +322,13 @@ test("markReminderFailed transitions to failed state and stores error", () => {
   const deadlineKey = store.buildDeadlineKey("2099-09-01", "12:00");
   store.claimReminderForSending(doc.id, deadlineKey);
 
-  const marked = store.markReminderFailed(doc.id, deadlineKey, "SMTP error");
+  const marked = store.markReminderFailed(doc.id, deadlineKey, "invalid_from_address");
   assert.equal(marked, true);
 
   const updated = store.getDocument(doc.id);
   assert.ok(updated);
   assert.equal(updated.reminderStatus, "failed");
-  assert.equal(updated.reminderLastError, "SMTP error");
+  assert.equal(updated.reminderLastError, "invalid_from_address");
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -531,29 +529,28 @@ test("isTransientEmailError: network errors are transient", () => {
   assert.equal(isTransientEmailError(err2), true);
 });
 
-test("isTransientEmailError: SMTP 4xx are transient", () => {
-  const err = Object.assign(new Error("421 try again later"), { responseCode: 421 });
+test("isTransientEmailError: provider rate limits are transient", () => {
+  const err = Object.assign(new Error("Too many requests"), { code: "rate_limit_exceeded" });
   assert.equal(isTransientEmailError(err), true);
+});
 
-  const err2 = Object.assign(new Error("451 temporary failure"), { responseCode: 451 });
+test("isTransientEmailError: HTTP 5xx errors are transient", () => {
+  const err2 = Object.assign(new Error("Internal server error"), { statusCode: 500 });
   assert.equal(isTransientEmailError(err2), true);
 });
 
-test("isTransientEmailError: SMTP 5xx are terminal", () => {
-  const err = Object.assign(new Error("550 mailbox not found"), { responseCode: 550 });
+test("isTransientEmailError: invalid API key is terminal", () => {
+  const err = Object.assign(new Error("Invalid API key"), { code: "invalid_api_key" });
   assert.equal(isTransientEmailError(err), false);
+});
 
-  const err2 = Object.assign(new Error("553 mailbox name not allowed"), { responseCode: 553 });
+test("isTransientEmailError: HTTP 4xx validation failures are terminal", () => {
+  const err2 = Object.assign(new Error("Bad request"), { statusCode: 400 });
   assert.equal(isTransientEmailError(err2), false);
 });
 
-test("isTransientEmailError: EAUTH is terminal", () => {
-  const err = Object.assign(new Error("Invalid login"), { code: "EAUTH" });
-  assert.equal(isTransientEmailError(err), false);
-});
-
-test("isTransientEmailError: EENVELOPE is terminal", () => {
-  const err = Object.assign(new Error("Bad envelope"), { code: "EENVELOPE" });
+test("isTransientEmailError: quota exhaustion is terminal", () => {
+  const err = Object.assign(new Error("Monthly quota exceeded"), { code: "monthly_quota_exceeded" });
   assert.equal(isTransientEmailError(err), false);
 });
 
@@ -580,7 +577,7 @@ test("terminal failure stays excluded until deadline changes", () => {
 
   const deadlineKey = store.buildDeadlineKey("2099-06-01", "08:00");
   store.claimReminderForSending(doc.id, deadlineKey);
-  store.markReminderFailed(doc.id, deadlineKey, "550 mailbox not found");
+  store.markReminderFailed(doc.id, deadlineKey, "invalid_from_address");
 
   // Should NOT appear in pending
   const candidates = store.listPendingReminders();
