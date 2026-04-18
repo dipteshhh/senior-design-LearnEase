@@ -14,7 +14,7 @@ const privacySections = [
   {
     title: "Protection",
     body:
-      "The backend is designed to encrypt stored document artifacts at rest and restrict access to the authenticated owner of each document.",
+      "Uploaded document files and extracted text artifacts are encrypted at rest with AES-256-GCM. Generated study guides, quizzes, checklist items, and account metadata (email, name, filenames, due dates) are stored in the application database without additional field-level encryption. All documents are scoped to the authenticated owner and served only over authenticated, same-origin requests.",
   },
   {
     title: "Retention and Deletion",
