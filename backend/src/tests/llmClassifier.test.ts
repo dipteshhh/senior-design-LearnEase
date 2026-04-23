@@ -38,6 +38,18 @@ function mockOpenAiClient(responseContent: string) {
   } as any;
 }
 
+function mockOpenAiClientWithCreate(
+  create: (params: any) => Promise<{ choices: [{ message: { content: string } }] }>
+) {
+  return {
+    chat: {
+      completions: {
+        create,
+      },
+    },
+  } as any;
+}
+
 function mockOpenAiClientThatThrows(error: Error) {
   return {
     chat: {
@@ -95,12 +107,16 @@ test("LLM classifier returns UNSUPPORTED for project report with trigger words",
   assert.equal(result.disagreement, false);
 });
 
-test("LLM classifier returns UNSUPPORTED for research paper assignment", async () => {
-  const client = mockOpenAiClient("UNSUPPORTED");
-  const text = "Research paper assignment. Submit your draft by due date.";
+test("LLM classifier returns HOMEWORK for research paper assignment sheet", async () => {
+  const client = mockOpenAiClient("HOMEWORK");
+  const text =
+    "Instructions for Research Paper: English 1110. " +
+    "You will write a four-page research paper on the controversial topic that you have already chosen. " +
+    "Your research paper must contain the following elements: an introduction, body paragraphs, parenthetical documentation, and a concluding paragraph. " +
+    "Grading Rubric for Research Project.";
   const result = await classifyWithLlm(text, client);
-  assert.equal(result.llmDocumentType, "UNSUPPORTED");
-  assert.equal(result.localDetection.documentType, "UNSUPPORTED");
+  assert.equal(result.llmDocumentType, "HOMEWORK");
+  assert.equal(result.localDetection.documentType, "HOMEWORK");
   assert.equal(result.disagreement, false);
 });
 
@@ -201,4 +217,23 @@ test("disagreement is false when LLM and local classifier agree", async () => {
   assert.equal(result.llmDocumentType, "HOMEWORK");
   assert.equal(result.localDetection.documentType, "HOMEWORK");
   assert.equal(result.disagreement, false);
+});
+
+test("LLM classifier prompt explains that paper/report assignment sheets are HOMEWORK", async () => {
+  let systemPrompt = "";
+  const client = mockOpenAiClientWithCreate(async (params) => {
+    systemPrompt = String(params.messages?.[0]?.content ?? "");
+    return {
+      choices: [{ message: { content: "HOMEWORK" } }],
+    };
+  });
+
+  const text =
+    "Instructions for Research Paper: English 1110. You will write a four-page research paper. Grading Rubric for Research Project.";
+  await classifyWithLlm(text, client);
+
+  assert.match(
+    systemPrompt,
+    /assignment sheet or instructions that tell students to write a research paper, summary, lab report, or project report is HOMEWORK/i
+  );
 });

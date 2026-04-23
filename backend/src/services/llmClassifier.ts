@@ -36,13 +36,14 @@ const CLASSIFIER_PROMPT = `You are a document type classifier for an educational
 Classify the document into exactly ONE of these categories:
 - HOMEWORK: A graded assignment, problem set, or homework that students must complete and submit.
 - LECTURE: Lecture notes, slides, class notes, or instructional material for a class session.
-- UNSUPPORTED: Any document that does not fit the above categories, including but not limited to: syllabi, course schedules, project reports, research papers, lab reports, case studies, theses, dissertations, personal essays, technical reports, journal articles, resumes, portfolios, cover letters, letters of recommendation, invoices, academic transcripts, or any non-academic document.
+- UNSUPPORTED: Any document that does not fit the above categories, including but not limited to: syllabi, course schedules, finished project reports, finished research papers, finished lab reports, case studies, theses, dissertations, personal essays, technical reports, journal articles, resumes, portfolios, cover letters, letters of recommendation, invoices, academic transcripts, or any non-academic document.
 
 IMPORTANT: Classify based on the document's PRIMARY PURPOSE, not incidental keywords.
 For example:
 - A project report that mentions "submit by due date" is still UNSUPPORTED (it is a report, not a homework assignment).
 - A lecture about "case study analysis" is still LECTURE (it is instructional material).
 - A homework that asks students to "write a thesis statement" is still HOMEWORK (the thesis statement is the task, not the document type).
+- An assignment sheet or instructions that tell students to write a research paper, summary, lab report, or project report is HOMEWORK (the document is the assignment prompt, not the finished paper).
 
 Respond with ONLY the category name, nothing else.`;
 

@@ -102,12 +102,49 @@ function makeUploadReq(
 }
 
 function buildPdfBuffer(text: string): Buffer {
-  const escapedText = text.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
-  const stream = `BT /F1 18 Tf 50 100 Td (${escapedText}) Tj ET`;
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const nextLine = currentLine ? `${currentLine} ${word}` : word;
+    if (nextLine.length > 70 && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = nextLine;
+    }
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  const pageHeight = Math.max(200, 80 + lines.length * 24);
+  const startY = pageHeight - 50;
+  const contentOps = [
+    "BT",
+    "/F1 18 Tf",
+    `50 ${startY} Td`,
+  ];
+
+  lines.forEach((line, index) => {
+    const escapedLine = line
+      .replaceAll("\\", "\\\\")
+      .replaceAll("(", "\\(")
+      .replaceAll(")", "\\)");
+    if (index > 0) {
+      contentOps.push("0 -24 Td");
+    }
+    contentOps.push(`(${escapedLine}) Tj`);
+  });
+  contentOps.push("ET");
+
+  const stream = contentOps.join("\n");
   const objects = [
     "1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj",
     "2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj",
-    "3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>endobj",
+    `3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 ${pageHeight}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>endobj`,
     `4 0 obj<< /Length ${Buffer.byteLength(stream, "utf8")} >>stream\n${stream}\nendstream endobj`,
     "5 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj",
   ];
@@ -343,6 +380,20 @@ test("uploadDocumentHandler rejects weekly project status report before persiste
   });
 });
 
+test("uploadDocumentHandler rejects completed research paper before persistence", async () => {
+  await assertUnsupportedUploadRejected({
+    filename: "research-paper.docx",
+    text:
+      "Research Paper: Effects of Social Media on Civic Engagement\n" +
+      "Abstract: This research paper examines survey data from undergraduate students.\n" +
+      "Introduction: We review prior literature and define the controversy.\n" +
+      "Methodology: We analyzed interview responses and coded recurring themes.\n" +
+      "Results: The analysis showed increased political discussion among frequent users.\n" +
+      "Discussion and Conclusion: The findings suggest platform-specific effects.\n" +
+      "References: Journal of Communication, Computers and Composition.",
+  });
+});
+
 test("uploadDocumentHandler rejects research proposal before persistence", async () => {
   await assertUnsupportedUploadRejected({
     filename: "Research Proposal.pdf",
@@ -399,6 +450,32 @@ test("uploadDocumentHandler stores supported homework upload", async () => {
     filename: "homework.pdf",
     userId,
   });
+  const res = makeRes();
+  const beforeArtifacts = countArtifactDirectories();
+
+  await uploadDocumentHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 201);
+  const docs = listDocumentsByUser(userId);
+  assert.equal(docs.length, 1);
+  assert.equal(docs[0]?.documentType, "HOMEWORK");
+  assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+});
+
+test("uploadDocumentHandler stores figure-heavy homework PDF text", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const req = makeUploadReq(
+    "September 20, 2023 Circuits Fall 2023 Homework Assignment # 3 " +
+      "The assignment is due on Sunday. " +
+      "1. Find v1 and v2. " +
+      "2. Calculate currents i1 through i4. " +
+      "3. Determine voltages v1, v2, and v3.",
+    {
+      filename: "HW3.pdf",
+      userId,
+    }
+  );
   const res = makeRes();
   const beforeArtifacts = countArtifactDirectories();
 

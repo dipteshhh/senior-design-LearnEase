@@ -196,6 +196,22 @@ const HOMEWORK_CORE_TRIGGERS = [
   "problem set",
 ];
 
+const HOMEWORK_ASSIGNMENT_SHEET_TRIGGERS = [
+  "instructions for",
+  "assignment overview",
+  "assignment sheet",
+  "here's what you are going to do",
+  "you are going to",
+  "you will write",
+  "must contain the following elements",
+  "must contain the following",
+  "must include the following",
+  "paper will include the following",
+  "answer the questions below",
+  "grading rubric",
+  "attach a copy of the source",
+];
+
 const HOMEWORK_SUBMISSION_TRIGGERS = [
   "submit",
   "submission",
@@ -233,6 +249,21 @@ const HOMEWORK_DELIVERABLE_TRIGGERS = [
 const HOMEWORK_DUE_TRIGGERS = [
   "due date",
   "deadline",
+];
+
+const HOMEWORK_NUMBERED_PROBLEM_VERBS = [
+  "find",
+  "calculate",
+  "determine",
+  "apply",
+  "use",
+  "solve",
+  "compute",
+  "obtain",
+  "evaluate",
+  "draw",
+  "show",
+  "write",
 ];
 
 const LECTURE_CORE_TRIGGERS = [
@@ -284,6 +315,28 @@ function countBulletLikeMarkers(text: string): number {
   return countPattern(text, /[•▪○]/g);
 }
 
+function looksLikeHomeworkAssignmentSheet(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  const assignmentSheetMatches = countTriggers(lowerText, HOMEWORK_ASSIGNMENT_SHEET_TRIGGERS);
+  const directiveMatches = countPattern(
+    lowerText,
+    /\b(?:write|create|choose|answer|attach|turn in)\b/g
+  );
+  const hasStructuredRequirementsBlock =
+    lowerText.includes("must contain the following") ||
+    lowerText.includes("must include the following") ||
+    lowerText.includes("paper will include the following") ||
+    lowerText.includes("answer the questions below");
+  const hasRubric = lowerText.includes("grading rubric") || /\brubric\b/.test(lowerText);
+
+  return (
+    (assignmentSheetMatches >= 3 && directiveMatches >= 2) ||
+    (assignmentSheetMatches >= 2 && directiveMatches >= 4) ||
+    (hasStructuredRequirementsBlock && directiveMatches >= 2) ||
+    (hasRubric && assignmentSheetMatches >= 2)
+  );
+}
+
 function scoreLectureProfile(text: string): number {
   const lowerText = text.toLowerCase();
   const lectureTriggerCount = countTriggers(lowerText, LECTURE_CORE_TRIGGERS);
@@ -314,37 +367,60 @@ function scoreLectureProfile(text: string): number {
 function scoreHomeworkProfile(text: string): number {
   const lowerText = text.toLowerCase();
   const coreMatches = countTriggers(lowerText, HOMEWORK_CORE_TRIGGERS);
+  const assignmentSheetMatches = countTriggers(
+    lowerText,
+    HOMEWORK_ASSIGNMENT_SHEET_TRIGGERS
+  );
   const submissionMatches = countTriggers(lowerText, HOMEWORK_SUBMISSION_TRIGGERS);
   const formatMatches = countTriggers(lowerText, HOMEWORK_FORMAT_TRIGGERS);
   const deliverableMatches = countTriggers(lowerText, HOMEWORK_DELIVERABLE_TRIGGERS);
   const dueMatches =
     countTriggers(lowerText, HOMEWORK_DUE_TRIGGERS) +
-    countPattern(lowerText, /\bdue\s*:/g);
+    countPattern(lowerText, /\bdue\s*:/g) +
+    countPattern(lowerText, /\b(?:assignment|homework)\s+is\s+due\b/g) +
+    countPattern(lowerText, /\bdue\s+on\b/g);
+  const directiveMatches = countPattern(
+    lowerText,
+    /\b(?:write|create|choose|answer|attach|turn in)\b/g
+  );
+  const assignmentSheetProfile = looksLikeHomeworkAssignmentSheet(lowerText);
   const hasHomeworkTitleAnchor =
     /(?:^|\n)\s*(?:homework|assignment|problem set)\b/m.test(lowerText);
   const numberedAssignmentMentions = countPattern(
     lowerText,
-    /\b(?:assignment|homework|problem set)\s*(?:#?\d+[a-z]?|[ivxlcdm]+)\b/g
+    /\b(?:assignment|homework|problem set)\s*(?:#\s*\d+[a-z]?|\d+[a-z]?|[ivxlcdm]+)\b/g
   );
   const numberedProblemMentions = countPattern(
     lowerText,
     /\b(?:question|problem|exercise)\s+\d+\b/g
   );
+  const numberedImperativeProblemMentions = countPattern(
+    lowerText,
+    new RegExp(
+      String.raw`(?:^|\s)\d+\.\s+(?:${HOMEWORK_NUMBERED_PROBLEM_VERBS.join("|")})\b`,
+      "g"
+    )
+  );
 
   let score = 0;
   score += coreMatches * 2;
+  score += Math.min(assignmentSheetMatches, 3) * 2;
   score += Math.min(submissionMatches, 2) * 2;
   score += Math.min(dueMatches, 2) * 2;
   score += Math.min(formatMatches, 2);
   score += Math.min(deliverableMatches, 3);
+  score += Math.min(directiveMatches, 4);
   if (hasHomeworkTitleAnchor) score += 2;
   if (numberedAssignmentMentions >= 1) score += 2;
   if (numberedProblemMentions >= 2) score += 2;
+  if (numberedImperativeProblemMentions >= 2) score += 3;
+  if (assignmentSheetProfile) score += 4;
   if (lowerText.includes("max points")) score += 1;
 
   // Reject generic mentions of assignments/homework inside other document types.
   if (
     !hasHomeworkTitleAnchor &&
+    !assignmentSheetProfile &&
     numberedAssignmentMentions === 0 &&
     numberedProblemMentions === 0 &&
     formatMatches === 0 &&
@@ -380,6 +456,11 @@ function looksLikeStandaloneScheduleDocument(text: string): boolean {
 function looksLikeOutOfScopeAcademicDocument(text: string): boolean {
   const lowerText = text.toLowerCase();
   const outOfScopeMatches = countTriggers(lowerText, OUT_OF_SCOPE_ACADEMIC_DOC_TRIGGERS);
+  const homeworkAssignmentSheet = looksLikeHomeworkAssignmentSheet(lowerText);
+
+  if (homeworkAssignmentSheet) {
+    return false;
+  }
 
   if (lowerText.includes("research paper")) {
     return true;

@@ -74,6 +74,20 @@ test("research paper with no triggers is UNSUPPORTED", () => {
   assert.equal(result.documentType, "UNSUPPORTED");
 });
 
+test("completed research paper with abstract and references stays UNSUPPORTED", () => {
+  const text =
+    "Research Paper: Effects of Social Media on Civic Engagement. " +
+    "Abstract: This research paper examines survey data from undergraduate students. " +
+    "Introduction: We review prior literature and define the controversy. " +
+    "Methodology: We analyzed interview responses and coded recurring themes. " +
+    "Results: The analysis showed increased political discussion among frequent users. " +
+    "Discussion and Conclusion: The findings suggest platform-specific effects. " +
+    "References: Journal of Communication, Computers and Composition.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
 // ── Mixed-signal documents should be classified by overall profile ───
 
 test("project report with 'submit' and 'due date' stays UNSUPPORTED", () => {
@@ -83,7 +97,19 @@ test("project report with 'submit' and 'due date' stays UNSUPPORTED", () => {
   assert.equal(result.documentType, "UNSUPPORTED");
 });
 
-test("research paper with 'assignment' stays UNSUPPORTED", () => {
+test("completed project report with results and analysis stays UNSUPPORTED", () => {
+  const text =
+    "Project Report: Database Performance Evaluation. " +
+    "Abstract: This report summarizes benchmark outcomes for three indexing strategies. " +
+    "Methodology: We measured latency across controlled workloads. " +
+    "Results: The report includes charts, analysis, and comparison tables. " +
+    "Conclusion: B-tree indexing performed best for the selected dataset.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
+});
+
+test("brief research paper mention without assignment-sheet structure stays UNSUPPORTED", () => {
   const text =
     "Research paper assignment. Submit your draft by due date.";
   const result = detectDocumentType(text);
@@ -143,6 +169,73 @@ test("real homework sheet with due date and submission instructions classifies a
   const result = detectDocumentType(text);
   assert.equal(result.documentType, "HOMEWORK");
   assert.equal(result.isAssignment, true);
+});
+
+test("library assignment overview with question prompts classifies as HOMEWORK", () => {
+  const text =
+    "Library Assignment Overview\n" +
+    "For this assignment, you are going to practice gathering information from different types of sources.\n" +
+    "Here's what you are going to do:\n" +
+    "First: Create an MS Word document.\n" +
+    "Second: Find at least one article in Wikipedia and one YouTube video.\n" +
+    "Write a paragraph that sums up what you learned about your topic.\n" +
+    "Third: Answer the questions below.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "HOMEWORK");
+  assert.equal(result.isAssignment, true);
+});
+
+test("research paper assignment sheet classifies as HOMEWORK", () => {
+  const text =
+    "Instructions for Research Paper: English 1110\n" +
+    "You will write a four-page research paper on the controversial topic that you have already chosen.\n" +
+    "Your research paper must contain the following elements: an introduction, body paragraphs, parenthetical documentation, and a concluding paragraph.\n" +
+    "A list of references will include the published sources that I approved.\n" +
+    "Grading Rubric for Research Project.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "HOMEWORK");
+  assert.equal(result.isAssignment, true);
+});
+
+test("summary assignment sheet for research source classifies as HOMEWORK", () => {
+  const text =
+    "English 1110: Summary\n" +
+    "Choose an article or book chapter that will give information on your research topic.\n" +
+    "Using the article or book chapter you have selected, write a one-and-a-half-page summary.\n" +
+    "Attach a copy of the source when you turn in your summary.\n" +
+    "Paper will include the following: bibliographical entry in MLA style, a first sentence naming the author, and several paragraphs presenting the writer's ideas objectively.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "HOMEWORK");
+  assert.equal(result.isAssignment, true);
+});
+
+test("figure-heavy homework sheet with numbered circuit problems classifies as HOMEWORK", () => {
+  const text =
+    "September 20, 2023 EECS 2300/2340 Electric Circuits 1 & Electric Circuits for Non-Majors, Fall 2023 " +
+    "Homework Assignment # 3 " +
+    "The assignment is due on Sunday, Sept. 24, 2023, by 11:00 pm " +
+    "All problems are weighted equally. " +
+    "Where applicable, always first obtain symbolic expressions for the required quantities or parameters and then calculate their numerical values. " +
+    "Do not skip intermediate steps. Please write as legibly as possible. " +
+    "1. Find v1 and v2 in the circuit below using nodal analysis " +
+    "2. Calculate currents i1 through i4 in the circuit below using nodal analysis. " +
+    "3. Determine voltages v1, v2, and v3 in the circuit below using nodal analysis. " +
+    "4. Use mesh analysis to obtain currents i1, i2, and i3 in the circuit below. " +
+    "5. Apply mesh analysis to find i in the figure below. " +
+    "6. Apply mesh analysis to find io in the circuit below.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "HOMEWORK");
+  assert.equal(result.isAssignment, true);
+});
+
+test("numbered research paper sections stay UNSUPPORTED", () => {
+  const text =
+    "Research Paper: Intelligent Engineering Applications. " +
+    "Abstract: This paper evaluates predictive performance across multiple datasets. " +
+    "1. Introduction. 2. Methodology. 3. Results. 4. Discussion. 5. References.";
+  const result = detectDocumentType(text);
+  assert.equal(result.documentType, "UNSUPPORTED");
+  assert.equal(result.isAssignment, false);
 });
 
 test("machine learning homework handout classifies as HOMEWORK", () => {
