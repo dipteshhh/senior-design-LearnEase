@@ -333,7 +333,7 @@ export async function generateQuiz(
           });
           break;
         }
-        repairHint = buildRepairHint(normalizedError);
+        repairHint = buildRepairHint(normalizedError, { documentText: text });
         continue;
       }
 
