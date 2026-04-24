@@ -231,17 +231,34 @@ function hasTokenOverlapWithDocument(
   return false;
 }
 
-function countHeadingMarkers(normalizedText: string): number {
-  const patterns = [
-    /\bquestion\s+\d+\b/gi,
-    /\bproblem\s+\d+\b/gi,
-    /\bpart\s+[a-z0-9]+\b/gi,
-    /\bsection\s+\d+\b/gi,
-    /\bmodule\s+\d+\b/gi,
-    /\bchapter\s+\d+\b/gi,
-  ];
+// Heading markers like "Question 1", "Problem 2", "Task 3", "Section 4",
+// "Module 5", "Chapter 6". The leading family word and trailing identifier
+// together give us a stable key per distinct numbered item.
+const NUMBERED_HEADING_MARKER_REGEX =
+  /\b(question|problem|task|section|module|chapter)\s+(\d+)\b/gi;
+// "Part" is special because it can be enumerated as "Part A", "Part 1",
+// "Part II", etc. We accept any short alphanumeric token after "Part".
+const PART_HEADING_MARKER_REGEX = /\bpart\s+([a-z0-9]{1,4})\b/gi;
 
-  return patterns.reduce((sum, pattern) => sum + (normalizedText.match(pattern)?.length ?? 0), 0);
+/**
+ * Returns the number of *distinct* problem/question/task/etc. markers found
+ * in the document. Repeated mentions of the same marker (e.g. "Question 1"
+ * appearing in both a table of contents and the body) only count once, so
+ * this number reflects the actual count of distinct numbered items in the
+ * source document.
+ */
+function countHeadingMarkers(normalizedText: string): number {
+  const distinct = new Set<string>();
+
+  for (const match of normalizedText.matchAll(NUMBERED_HEADING_MARKER_REGEX)) {
+    distinct.add(`${match[1].toLowerCase()}:${match[2]}`);
+  }
+
+  for (const match of normalizedText.matchAll(PART_HEADING_MARKER_REGEX)) {
+    distinct.add(`part:${match[1].toLowerCase()}`);
+  }
+
+  return distinct.size;
 }
 
 function createValidationContext(input: ValidationInput): ValidationContext {
