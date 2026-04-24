@@ -382,6 +382,167 @@ test("validateStudyGuideAgainstDocument requires at least three sections for str
   );
 });
 
+function buildStructuredHomeworkText(headings: string[]): string {
+  return [
+    ...headings,
+    `${"Detailed homework prose with hints and constraints. ".repeat(150)} Review the weekly schedule before class.`,
+  ].join(" ");
+}
+
+function buildSection(id: string, title: string, page: number) {
+  return {
+    id,
+    title,
+    content: `${title} walkthrough.`,
+    citations: [
+      { source_type: "pdf" as const, page, excerpt: "Review the weekly schedule before class." },
+    ],
+  };
+}
+
+test("validateStudyGuideAgainstDocument allows two sections when only two distinct Question markers are detected", () => {
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      buildSection("s1", "Question 1: Implement the algorithm", 1),
+      buildSection("s2", "Question 2: Write a short summary", 2),
+    ],
+  };
+
+  const text = buildStructuredHomeworkText([
+    "Question 1: Implement the algorithm in code.",
+    "Question 2: Write a short summary of the paper.",
+  ]);
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 3,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument allows two sections when only two distinct Problem markers are detected", () => {
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      buildSection("s1", "Problem 1: Database normalization", 1),
+      buildSection("s2", "Problem 2: SQL window functions", 2),
+    ],
+  };
+
+  const text = buildStructuredHomeworkText([
+    "Problem 1: Normalize the schema to 3NF.",
+    "Problem 2: Write the SQL window function.",
+  ]);
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 3,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument allows two sections when only two distinct Task markers are detected", () => {
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      buildSection("s1", "Task 1: Setup the environment", 1),
+      buildSection("s2", "Task 2: Run the experiments", 2),
+    ],
+  };
+
+  const text = buildStructuredHomeworkText([
+    "Task 1: Setup the development environment.",
+    "Task 2: Run the experiments and report metrics.",
+  ]);
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 3,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument allows single-section guide when only one problem marker is detected", () => {
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [buildSection("s1", "Problem 1: Single Worksheet Task", 1)],
+  };
+
+  const text = buildStructuredHomeworkText(["Problem 1: Solve the worksheet."]);
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 2,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument counts repeated mentions of the same marker only once", () => {
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [buildSection("s1", "Question 1: The only problem", 1)],
+  };
+
+  const text = buildStructuredHomeworkText([
+    "Table of contents: Question 1.",
+    "Body header: Question 1.",
+    "Footer reference: Question 1 again.",
+  ]);
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 2,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument still requires three sections when three or more distinct Task markers are detected", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      buildSection("s1", "Task 1: Setup", 1),
+      buildSection("s2", "Task 2: Implement", 2),
+    ],
+  };
+
+  const text = buildStructuredHomeworkText([
+    "Task 1: Setup the environment.",
+    "Task 2: Implement the algorithm.",
+    "Task 3: Run experiments.",
+  ]);
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text,
+        fileType: "PDF",
+        pageCount: 4,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "SCHEMA_VALIDATION_FAILED");
+      return true;
+    }
+  );
+});
+
 test("validateStudyGuideAgainstDocument rejects generic section titles", () => {
   const invalid: StudyGuide = {
     ...BASE_STUDY_GUIDE,
