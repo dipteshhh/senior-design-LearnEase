@@ -490,39 +490,52 @@ function validateNoAnswerLeakage(studyGuide: StudyGuide): void {
   });
 }
 
-function shouldRequireMinimumSections(context: ValidationContext): boolean {
+function getRequiredMinimumSections(context: ValidationContext): number {
   const headingMarkerCount = countHeadingMarkers(context.normalizedText);
-  const hasExplicitStructure = headingMarkerCount >= MIN_HEADING_MARKERS_FOR_SECTION_REQUIREMENT;
+  const hasStrongExplicitStructure =
+    headingMarkerCount >= MIN_HEADING_MARKERS_FOR_SECTION_REQUIREMENT;
 
   if (
-    hasExplicitStructure &&
+    hasStrongExplicitStructure &&
     context.fileType === "PDF" &&
     context.pageCount >= MIN_STRUCTURED_PDF_PAGES
   ) {
-    return true;
+    return MIN_SECTION_COUNT_FOR_STRUCTURED_DOC;
   }
 
   if (
-    hasExplicitStructure &&
+    hasStrongExplicitStructure &&
     context.fileType === "DOCX" &&
     (context.paragraphCount ?? 0) >= MIN_STRUCTURED_DOCX_PARAGRAPHS
   ) {
-    return true;
+    return MIN_SECTION_COUNT_FOR_STRUCTURED_DOC;
   }
 
-  return context.normalizedText.length >= MIN_STRUCTURED_TEXT_CHARS;
+  // Weak explicit structure: fewer than 3 problem/question markers were
+  // detected. Trust the marker count as an upper bound so a 2-question
+  // homework or 1-question worksheet is not forced to invent extra sections.
+  if (headingMarkerCount > 0) {
+    return Math.min(headingMarkerCount, MIN_SECTION_COUNT_FOR_STRUCTURED_DOC);
+  }
+
+  // No explicit structural markers: fall back to the length-based heuristic
+  // for prose-heavy documents that should still be split into multiple
+  // student-readable sections.
+  if (context.normalizedText.length >= MIN_STRUCTURED_TEXT_CHARS) {
+    return MIN_SECTION_COUNT_FOR_STRUCTURED_DOC;
+  }
+
+  return 0;
 }
 
 function validateSectionStructure(studyGuide: StudyGuide, context: ValidationContext): void {
-  if (
-    shouldRequireMinimumSections(context) &&
-    studyGuide.sections.length < MIN_SECTION_COUNT_FOR_STRUCTURED_DOC
-  ) {
+  const requiredMinSections = getRequiredMinimumSections(context);
+  if (requiredMinSections > 0 && studyGuide.sections.length < requiredMinSections) {
     throw new ContractValidationError(
       "SCHEMA_VALIDATION_FAILED",
-      "Study guide must include at least three sections for sufficiently structured documents.",
+      `Study guide must include at least ${requiredMinSections} section${requiredMinSections === 1 ? "" : "s"} for this document.`,
       {
-        min_sections: MIN_SECTION_COUNT_FOR_STRUCTURED_DOC,
+        min_sections: requiredMinSections,
         actual_sections: studyGuide.sections.length,
         file_type: context.fileType,
         page_count: context.pageCount,

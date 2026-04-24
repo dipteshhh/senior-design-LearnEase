@@ -382,6 +382,69 @@ test("validateStudyGuideAgainstDocument requires at least three sections for str
   );
 });
 
+test("validateStudyGuideAgainstDocument allows section count to match detected problem markers when fewer than three", () => {
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      {
+        id: "s1",
+        title: "Question 1: Implement Scaled Dot-Product Attention",
+        content: "Problem 1 walkthrough.",
+        citations: [{ source_type: "pdf", page: 1, excerpt: "Review the weekly schedule before class." }],
+      },
+      {
+        id: "s2",
+        title: "Question 2: Summarize the Transformer Paper",
+        content: "Problem 2 walkthrough.",
+        citations: [{ source_type: "pdf", page: 2, excerpt: "Review the weekly schedule before class." }],
+      },
+    ],
+  };
+
+  const text = [
+    "Question 1: Implement Scaled Dot-Product Attention.",
+    "Question 2: Summarize the Transformer paper.",
+    `${"Detailed homework prose with hints and constraints. ".repeat(150)} Review the weekly schedule before class.`,
+  ].join(" ");
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 3,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument allows single-section guide when only one problem marker is detected", () => {
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      {
+        id: "s1",
+        title: "Problem 1: Single Worksheet Task",
+        content: "Worksheet walkthrough.",
+        citations: [{ source_type: "pdf", page: 1, excerpt: "Review the weekly schedule before class." }],
+      },
+    ],
+  };
+
+  const text = [
+    "Problem 1: Solve the worksheet.",
+    `${"Detailed worksheet prose with constraints. ".repeat(160)} Review the weekly schedule before class.`,
+  ].join(" ");
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 2,
+      paragraphCount: null,
+    })
+  );
+});
+
 test("validateStudyGuideAgainstDocument rejects generic section titles", () => {
   const invalid: StudyGuide = {
     ...BASE_STUDY_GUIDE,
