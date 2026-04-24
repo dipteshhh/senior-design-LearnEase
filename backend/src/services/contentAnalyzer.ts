@@ -469,7 +469,7 @@ export async function analyzeDocument(
           });
           break;
         }
-        repairHint = buildRepairHint(normalizedError);
+        repairHint = buildRepairHint(normalizedError, { documentText: text });
         continue;
       }
 
