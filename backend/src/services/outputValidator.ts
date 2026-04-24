@@ -32,6 +32,7 @@ interface ValidationContext {
   pageCount: number;
   paragraphCount: number | null;
   normalizedText: string;
+  headingDetectionText: string;
   groundingTextLoose: string;
   docTokensLoose: string[] | null;
 }
@@ -231,34 +232,235 @@ function hasTokenOverlapWithDocument(
   return false;
 }
 
-// Heading markers like "Question 1", "Problem 2", "Task 3", "Section 4",
-// "Module 5", "Chapter 6". The leading family word and trailing identifier
-// together give us a stable key per distinct numbered item.
-const NUMBERED_HEADING_MARKER_REGEX =
-  /\b(question|problem|task|section|module|chapter)\s+(\d+)\b/gi;
-// "Part" is special because it can be enumerated as "Part A", "Part 1",
-// "Part II", etc. We accept any short alphanumeric token after "Part".
-const PART_HEADING_MARKER_REGEX = /\bpart\s+([a-z0-9]{1,4})\b/gi;
+const PAGE_MARKER_REGEX = /^--\s*\d+\s+of\s+\d+\s*--$/i;
+const HEADING_PREFIX_ONLY_REGEX = /^(question|problem|task|part|section|module|chapter|q)\s*#?\s*$/i;
+const NUMBERED_PREFIX_ONLY_REGEX = /^\d{1,2}[.)]\s*$/;
+const NUMBERED_LABELED_HEADING_MARKER_REGEX =
+  /^(question|problem|task|section|module|chapter)\s*(?:#\s*)?(\d+)\b/i;
+const PART_HEADING_MARKER_REGEX = /^part\s*(?:#\s*)?(\d+|[ivxlcdm]+|[a-z])\b/i;
+const SHORT_QUESTION_HEADING_MARKER_REGEX = /^q\s*(?:#\s*)?(\d+)\b/i;
+const NUMBERED_HEADING_MARKER_REGEX = /^(\d{1,2})[.)]\s+(.+)$/i;
+const FLAT_TEXT_LABELED_HEADING_MARKER_REGEX =
+  /\b(question|problem|task|section|module|chapter)\s*(?:#\s*)?(\d+)\b/gi;
+const FLAT_TEXT_PART_HEADING_MARKER_REGEX =
+  /\bpart(?:\s+(?:#\s*)?|#\s*)(\d+|[ivxlcdm]+|[a-z])\b/gi;
+const FLAT_TEXT_SHORT_QUESTION_HEADING_MARKER_REGEX = /\bq\s*(?:#\s*)?(\d+)\b/gi;
+const SUBORDINATE_NUMBERED_LIST_INTRO_REGEX =
+  /(?:requirements?|instructions?|steps?|resources?|materials?|examples?|hints?|notes?|parts?)\s*:$/i;
+const MAX_MARKER_SAMPLE_LENGTH = 120;
+
+interface HeadingMarker {
+  key: string;
+  sample: string;
+}
+
+function normalizeHeadingDetectionText(text: string, fileType: FileType): string {
+  let normalized = normalizeLineEndings(text);
+  normalized = normalizeQuotes(normalized);
+  normalized = normalizeUnicodeVariants(normalized);
+  normalized = removeHiddenCharacters(normalized);
+  if (fileType === "PDF") {
+    normalized = normalizePdfHyphenation(normalized);
+  }
+  normalized = normalized.replace(/[^\S\n]+/g, " ");
+  normalized = normalized.replace(/\n{3,}/g, "\n\n");
+  return normalized.trim();
+}
+
+function toHeadingLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !PAGE_MARKER_REGEX.test(line));
+}
+
+function buildHeadingCandidates(lines: string[]): Array<{ lineIndex: number; text: string }> {
+  const candidates: Array<{ lineIndex: number; text: string }> = [];
+
+  lines.forEach((line, lineIndex) => {
+    candidates.push({ lineIndex, text: line });
+
+    const nextLine = lines[lineIndex + 1];
+    if (!nextLine) {
+      return;
+    }
+
+    if (HEADING_PREFIX_ONLY_REGEX.test(line) || NUMBERED_PREFIX_ONLY_REGEX.test(line)) {
+      candidates.push({
+        lineIndex,
+        text: `${line} ${nextLine}`.replace(/\s+/g, " ").trim(),
+      });
+    }
+  });
+
+  return candidates;
+}
+
+function normalizeHeadingIdentifier(identifier: string): string {
+  return identifier.toLowerCase();
+}
+
+function truncateMarkerSample(sample: string): string {
+  return sample.replace(/\s+/g, " ").trim().slice(0, MAX_MARKER_SAMPLE_LENGTH);
+}
+
+function markerSampleFromFlatText(text: string, index: number): string {
+  return truncateMarkerSample(text.slice(index, index + MAX_MARKER_SAMPLE_LENGTH));
+}
+
+function addDistinctHeadingMarker(
+  markers: Map<string, HeadingMarker>,
+  key: string,
+  sample: string
+): void {
+  if (markers.has(key)) {
+    return;
+  }
+  markers.set(key, {
+    key,
+    sample: truncateMarkerSample(sample),
+  });
+}
+
+function collectLabeledHeadingMarkers(lines: string[]): HeadingMarker[] {
+  const markers = new Map<string, HeadingMarker>();
+
+  for (const candidate of buildHeadingCandidates(lines)) {
+    const numberedMatch = candidate.text.match(NUMBERED_LABELED_HEADING_MARKER_REGEX);
+    if (numberedMatch) {
+      const family = numberedMatch[1].toLowerCase();
+      const identifier = normalizeHeadingIdentifier(numberedMatch[2]);
+      addDistinctHeadingMarker(markers, `${family}:${identifier}`, candidate.text);
+      continue;
+    }
+
+    const partMatch = candidate.text.match(PART_HEADING_MARKER_REGEX);
+    if (partMatch) {
+      const identifier = normalizeHeadingIdentifier(partMatch[1]);
+      addDistinctHeadingMarker(markers, `part:${identifier}`, candidate.text);
+      continue;
+    }
+
+    const shortQuestionMatch = candidate.text.match(SHORT_QUESTION_HEADING_MARKER_REGEX);
+    if (shortQuestionMatch) {
+      const identifier = normalizeHeadingIdentifier(shortQuestionMatch[1]);
+      addDistinctHeadingMarker(markers, `question:${identifier}`, candidate.text);
+    }
+  }
+
+  return Array.from(markers.values());
+}
+
+function collectFlatTextLabeledHeadingMarkers(text: string): HeadingMarker[] {
+  const markers = new Map<string, HeadingMarker>();
+
+  for (const match of text.matchAll(FLAT_TEXT_LABELED_HEADING_MARKER_REGEX)) {
+    const family = match[1].toLowerCase();
+    const identifier = normalizeHeadingIdentifier(match[2]);
+    addDistinctHeadingMarker(
+      markers,
+      `${family}:${identifier}`,
+      markerSampleFromFlatText(text, match.index ?? 0)
+    );
+  }
+
+  for (const match of text.matchAll(FLAT_TEXT_PART_HEADING_MARKER_REGEX)) {
+    const identifier = normalizeHeadingIdentifier(match[1]);
+    addDistinctHeadingMarker(
+      markers,
+      `part:${identifier}`,
+      markerSampleFromFlatText(text, match.index ?? 0)
+    );
+  }
+
+  for (const match of text.matchAll(FLAT_TEXT_SHORT_QUESTION_HEADING_MARKER_REGEX)) {
+    const identifier = normalizeHeadingIdentifier(match[1]);
+    addDistinctHeadingMarker(
+      markers,
+      `question:${identifier}`,
+      markerSampleFromFlatText(text, match.index ?? 0)
+    );
+  }
+
+  return Array.from(markers.values());
+}
+
+function looksLikeTopLevelNumberedHeading(
+  content: string,
+  previousNonEmptyLine: string | null
+): boolean {
+  const normalizedContent = content.trim();
+
+  if (!normalizedContent || normalizedContent.length > 160) {
+    return false;
+  }
+
+  if (/^(?:https?:\/\/|www\.)/i.test(normalizedContent)) {
+    return false;
+  }
+
+  if (!/[A-Za-z]/.test(normalizedContent)) {
+    return false;
+  }
+
+  if (
+    previousNonEmptyLine &&
+    SUBORDINATE_NUMBERED_LIST_INTRO_REGEX.test(previousNonEmptyLine.trim())
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function collectNumberedHeadingMarkers(lines: string[]): HeadingMarker[] {
+  const markers = new Map<string, HeadingMarker>();
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    let candidateText = lines[lineIndex];
+    if (NUMBERED_PREFIX_ONLY_REGEX.test(candidateText) && lines[lineIndex + 1]) {
+      candidateText = `${candidateText} ${lines[lineIndex + 1]}`.replace(/\s+/g, " ").trim();
+    }
+
+    const match = candidateText.match(NUMBERED_HEADING_MARKER_REGEX);
+    if (!match) {
+      continue;
+    }
+
+    const previousNonEmptyLine = lineIndex > 0 ? lines[lineIndex - 1] : null;
+    if (!looksLikeTopLevelNumberedHeading(match[2], previousNonEmptyLine)) {
+      continue;
+    }
+
+    addDistinctHeadingMarker(markers, `numbered:${match[1]}`, candidateText);
+  }
+
+  return Array.from(markers.values());
+}
 
 /**
- * Returns the number of *distinct* problem/question/task/etc. markers found
- * in the document. Repeated mentions of the same marker (e.g. "Question 1"
- * appearing in both a table of contents and the body) only count once, so
- * this number reflects the actual count of distinct numbered items in the
- * source document.
+ * Returns the set of *distinct* problem/question/task/etc. marker keys
+ * found in the document. Repeated mentions of the same marker (e.g.
+ * "Question 1" appearing in both a table of contents and the body) only
+ * count once, so this set reflects the actual count of distinct numbered
+ * items in the source document. Each key is formatted as
+ * `"<family>:<identifier>"` (e.g. `"question:1"`, `"part:a"`).
  */
-function countHeadingMarkers(normalizedText: string): number {
-  const distinct = new Set<string>();
-
-  for (const match of normalizedText.matchAll(NUMBERED_HEADING_MARKER_REGEX)) {
-    distinct.add(`${match[1].toLowerCase()}:${match[2]}`);
+function collectDistinctHeadingMarkers(headingDetectionText: string): HeadingMarker[] {
+  const lines = toHeadingLines(headingDetectionText);
+  const labeledMarkers = collectLabeledHeadingMarkers(lines);
+  if (lines.length <= 1) {
+    const flatTextMarkers = collectFlatTextLabeledHeadingMarkers(headingDetectionText);
+    if (flatTextMarkers.length > labeledMarkers.length) {
+      return flatTextMarkers;
+    }
   }
 
-  for (const match of normalizedText.matchAll(PART_HEADING_MARKER_REGEX)) {
-    distinct.add(`part:${match[1].toLowerCase()}`);
+  if (labeledMarkers.length > 0) {
+    return labeledMarkers;
   }
 
-  return distinct.size;
+  return collectNumberedHeadingMarkers(lines);
 }
 
 function createValidationContext(input: ValidationInput): ValidationContext {
@@ -268,6 +470,7 @@ function createValidationContext(input: ValidationInput): ValidationContext {
     pageCount: input.pageCount,
     paragraphCount: input.paragraphCount,
     normalizedText,
+    headingDetectionText: normalizeHeadingDetectionText(input.text, input.fileType),
     groundingTextLoose: normalizeForLooseGroundingMatch(normalizedText),
     docTokensLoose: null,
   };
@@ -507,8 +710,29 @@ function validateNoAnswerLeakage(studyGuide: StudyGuide): void {
   });
 }
 
-function getRequiredMinimumSections(context: ValidationContext): number {
-  const headingMarkerCount = countHeadingMarkers(context.normalizedText);
+type SectionRequirementReason =
+  | "strong_explicit_structure"
+  | "weak_explicit_structure"
+  | "text_length_fallback"
+  | "no_minimum";
+
+interface SectionRequirement {
+  minSections: number;
+  reason: SectionRequirementReason;
+  distinctMarkers: string[];
+  markerSamples: string[];
+  headingMarkerCount: number;
+  usedTextLengthFallback: boolean;
+}
+
+const MAX_DETECTED_MARKERS_IN_ERROR = 20;
+const MAX_SOURCE_PREVIEW_CHARS = 400;
+
+function computeSectionRequirement(context: ValidationContext): SectionRequirement {
+  const detectedMarkers = collectDistinctHeadingMarkers(context.headingDetectionText);
+  const distinctMarkers = detectedMarkers.map((marker) => marker.key);
+  const markerSamples = detectedMarkers.map((marker) => marker.sample);
+  const headingMarkerCount = detectedMarkers.length;
   const hasStrongExplicitStructure =
     headingMarkerCount >= MIN_HEADING_MARKERS_FOR_SECTION_REQUIREMENT;
 
@@ -517,7 +741,14 @@ function getRequiredMinimumSections(context: ValidationContext): number {
     context.fileType === "PDF" &&
     context.pageCount >= MIN_STRUCTURED_PDF_PAGES
   ) {
-    return MIN_SECTION_COUNT_FOR_STRUCTURED_DOC;
+    return {
+      minSections: MIN_SECTION_COUNT_FOR_STRUCTURED_DOC,
+      reason: "strong_explicit_structure",
+      distinctMarkers,
+      markerSamples,
+      headingMarkerCount,
+      usedTextLengthFallback: false,
+    };
   }
 
   if (
@@ -525,39 +756,78 @@ function getRequiredMinimumSections(context: ValidationContext): number {
     context.fileType === "DOCX" &&
     (context.paragraphCount ?? 0) >= MIN_STRUCTURED_DOCX_PARAGRAPHS
   ) {
-    return MIN_SECTION_COUNT_FOR_STRUCTURED_DOC;
+    return {
+      minSections: MIN_SECTION_COUNT_FOR_STRUCTURED_DOC,
+      reason: "strong_explicit_structure",
+      distinctMarkers,
+      markerSamples,
+      headingMarkerCount,
+      usedTextLengthFallback: false,
+    };
   }
 
-  // Weak explicit structure: fewer than 3 problem/question markers were
-  // detected. Trust the marker count as an upper bound so a 2-question
-  // homework or 1-question worksheet is not forced to invent extra sections.
   if (headingMarkerCount > 0) {
-    return Math.min(headingMarkerCount, MIN_SECTION_COUNT_FOR_STRUCTURED_DOC);
+    return {
+      minSections: Math.min(headingMarkerCount, MIN_SECTION_COUNT_FOR_STRUCTURED_DOC),
+      reason: "weak_explicit_structure",
+      distinctMarkers,
+      markerSamples,
+      headingMarkerCount,
+      usedTextLengthFallback: false,
+    };
   }
 
-  // No explicit structural markers: fall back to the length-based heuristic
-  // for prose-heavy documents that should still be split into multiple
-  // student-readable sections.
   if (context.normalizedText.length >= MIN_STRUCTURED_TEXT_CHARS) {
-    return MIN_SECTION_COUNT_FOR_STRUCTURED_DOC;
+    return {
+      minSections: MIN_SECTION_COUNT_FOR_STRUCTURED_DOC,
+      reason: "text_length_fallback",
+      distinctMarkers,
+      markerSamples,
+      headingMarkerCount,
+      usedTextLengthFallback: true,
+    };
   }
 
-  return 0;
+  return {
+    minSections: 0,
+    reason: "no_minimum",
+    distinctMarkers,
+    markerSamples,
+    headingMarkerCount,
+    usedTextLengthFallback: false,
+  };
 }
 
 function validateSectionStructure(studyGuide: StudyGuide, context: ValidationContext): void {
-  const requiredMinSections = getRequiredMinimumSections(context);
-  if (requiredMinSections > 0 && studyGuide.sections.length < requiredMinSections) {
+  const requirement = computeSectionRequirement(context);
+  if (
+    requirement.minSections > 0 &&
+    studyGuide.sections.length < requirement.minSections
+  ) {
+    const truncatedMarkers = requirement.distinctMarkers.slice(0, MAX_DETECTED_MARKERS_IN_ERROR);
+    const truncatedMarkerSamples =
+      requirement.markerSamples.slice(0, MAX_DETECTED_MARKERS_IN_ERROR);
+    const markersTruncated =
+      requirement.distinctMarkers.length > truncatedMarkers.length;
+
     throw new ContractValidationError(
       "SCHEMA_VALIDATION_FAILED",
-      `Study guide must include at least ${requiredMinSections} section${requiredMinSections === 1 ? "" : "s"} for this document.`,
+      `Study guide must include at least ${requirement.minSections} section${requirement.minSections === 1 ? "" : "s"} for this document.`,
       {
-        min_sections: requiredMinSections,
+        min_sections: requirement.minSections,
         actual_sections: studyGuide.sections.length,
         file_type: context.fileType,
         page_count: context.pageCount,
         paragraph_count: context.paragraphCount,
         text_length: context.normalizedText.length,
+        detected_marker_count: requirement.headingMarkerCount,
+        heading_marker_count: requirement.headingMarkerCount,
+        section_requirement_reason: requirement.reason,
+        used_text_length_fallback: requirement.usedTextLengthFallback,
+        detected_markers: truncatedMarkers,
+        detected_marker_samples: truncatedMarkerSamples,
+        detected_markers_truncated: markersTruncated,
+        source_text_preview: context.normalizedText.slice(0, MAX_SOURCE_PREVIEW_CHARS),
       }
     );
   }

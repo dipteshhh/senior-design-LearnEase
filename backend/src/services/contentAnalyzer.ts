@@ -279,6 +279,20 @@ function getRepairFailureSignature(error: unknown): string {
       minSections: typeof details.min_sections === "number" ? details.min_sections : null,
       actualSections:
         typeof details.actual_sections === "number" ? details.actual_sections : null,
+      detectedMarkerCount:
+        typeof details.detected_marker_count === "number"
+          ? details.detected_marker_count
+          : null,
+      headingMarkerCount:
+        typeof details.heading_marker_count === "number" ? details.heading_marker_count : null,
+      sectionRequirementReason:
+        typeof details.section_requirement_reason === "string"
+          ? details.section_requirement_reason
+          : null,
+      usedTextLengthFallback:
+        typeof details.used_text_length_fallback === "boolean"
+          ? details.used_text_length_fallback
+          : null,
     });
   }
   if (error instanceof Error) {
@@ -439,6 +453,10 @@ export async function analyzeDocument(
         queueWaitMs,
         openAiDurationMs,
         validationDurationMs,
+        errorMessage:
+          normalizedError instanceof Error ? normalizedError.message : String(normalizedError),
+        errorDetails:
+          normalizedError instanceof ContractValidationError ? normalizedError.details : null,
         error: normalizedError,
       });
 
