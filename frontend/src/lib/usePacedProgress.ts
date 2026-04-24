@@ -9,6 +9,19 @@ import {
 
 const TICK_INTERVAL_MS = 400;
 
+function readStoredStartedAt(storageKey: string | undefined): number | null {
+  if (!storageKey || typeof window === "undefined") return null;
+  const raw = window.sessionStorage.getItem(storageKey);
+  if (!raw) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function storeStartedAt(storageKey: string | undefined, value: number): void {
+  if (!storageKey || typeof window === "undefined") return;
+  window.sessionStorage.setItem(storageKey, String(value));
+}
+
 export interface UsePacedProgressOptions extends PacedProgressConfig {
   /** True while the backend reports the task is still running. */
   isProcessing: boolean;
@@ -16,6 +29,8 @@ export interface UsePacedProgressOptions extends PacedProgressConfig {
   isReady: boolean;
   /** True once the backend confirms the task failed. */
   isFailed: boolean;
+  /** Optional sessionStorage key used to resume visual progress after navigation. */
+  storageKey?: string;
 }
 
 export interface UsePacedProgressReturn extends PacedProgressResult {
@@ -34,10 +49,13 @@ export interface UsePacedProgressReturn extends PacedProgressResult {
 export function usePacedProgress(
   options: UsePacedProgressOptions,
 ): UsePacedProgressReturn {
-  const { isProcessing, isReady, isFailed, ...config } = options;
+  const { isProcessing, isReady, isFailed, storageKey, ...config } = options;
 
-  const startedAtRef = useRef<number | null>(null);
-  const [elapsedMs, setElapsedMs] = useState(0);
+  const initialStartedAt = readStoredStartedAt(storageKey);
+  const startedAtRef = useRef<number | null>(initialStartedAt);
+  const [elapsedMs, setElapsedMs] = useState(() =>
+    initialStartedAt == null ? 0 : Math.max(0, Date.now() - initialStartedAt)
+  );
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -56,7 +74,9 @@ export function usePacedProgress(
     if (!isProcessing && !isReady) return;
 
     if (startedAtRef.current == null) {
-      startedAtRef.current = Date.now();
+      const now = Date.now();
+      startedAtRef.current = now;
+      storeStartedAt(storageKey, now);
     }
 
     const interval = window.setInterval(() => {
@@ -66,17 +86,21 @@ export function usePacedProgress(
     }, TICK_INTERVAL_MS);
 
     return () => window.clearInterval(interval);
-  }, [isProcessing, isReady]);
+  }, [isProcessing, isReady, storageKey]);
 
   const result = computePacedProgress(elapsedMs, isReady, isFailed, config);
 
   const start = () => {
-    startedAtRef.current = Date.now();
+    const now = Date.now();
+    startedAtRef.current = now;
+    storeStartedAt(storageKey, now);
     setElapsedMs(0);
   };
 
   const reset = () => {
-    startedAtRef.current = Date.now();
+    const now = Date.now();
+    startedAtRef.current = now;
+    storeStartedAt(storageKey, now);
     setElapsedMs(0);
   };
 

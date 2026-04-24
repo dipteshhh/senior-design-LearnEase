@@ -295,6 +295,7 @@ export default function ProcessingPage() {
     isProcessing,
     isReady,
     isFailed,
+    storageKey: id ? `learnease:study-guide-progress:${id}` : undefined,
   });
   const idleSteps = useMemo(
     () =>
