@@ -240,6 +240,11 @@ const NUMBERED_LABELED_HEADING_MARKER_REGEX =
 const PART_HEADING_MARKER_REGEX = /^part\s*(?:#\s*)?(\d+|[ivxlcdm]+|[a-z])\b/i;
 const SHORT_QUESTION_HEADING_MARKER_REGEX = /^q\s*(?:#\s*)?(\d+)\b/i;
 const NUMBERED_HEADING_MARKER_REGEX = /^(\d{1,2})[.)]\s+(.+)$/i;
+const FLAT_TEXT_LABELED_HEADING_MARKER_REGEX =
+  /\b(question|problem|task|section|module|chapter)\s*(?:#\s*)?(\d+)\b/gi;
+const FLAT_TEXT_PART_HEADING_MARKER_REGEX =
+  /\bpart(?:\s+(?:#\s*)?|#\s*)(\d+|[ivxlcdm]+|[a-z])\b/gi;
+const FLAT_TEXT_SHORT_QUESTION_HEADING_MARKER_REGEX = /\bq\s*(?:#\s*)?(\d+)\b/gi;
 const SUBORDINATE_NUMBERED_LIST_INTRO_REGEX =
   /(?:requirements?|instructions?|steps?|resources?|materials?|examples?|hints?|notes?|parts?)\s*:$/i;
 const MAX_MARKER_SAMPLE_LENGTH = 120;
@@ -299,6 +304,10 @@ function truncateMarkerSample(sample: string): string {
   return sample.replace(/\s+/g, " ").trim().slice(0, MAX_MARKER_SAMPLE_LENGTH);
 }
 
+function markerSampleFromFlatText(text: string, index: number): string {
+  return truncateMarkerSample(text.slice(index, index + MAX_MARKER_SAMPLE_LENGTH));
+}
+
 function addDistinctHeadingMarker(
   markers: Map<string, HeadingMarker>,
   key: string,
@@ -337,6 +346,40 @@ function collectLabeledHeadingMarkers(lines: string[]): HeadingMarker[] {
       const identifier = normalizeHeadingIdentifier(shortQuestionMatch[1]);
       addDistinctHeadingMarker(markers, `question:${identifier}`, candidate.text);
     }
+  }
+
+  return Array.from(markers.values());
+}
+
+function collectFlatTextLabeledHeadingMarkers(text: string): HeadingMarker[] {
+  const markers = new Map<string, HeadingMarker>();
+
+  for (const match of text.matchAll(FLAT_TEXT_LABELED_HEADING_MARKER_REGEX)) {
+    const family = match[1].toLowerCase();
+    const identifier = normalizeHeadingIdentifier(match[2]);
+    addDistinctHeadingMarker(
+      markers,
+      `${family}:${identifier}`,
+      markerSampleFromFlatText(text, match.index ?? 0)
+    );
+  }
+
+  for (const match of text.matchAll(FLAT_TEXT_PART_HEADING_MARKER_REGEX)) {
+    const identifier = normalizeHeadingIdentifier(match[1]);
+    addDistinctHeadingMarker(
+      markers,
+      `part:${identifier}`,
+      markerSampleFromFlatText(text, match.index ?? 0)
+    );
+  }
+
+  for (const match of text.matchAll(FLAT_TEXT_SHORT_QUESTION_HEADING_MARKER_REGEX)) {
+    const identifier = normalizeHeadingIdentifier(match[1]);
+    addDistinctHeadingMarker(
+      markers,
+      `question:${identifier}`,
+      markerSampleFromFlatText(text, match.index ?? 0)
+    );
   }
 
   return Array.from(markers.values());
@@ -406,6 +449,13 @@ function collectNumberedHeadingMarkers(lines: string[]): HeadingMarker[] {
 function collectDistinctHeadingMarkers(headingDetectionText: string): HeadingMarker[] {
   const lines = toHeadingLines(headingDetectionText);
   const labeledMarkers = collectLabeledHeadingMarkers(lines);
+  if (lines.length <= 1) {
+    const flatTextMarkers = collectFlatTextLabeledHeadingMarkers(headingDetectionText);
+    if (flatTextMarkers.length > labeledMarkers.length) {
+      return flatTextMarkers;
+    }
+  }
+
   if (labeledMarkers.length > 0) {
     return labeledMarkers;
   }

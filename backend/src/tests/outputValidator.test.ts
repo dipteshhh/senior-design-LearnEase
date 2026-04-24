@@ -489,6 +489,54 @@ test("validateStudyGuideAgainstDocument allows two sections for messy extracted 
   );
 });
 
+test("validateStudyGuideAgainstDocument counts markers after upload text normalization", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [buildSection("s1", "Question 1: Implement Scaled Dot-Product Attention", 1)],
+  };
+
+  const extractedText = buildExtractedHomeworkText([
+    "Question 1 : Implement Scaled Dot-Product Attention (50 points)",
+    "You are required to implement the scaled dot-product attention mechanism using Python.",
+    "Requirements:",
+    "1. Write a function scaled_dot_product_attention(Q, K, V) where",
+    "2. The function should compute:",
+    "3. Demonstrate your function with a toy example:",
+    "Question 2 (Summarization Based - 50 points)",
+    "Read and Summarize the Paper: Attention is All You Need",
+    "Requirements:",
+    "Write a 2-3 page summary in your own words. Organize it into three parts:",
+    "1. Core Ideas (20 points):",
+    "2. Contributions and Results (20 points):",
+    "3. Personal Reflection (10 points):",
+    "o What was the most surprising or interesting part for you?",
+    "Review the weekly schedule before class.",
+  ]);
+  const storedText = normalizeDocumentText(extractedText, "PDF");
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text: storedText,
+        fileType: "PDF",
+        pageCount: 3,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "SCHEMA_VALIDATION_FAILED");
+      assert.equal(error.details.min_sections, 2);
+      assert.equal(error.details.heading_marker_count, 2);
+      assert.equal(error.details.detected_marker_count, 2);
+      assert.deepEqual(
+        (error.details.detected_markers as string[]).slice().sort(),
+        ["question:1", "question:2"]
+      );
+      return true;
+    }
+  );
+});
+
 test("validateStudyGuideAgainstDocument detects line-broken, hash-prefixed, and shorthand question markers", () => {
   const invalid: StudyGuide = {
     ...BASE_STUDY_GUIDE,
@@ -520,6 +568,47 @@ test("validateStudyGuideAgainstDocument detects line-broken, hash-prefixed, and 
       assert.equal(error.details.min_sections, 3);
       assert.equal(error.details.heading_marker_count, 3);
       assert.equal(error.details.detected_marker_count, 3);
+      assert.deepEqual(
+        (error.details.detected_markers as string[]).slice().sort(),
+        ["question:1", "question:2", "question:3"]
+      );
+      return true;
+    }
+  );
+});
+
+test("validateStudyGuideAgainstDocument requires three sections for normalized one-line homework markers", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      buildSection("s1", "Question 1: Setup", 1),
+      buildSection("s2", "Question 2: Analyze", 2),
+    ],
+  };
+
+  const text = normalizeDocumentText(
+    buildExtractedHomeworkText([
+      "Question 1: Setup the environment.",
+      "Question 2: Analyze the outputs.",
+      "Question 3: Reflect on the results.",
+      "Review the weekly schedule before class.",
+    ]),
+    "PDF"
+  );
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text,
+        fileType: "PDF",
+        pageCount: 3,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "SCHEMA_VALIDATION_FAILED");
+      assert.equal(error.details.min_sections, 3);
+      assert.equal(error.details.heading_marker_count, 3);
       assert.deepEqual(
         (error.details.detected_markers as string[]).slice().sort(),
         ["question:1", "question:2", "question:3"]
