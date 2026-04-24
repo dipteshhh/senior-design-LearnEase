@@ -543,6 +543,74 @@ test("validateStudyGuideAgainstDocument still requires three sections when three
   );
 });
 
+test("validateStudyGuideAgainstDocument attaches diagnostic fields when section count is insufficient", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [
+      buildSection("s1", "Question 1: Algorithm", 1),
+      buildSection("s2", "Question 2: Summary", 2),
+    ],
+  };
+
+  const text = buildStructuredHomeworkText([
+    "Question 1: Implement the algorithm.",
+    "Question 2: Summarize the paper.",
+    "Question 3: Reflect on the class.",
+  ]);
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text,
+        fileType: "PDF",
+        pageCount: 4,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "SCHEMA_VALIDATION_FAILED");
+      assert.equal(error.details.min_sections, 3);
+      assert.equal(error.details.actual_sections, 2);
+      assert.equal(error.details.heading_marker_count, 3);
+      assert.equal(error.details.section_requirement_reason, "strong_explicit_structure");
+      assert.deepEqual(
+        (error.details.detected_markers as string[]).slice().sort(),
+        ["question:1", "question:2", "question:3"]
+      );
+      assert.equal(error.details.detected_markers_truncated, false);
+      assert.equal(typeof error.details.source_text_preview, "string");
+      assert.ok((error.details.source_text_preview as string).length <= 400);
+      return true;
+    }
+  );
+});
+
+test("validateStudyGuideAgainstDocument reports text_length_fallback when no markers are detected", () => {
+  const invalid: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    sections: [buildSection("s1", "Overview of the module", 1)],
+  };
+
+  const text = `${"Plain prose with no numbered markers at all. ".repeat(200)} Review the weekly schedule before class.`;
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(invalid, {
+        text,
+        fileType: "PDF",
+        pageCount: 4,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.details.section_requirement_reason, "text_length_fallback");
+      assert.equal(error.details.heading_marker_count, 0);
+      assert.deepEqual(error.details.detected_markers, []);
+      return true;
+    }
+  );
+});
+
 test("validateStudyGuideAgainstDocument rejects generic section titles", () => {
   const invalid: StudyGuide = {
     ...BASE_STUDY_GUIDE,

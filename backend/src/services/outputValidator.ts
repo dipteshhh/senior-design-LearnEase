@@ -241,13 +241,14 @@ const NUMBERED_HEADING_MARKER_REGEX =
 const PART_HEADING_MARKER_REGEX = /\bpart\s+([a-z0-9]{1,4})\b/gi;
 
 /**
- * Returns the number of *distinct* problem/question/task/etc. markers found
- * in the document. Repeated mentions of the same marker (e.g. "Question 1"
- * appearing in both a table of contents and the body) only count once, so
- * this number reflects the actual count of distinct numbered items in the
- * source document.
+ * Returns the set of *distinct* problem/question/task/etc. marker keys
+ * found in the document. Repeated mentions of the same marker (e.g.
+ * "Question 1" appearing in both a table of contents and the body) only
+ * count once, so this set reflects the actual count of distinct numbered
+ * items in the source document. Each key is formatted as
+ * `"<family>:<identifier>"` (e.g. `"question:1"`, `"part:a"`).
  */
-function countHeadingMarkers(normalizedText: string): number {
+function collectDistinctHeadingMarkers(normalizedText: string): Set<string> {
   const distinct = new Set<string>();
 
   for (const match of normalizedText.matchAll(NUMBERED_HEADING_MARKER_REGEX)) {
@@ -258,7 +259,7 @@ function countHeadingMarkers(normalizedText: string): number {
     distinct.add(`part:${match[1].toLowerCase()}`);
   }
 
-  return distinct.size;
+  return distinct;
 }
 
 function createValidationContext(input: ValidationInput): ValidationContext {
@@ -507,8 +508,26 @@ function validateNoAnswerLeakage(studyGuide: StudyGuide): void {
   });
 }
 
-function getRequiredMinimumSections(context: ValidationContext): number {
-  const headingMarkerCount = countHeadingMarkers(context.normalizedText);
+type SectionRequirementReason =
+  | "strong_explicit_structure"
+  | "weak_explicit_structure"
+  | "text_length_fallback"
+  | "no_minimum";
+
+interface SectionRequirement {
+  minSections: number;
+  reason: SectionRequirementReason;
+  distinctMarkers: string[];
+  headingMarkerCount: number;
+}
+
+const MAX_DETECTED_MARKERS_IN_ERROR = 20;
+const MAX_SOURCE_PREVIEW_CHARS = 400;
+
+function computeSectionRequirement(context: ValidationContext): SectionRequirement {
+  const distinctMarkerSet = collectDistinctHeadingMarkers(context.normalizedText);
+  const distinctMarkers = Array.from(distinctMarkerSet);
+  const headingMarkerCount = distinctMarkerSet.size;
   const hasStrongExplicitStructure =
     headingMarkerCount >= MIN_HEADING_MARKERS_FOR_SECTION_REQUIREMENT;
 
@@ -517,7 +536,12 @@ function getRequiredMinimumSections(context: ValidationContext): number {
     context.fileType === "PDF" &&
     context.pageCount >= MIN_STRUCTURED_PDF_PAGES
   ) {
-    return MIN_SECTION_COUNT_FOR_STRUCTURED_DOC;
+    return {
+      minSections: MIN_SECTION_COUNT_FOR_STRUCTURED_DOC,
+      reason: "strong_explicit_structure",
+      distinctMarkers,
+      headingMarkerCount,
+    };
   }
 
   if (
@@ -525,39 +549,65 @@ function getRequiredMinimumSections(context: ValidationContext): number {
     context.fileType === "DOCX" &&
     (context.paragraphCount ?? 0) >= MIN_STRUCTURED_DOCX_PARAGRAPHS
   ) {
-    return MIN_SECTION_COUNT_FOR_STRUCTURED_DOC;
+    return {
+      minSections: MIN_SECTION_COUNT_FOR_STRUCTURED_DOC,
+      reason: "strong_explicit_structure",
+      distinctMarkers,
+      headingMarkerCount,
+    };
   }
 
-  // Weak explicit structure: fewer than 3 problem/question markers were
-  // detected. Trust the marker count as an upper bound so a 2-question
-  // homework or 1-question worksheet is not forced to invent extra sections.
   if (headingMarkerCount > 0) {
-    return Math.min(headingMarkerCount, MIN_SECTION_COUNT_FOR_STRUCTURED_DOC);
+    return {
+      minSections: Math.min(headingMarkerCount, MIN_SECTION_COUNT_FOR_STRUCTURED_DOC),
+      reason: "weak_explicit_structure",
+      distinctMarkers,
+      headingMarkerCount,
+    };
   }
 
-  // No explicit structural markers: fall back to the length-based heuristic
-  // for prose-heavy documents that should still be split into multiple
-  // student-readable sections.
   if (context.normalizedText.length >= MIN_STRUCTURED_TEXT_CHARS) {
-    return MIN_SECTION_COUNT_FOR_STRUCTURED_DOC;
+    return {
+      minSections: MIN_SECTION_COUNT_FOR_STRUCTURED_DOC,
+      reason: "text_length_fallback",
+      distinctMarkers,
+      headingMarkerCount,
+    };
   }
 
-  return 0;
+  return {
+    minSections: 0,
+    reason: "no_minimum",
+    distinctMarkers,
+    headingMarkerCount,
+  };
 }
 
 function validateSectionStructure(studyGuide: StudyGuide, context: ValidationContext): void {
-  const requiredMinSections = getRequiredMinimumSections(context);
-  if (requiredMinSections > 0 && studyGuide.sections.length < requiredMinSections) {
+  const requirement = computeSectionRequirement(context);
+  if (
+    requirement.minSections > 0 &&
+    studyGuide.sections.length < requirement.minSections
+  ) {
+    const truncatedMarkers = requirement.distinctMarkers.slice(0, MAX_DETECTED_MARKERS_IN_ERROR);
+    const markersTruncated =
+      requirement.distinctMarkers.length > truncatedMarkers.length;
+
     throw new ContractValidationError(
       "SCHEMA_VALIDATION_FAILED",
-      `Study guide must include at least ${requiredMinSections} section${requiredMinSections === 1 ? "" : "s"} for this document.`,
+      `Study guide must include at least ${requirement.minSections} section${requirement.minSections === 1 ? "" : "s"} for this document.`,
       {
-        min_sections: requiredMinSections,
+        min_sections: requirement.minSections,
         actual_sections: studyGuide.sections.length,
         file_type: context.fileType,
         page_count: context.pageCount,
         paragraph_count: context.paragraphCount,
         text_length: context.normalizedText.length,
+        heading_marker_count: requirement.headingMarkerCount,
+        section_requirement_reason: requirement.reason,
+        detected_markers: truncatedMarkers,
+        detected_markers_truncated: markersTruncated,
+        source_text_preview: context.normalizedText.slice(0, MAX_SOURCE_PREVIEW_CHARS),
       }
     );
   }
