@@ -124,7 +124,31 @@ Important:
 - body: `{ item_id, completed }`
 - Success: `200 { success: true }`
 
-## 6) Delete Flows
+## 6) Homework Due Dates + Reminders
+
+These controls are HOMEWORK-only. Disable or hide them for LECTURE and UNSUPPORTED documents.
+
+Document list/detail responses include:
+- `assignment_due_date: string | null`
+- `assignment_due_time: string | null`
+- `reminder_opt_in: boolean`
+- `reminder_status: "pending" | "sending" | "sent" | "failed" | "skipped" | "past_due"`
+
+### Update due date
+- `PATCH /api/documents/:documentId/due-date`
+- body: `{ due_date: "YYYY-MM-DD" }`
+
+### Update due time
+- `PATCH /api/documents/:documentId/due-time`
+- body: `{ due_time: "HH:MM" }`
+- Requires an existing due date.
+
+### Enable or disable reminders
+- `PATCH /api/documents/:documentId/reminder-opt-in`
+- body: `{ opt_in: boolean }`
+- Enabling requires both due date and due time.
+
+## 7) Delete Flows
 
 ### Delete single document
 - `DELETE /api/documents/:documentId`
@@ -134,7 +158,7 @@ Important:
 - `DELETE /api/user/data`
 - Success: `200 { success: true }`
 
-## 7) Polling + UX Recommendations
+## 8) Polling + UX Recommendations
 
 - Recommended polling interval: `1s-2s` while a flow is processing.
 - Read limits:
@@ -146,7 +170,7 @@ Important:
     - `GET /api/quiz/:id`
 - Handle `429 RATE_LIMITED` with short backoff and continue polling.
 
-## 8) Error Handling Contract (Frontend)
+## 9) Error Handling Contract (Frontend)
 
 - `401 UNAUTHORIZED`:
   - clear local auth state
@@ -163,7 +187,7 @@ Important:
 - `GENERATION_FAILED` on failed documents:
   - show "try again later" guidance when error message indicates temporary upstream unavailability (for example, repeated transient failures/circuit-breaker style protection)
 
-## 9) Minimal Fetch Helpers
+## 10) Minimal Fetch Helpers
 
 ```ts
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -202,7 +226,7 @@ const poll = async () => {
 };
 ```
 
-## 10) What Backend Guarantees (for UI confidence)
+## 11) What Backend Guarantees (for UI confidence)
 
 - Guardrails are backend-enforced (no direct assignment-solving outputs in restricted modes).
 - Artifact files are encrypted at rest (AES-256-GCM).

@@ -54,9 +54,11 @@ See `docs/CLASSIFICATION.md`.
 | Study Guide | ✅ Allowed (no solving) | ✅ Allowed | ❌ |
 | Quiz (Test Your Knowledge) | ❌ | ✅ Allowed | ❌ |
 | Checklist Completion | ✅ | ✅ | ❌ |
+| Due Date / Email Reminders | ✅ Allowed | ❌ | ❌ |
 
 Additional rules:
 - Quiz is lecture-only, user-triggered only (see `docs/SCHEMAS.md` + `docs/AI_contract.md`)
+- Due date editing and email reminders are homework-only. Reminders require both a due date and due time and must be explicitly enabled by the user.
 - UNSUPPORTED returns a clear error with no partial processing
 
 ---
