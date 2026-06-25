@@ -241,16 +241,25 @@ test("recoverInterruptedProcessingDocuments marks processing rows as failed", ()
   const studyGuideDoc = store.getDocument("aaaaaaaa-5777-4aaa-8aaa-aaaaaaaaaaaa");
   const quizDoc = store.getDocument("bbbbbbbb-5777-4bbb-8bbb-bbbbbbbbbbbb");
   const readyDoc = store.getDocument("cccccccc-5777-4ccc-8ccc-cccccccccccc");
+  const summaries = store.listDocumentSummariesByUser("user-recover");
+  const studyGuideSummary = summaries.find((doc) => doc.id === "aaaaaaaa-5777-4aaa-8aaa-aaaaaaaaaaaa");
+  const quizSummary = summaries.find((doc) => doc.id === "bbbbbbbb-5777-4bbb-8bbb-bbbbbbbbbbbb");
 
   assert.ok(studyGuideDoc);
   assert.equal(studyGuideDoc.status, "failed");
   assert.equal(studyGuideDoc.errorCode, "STUDY_GUIDE:GENERATION_INTERRUPTED");
   assert.equal(studyGuideDoc.studyGuideStatus, "failed");
+  assert.ok(studyGuideSummary);
+  assert.equal(studyGuideSummary.status, "failed");
+  assert.equal(studyGuideSummary.errorCode, "STUDY_GUIDE:GENERATION_INTERRUPTED");
 
   assert.ok(quizDoc);
   assert.equal(quizDoc.status, "failed");
   assert.equal(quizDoc.errorCode, "QUIZ:GENERATION_INTERRUPTED");
   assert.equal(quizDoc.quizStatus, "failed");
+  assert.ok(quizSummary);
+  assert.equal(quizSummary.status, "failed");
+  assert.equal(quizSummary.errorCode, "QUIZ:GENERATION_INTERRUPTED");
 
   assert.ok(readyDoc);
   assert.equal(readyDoc.status, "ready");

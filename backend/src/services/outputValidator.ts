@@ -33,8 +33,6 @@ interface ValidationContext {
   paragraphCount: number | null;
   normalizedText: string;
   headingDetectionText: string;
-  groundingTextLoose: string;
-  docTokensLoose: string[] | null;
 }
 
 const MIN_SECTION_COUNT_FOR_STRUCTURED_DOC = 3;
@@ -109,127 +107,6 @@ export function normalizeDocumentText(text: string, fileType: FileType): string 
   }
   normalized = normalized.replace(/\s+/g, " ");
   return normalized.trim();
-}
-
-function normalizeForLooseGroundingMatch(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function shouldAllowLooseGroundingMatch(normalizedFragment: string): boolean {
-  const tokens = normalizedFragment.split(" ").filter(Boolean);
-  return tokens.length >= 3 || normalizedFragment.length >= 16;
-}
-
-function toLooseTokenSet(text: string): Set<string> {
-  const normalized = normalizeForLooseGroundingMatch(text);
-  if (!normalized) return new Set();
-  return new Set(normalized.split(" ").filter(Boolean));
-}
-
-function hasStrongCitationOverlap(quote: string, citationExcerpts: string[]): boolean {
-  const quoteTokens = toLooseTokenSet(quote);
-  if (quoteTokens.size < 3) {
-    return false;
-  }
-
-  for (const excerpt of citationExcerpts) {
-    const excerptTokens = toLooseTokenSet(excerpt);
-    if (excerptTokens.size < 3) {
-      continue;
-    }
-
-    let overlap = 0;
-    for (const token of quoteTokens) {
-      if (excerptTokens.has(token)) {
-        overlap += 1;
-      }
-    }
-
-    const required = Math.max(3, Math.ceil(Math.min(quoteTokens.size, excerptTokens.size) * 0.6));
-    if (overlap >= required) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/**
- * Token-overlap grounding check for citation excerpts against the full
- * document text. Uses a sliding window over the document token stream so
- * that a locally concentrated cluster of matching tokens passes, even if
- * the model paraphrased slightly or PDF extraction introduced artifacts.
- */
-function hasTokenOverlapWithDocument(
-  normalizedExcerpt: string,
-  context: ValidationContext
-): boolean {
-  const excerptTokens = toLooseTokenSet(normalizedExcerpt);
-  if (excerptTokens.size < 3) {
-    return false;
-  }
-
-  if (!context.docTokensLoose) {
-    context.docTokensLoose = normalizeForLooseGroundingMatch(context.normalizedText)
-      .split(" ")
-      .filter(Boolean);
-  }
-  const docTokens = context.docTokensLoose;
-  if (docTokens.length === 0) {
-    return false;
-  }
-
-  // Window size: twice the excerpt token count, capped to avoid degenerate scans
-  const windowSize = Math.min(excerptTokens.size * 2, docTokens.length);
-  const required = Math.max(3, Math.ceil(excerptTokens.size * 0.6));
-
-  // Build initial window token counts
-  const windowCounts = new Map<string, number>();
-  let overlap = 0;
-
-  for (let i = 0; i < windowSize; i++) {
-    const token = docTokens[i];
-    windowCounts.set(token, (windowCounts.get(token) ?? 0) + 1);
-    if (excerptTokens.has(token) && windowCounts.get(token) === 1) {
-      overlap += 1;
-    }
-  }
-
-  if (overlap >= required) {
-    return true;
-  }
-
-  // Slide the window
-  for (let i = windowSize; i < docTokens.length; i++) {
-    // Add new token entering the window
-    const entering = docTokens[i];
-    windowCounts.set(entering, (windowCounts.get(entering) ?? 0) + 1);
-    if (excerptTokens.has(entering) && windowCounts.get(entering) === 1) {
-      overlap += 1;
-    }
-
-    // Remove token leaving the window
-    const leaving = docTokens[i - windowSize];
-    const leavingCount = (windowCounts.get(leaving) ?? 1) - 1;
-    if (leavingCount <= 0) {
-      windowCounts.delete(leaving);
-      if (excerptTokens.has(leaving)) {
-        overlap -= 1;
-      }
-    } else {
-      windowCounts.set(leaving, leavingCount);
-    }
-
-    if (overlap >= required) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 const PAGE_MARKER_REGEX = /^--\s*\d+\s+of\s+\d+\s*--$/i;
@@ -471,8 +348,6 @@ function createValidationContext(input: ValidationInput): ValidationContext {
     paragraphCount: input.paragraphCount,
     normalizedText,
     headingDetectionText: normalizeHeadingDetectionText(input.text, input.fileType),
-    groundingTextLoose: normalizeForLooseGroundingMatch(normalizedText),
-    docTokensLoose: null,
   };
 }
 
@@ -486,56 +361,13 @@ function isDirectGroundingMatch(normalizedFragment: string, context: ValidationC
     return false;
   }
 
-  if (context.normalizedText.includes(normalizedFragment)) {
-    return true;
-  }
-
-  if (!shouldAllowLooseGroundingMatch(normalizedFragment)) {
-    return false;
-  }
-
-  const looseFragment = normalizeForLooseGroundingMatch(normalizedFragment);
-  return Boolean(looseFragment && context.groundingTextLoose.includes(looseFragment));
-}
-
-function hasOrderedEllipsisFragmentGrounding(
-  normalizedFragment: string,
-  context: ValidationContext
-): boolean {
-  const rawFragments = normalizedFragment
-    .split(/\s*(?:\.\.\.|…|\[\.\.\.\])\s*/g)
-    .map((fragment) => fragment.trim())
-    .filter((fragment) => fragment.length > 0);
-
-  if (rawFragments.length < 2) {
-    return false;
-  }
-
-  const looseFragments = rawFragments
-    .map((fragment) => normalizeForLooseGroundingMatch(fragment))
-    .filter((fragment) => shouldAllowLooseGroundingMatch(fragment));
-
-  if (looseFragments.length < 2) {
-    return false;
-  }
-
-  let searchStart = 0;
-  for (const looseFragment of looseFragments) {
-    const position = context.groundingTextLoose.indexOf(looseFragment, searchStart);
-    if (position < 0) {
-      return false;
-    }
-    searchStart = position + looseFragment.length;
-  }
-
-  return true;
+  return context.normalizedText.includes(normalizedFragment);
 }
 
 function validateQuoteExists(
   quote: string,
   context: ValidationContext,
-  details: Record<string, unknown>,
-  citationExcerpts: string[]
+  details: Record<string, unknown>
 ): void {
   const normalizedQuote = normalizeDocumentText(quote, context.fileType);
   if (!normalizedQuote) {
@@ -549,10 +381,6 @@ function validateQuoteExists(
     return;
   }
 
-  if (hasStrongCitationOverlap(normalizedQuote, citationExcerpts)) {
-    return;
-  }
-
   throw new ContractValidationError(
     "QUOTE_NOT_FOUND",
     "Supporting quote was not found in extracted text.",
@@ -563,15 +391,10 @@ function validateQuoteExists(
   );
 }
 
-interface CitationValidationOptions {
-  groundedFallbackExcerpt?: string;
-}
-
 function validateCitation(
   citation: Citation,
   context: ValidationContext,
-  path: string,
-  options: CitationValidationOptions = {}
+  path: string
 ): void {
   const normalizedExcerpt = normalizeCitationText(citation);
   if (!normalizedExcerpt) {
@@ -581,22 +404,12 @@ function validateCitation(
     });
   }
 
-  const citationGrounded =
-    isDirectGroundingMatch(normalizedExcerpt, context) ||
-    hasOrderedEllipsisFragmentGrounding(normalizedExcerpt, context) ||
-    hasTokenOverlapWithDocument(normalizedExcerpt, context);
-  if (!citationGrounded) {
-    const normalizedFallback = options.groundedFallbackExcerpt
-      ? normalizeDocumentText(options.groundedFallbackExcerpt, context.fileType)
-      : "";
-    const fallbackGrounded = isDirectGroundingMatch(normalizedFallback, context);
-    if (!fallbackGrounded) {
-      throw new ContractValidationError(
-        "CITATION_EXCERPT_NOT_FOUND",
-        "Citation excerpt was not found in extracted text.",
-        { path, excerpt_preview: normalizedExcerpt.slice(0, 180) }
-      );
-    }
+  if (!isDirectGroundingMatch(normalizedExcerpt, context)) {
+    throw new ContractValidationError(
+      "CITATION_EXCERPT_NOT_FOUND",
+      "Citation excerpt was not found in extracted text.",
+      { path, excerpt_preview: normalizedExcerpt.slice(0, 180) }
+    );
   }
 
   if (citation.source_type === "pdf") {
@@ -642,15 +455,8 @@ function validateExtractionItems(
 ): void {
   items.forEach((item, index) => {
     const itemPath = `${path}[${index}]`;
-    const citationExcerpts = item.citations.map((citation) => normalizeCitationText(citation));
-    const normalizedQuote = normalizeDocumentText(item.supporting_quote, context.fileType);
-    const groundedFallbackExcerpt = isDirectGroundingMatch(normalizedQuote, context)
-      ? item.supporting_quote
-      : undefined;
     item.citations.forEach((citation, citationIndex) => {
-      validateCitation(citation, context, `${itemPath}.citations[${citationIndex}]`, {
-        groundedFallbackExcerpt,
-      });
+      validateCitation(citation, context, `${itemPath}.citations[${citationIndex}]`);
     });
     validateQuoteExists(
       item.supporting_quote,
@@ -658,8 +464,7 @@ function validateExtractionItems(
       {
         path: itemPath,
         item_id: item.id,
-      },
-      citationExcerpts
+      }
     );
   });
 }
@@ -918,7 +723,6 @@ export function validateQuizAgainstDocument(
 
   quiz.questions.forEach((question, questionIndex) => {
     const questionPath = `questions[${questionIndex}]`;
-    const citationExcerpts = question.citations.map((citation) => normalizeCitationText(citation));
     question.citations.forEach((citation, citationIndex) => {
       validateCitation(citation, context, `${questionPath}.citations[${citationIndex}]`);
     });
@@ -928,8 +732,7 @@ export function validateQuizAgainstDocument(
       {
         path: questionPath,
         question_id: question.id,
-      },
-      citationExcerpts
+      }
     );
   });
 }

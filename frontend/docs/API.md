@@ -139,7 +139,11 @@ Response:
     "error_code": "SCHEMA_VALIDATION_FAILED | QUOTE_NOT_FOUND | GENERATION_INTERRUPTED | ... | null",
     "error_message": "safe user-facing message | null",
     "has_study_guide": true,
-    "has_quiz": false
+    "has_quiz": false,
+    "assignment_due_date": "YYYY-MM-DD | null",
+    "assignment_due_time": "HH:MM | null",
+    "reminder_opt_in": false,
+    "reminder_status": "pending | sending | sent | failed | skipped | past_due"
   }
 ]
 ```
@@ -174,7 +178,11 @@ Response:
   "error_code": "... | null",
   "error_message": "safe user-facing message | null",
   "has_study_guide": true,
-  "has_quiz": false
+  "has_quiz": false,
+  "assignment_due_date": "YYYY-MM-DD | null",
+  "assignment_due_time": "HH:MM | null",
+  "reminder_opt_in": false,
+  "reminder_status": "pending | sending | sent | failed | skipped | past_due"
 }
 ```
 
@@ -412,6 +420,99 @@ Errors:
 - `401` unauthorized
 - `403` not owner
 - `404` checklist item not found
+
+---
+
+## PATCH /api/documents/:documentId/due-date
+
+Update a HOMEWORK document's due date.
+
+Request:
+```json
+{ "due_date": "2026-03-15" }
+```
+
+Response:
+- `200`
+```json
+{
+  "success": true,
+  "assignment_due_date": "2026-03-15",
+  "assignment_due_time": "23:59 | null",
+  "reminder_opt_in": false,
+  "reminder_status": "pending | sending | sent | failed | skipped | past_due"
+}
+```
+
+Errors:
+- `400` invalid due date (`INVALID_DUE_DATE`)
+- `401` unauthorized
+- `403` not owner
+- `404` document not found
+- `422` malformed `documentId` (must be UUID)
+- `422` not homework (`NOT_HOMEWORK`)
+
+---
+
+## PATCH /api/documents/:documentId/due-time
+
+Update a HOMEWORK document's due time. A due date must already be set.
+
+Request:
+```json
+{ "due_time": "23:59" }
+```
+
+Response:
+- `200`
+```json
+{
+  "success": true,
+  "assignment_due_date": "2026-03-15",
+  "assignment_due_time": "23:59",
+  "reminder_opt_in": false,
+  "reminder_status": "pending | sending | sent | failed | skipped | past_due"
+}
+```
+
+Errors:
+- `400` invalid due time (`INVALID_DUE_TIME`)
+- `401` unauthorized
+- `403` not owner
+- `404` document not found
+- `422` malformed `documentId` (must be UUID)
+- `422` not homework (`NOT_HOMEWORK`)
+- `422` missing due date (`DUE_DATE_REQUIRED_FOR_TIME`)
+
+---
+
+## PATCH /api/documents/:documentId/reminder-opt-in
+
+Enable or disable email reminders for a HOMEWORK document. Enabling reminders requires both `assignment_due_date` and `assignment_due_time`.
+
+Request:
+```json
+{ "opt_in": true }
+```
+
+Response:
+- `200`
+```json
+{
+  "success": true,
+  "reminder_opt_in": true,
+  "reminder_status": "pending | sending | sent | failed | skipped | past_due"
+}
+```
+
+Errors:
+- `400` invalid opt-in value (`INVALID_OPT_IN`)
+- `401` unauthorized
+- `403` not owner
+- `404` document not found
+- `422` malformed `documentId` (must be UUID)
+- `422` not homework (`NOT_HOMEWORK`)
+- `422` deadline required (`DEADLINE_REQUIRED`)
 
 ---
 

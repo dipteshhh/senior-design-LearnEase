@@ -826,7 +826,11 @@ interface DocumentSummaryRow {
   error_code: string | null;
   error_message: string | null;
   study_guide_status: string | null;
+  study_guide_error_code: string | null;
+  study_guide_error_message: string | null;
   quiz_status: string | null;
+  quiz_error_code: string | null;
+  quiz_error_message: string | null;
   has_study_guide: number;
   has_quiz: number;
   assignment_due_date: string | null;
@@ -851,7 +855,11 @@ export function listDocumentSummariesByUser(userId: string): DocumentSummary[] {
           d.error_code,
           d.error_message,
           d.study_guide_status,
+          d.study_guide_error_code,
+          d.study_guide_error_message,
           d.quiz_status,
+          d.quiz_error_code,
+          d.quiz_error_message,
           EXISTS (SELECT 1 FROM study_guides sg WHERE sg.document_id = d.id) AS has_study_guide,
           EXISTS (SELECT 1 FROM quizzes q WHERE q.document_id = d.id) AS has_quiz,
           d.assignment_due_date,
@@ -865,32 +873,49 @@ export function listDocumentSummariesByUser(userId: string): DocumentSummary[] {
     )
     .all(userId) as DocumentSummaryRow[];
 
-  return rows.map((row) => ({
-    id: row.id,
-    userId: row.user_id,
-    filename: row.original_filename,
-    fileType: row.file_type,
-    documentType: row.document_type,
-    status: row.status,
-    uploadedAt: row.uploaded_at,
-    pageCount: row.page_count ?? 0,
-    studyGuideStatus: normalizeFlowStatus(
+  return rows.map((row) => {
+    const studyGuideStatus = normalizeFlowStatus(
       row.study_guide_status,
       row.has_study_guide ? "ready" : "idle"
-    ),
-    quizStatus: normalizeFlowStatus(
+    );
+    const quizStatus = normalizeFlowStatus(
       row.quiz_status,
       row.has_quiz ? "ready" : "idle"
-    ),
-    errorCode: row.error_code,
-    errorMessage: row.error_message,
-    hasStudyGuide: row.has_study_guide === 1,
-    hasQuiz: row.has_quiz === 1,
-    assignmentDueDate: row.assignment_due_date ?? null,
-    assignmentDueTime: row.assignment_due_time ?? null,
-    reminderOptIn: (row.reminder_opt_in ?? 0) === 1,
-    reminderStatus: (row.reminder_status as ReminderStatus) ?? "pending",
-  }));
+    );
+    const hasStudyGuide = row.has_study_guide === 1;
+    const hasQuiz = row.has_quiz === 1;
+    const overall = deriveOverallState({
+      studyGuide: hasStudyGuide ? ({} as StudyGuide) : null,
+      studyGuideStatus,
+      studyGuideErrorCode: row.study_guide_error_code,
+      studyGuideErrorMessage: row.study_guide_error_message,
+      quiz: hasQuiz ? ({} as Quiz) : null,
+      quizStatus,
+      quizErrorCode: row.quiz_error_code,
+      quizErrorMessage: row.quiz_error_message,
+    });
+
+    return {
+      id: row.id,
+      userId: row.user_id,
+      filename: row.original_filename,
+      fileType: row.file_type,
+      documentType: row.document_type,
+      status: overall.status,
+      uploadedAt: row.uploaded_at,
+      pageCount: row.page_count ?? 0,
+      studyGuideStatus,
+      quizStatus,
+      errorCode: overall.errorCode,
+      errorMessage: overall.errorMessage,
+      hasStudyGuide,
+      hasQuiz,
+      assignmentDueDate: row.assignment_due_date ?? null,
+      assignmentDueTime: row.assignment_due_time ?? null,
+      reminderOptIn: (row.reminder_opt_in ?? 0) === 1,
+      reminderStatus: (row.reminder_status as ReminderStatus) ?? "pending",
+    };
+  });
 }
 
 export function findDocumentIdByUserAndContentHash(
@@ -1538,6 +1563,9 @@ export function recoverInterruptedProcessingDocuments(): number {
       `
         UPDATE documents
         SET
+          status = 'failed',
+          error_code = ?,
+          error_message = ?,
           study_guide_status = 'failed',
           study_guide_error_code = ?,
           study_guide_error_message = ?
@@ -1545,6 +1573,8 @@ export function recoverInterruptedProcessingDocuments(): number {
       `
     )
     .run(
+      FLOW_INTERRUPTED_ERROR_CODE.STUDY_GUIDE,
+      FLOW_INTERRUPTED_ERROR_MESSAGE.STUDY_GUIDE,
       FLOW_INTERRUPTED_ERROR_CODE.STUDY_GUIDE,
       FLOW_INTERRUPTED_ERROR_MESSAGE.STUDY_GUIDE
     );
@@ -1554,19 +1584,30 @@ export function recoverInterruptedProcessingDocuments(): number {
       `
         UPDATE documents
         SET
+          status = 'failed',
+          error_code = ?,
+          error_message = ?,
           quiz_status = 'failed',
           quiz_error_code = ?,
           quiz_error_message = ?
         WHERE quiz_status = 'processing'
       `
     )
-    .run(FLOW_INTERRUPTED_ERROR_CODE.QUIZ, FLOW_INTERRUPTED_ERROR_MESSAGE.QUIZ);
+    .run(
+      FLOW_INTERRUPTED_ERROR_CODE.QUIZ,
+      FLOW_INTERRUPTED_ERROR_MESSAGE.QUIZ,
+      FLOW_INTERRUPTED_ERROR_CODE.QUIZ,
+      FLOW_INTERRUPTED_ERROR_MESSAGE.QUIZ
+    );
 
   const legacyStudyGuide = db
     .prepare(
       `
         UPDATE documents
         SET
+          status = 'failed',
+          error_code = ?,
+          error_message = ?,
           study_guide_status = 'failed',
           study_guide_error_code = ?,
           study_guide_error_message = ?
@@ -1578,6 +1619,8 @@ export function recoverInterruptedProcessingDocuments(): number {
     )
     .run(
       FLOW_INTERRUPTED_ERROR_CODE.STUDY_GUIDE,
+      FLOW_INTERRUPTED_ERROR_MESSAGE.STUDY_GUIDE,
+      FLOW_INTERRUPTED_ERROR_CODE.STUDY_GUIDE,
       FLOW_INTERRUPTED_ERROR_MESSAGE.STUDY_GUIDE
     );
 
@@ -1586,6 +1629,9 @@ export function recoverInterruptedProcessingDocuments(): number {
       `
         UPDATE documents
         SET
+          status = 'failed',
+          error_code = ?,
+          error_message = ?,
           quiz_status = 'failed',
           quiz_error_code = ?,
           quiz_error_message = ?
@@ -1595,7 +1641,12 @@ export function recoverInterruptedProcessingDocuments(): number {
           AND error_code = 'QUIZ_PROCESSING'
       `
     )
-    .run(FLOW_INTERRUPTED_ERROR_CODE.QUIZ, FLOW_INTERRUPTED_ERROR_MESSAGE.QUIZ);
+    .run(
+      FLOW_INTERRUPTED_ERROR_CODE.QUIZ,
+      FLOW_INTERRUPTED_ERROR_MESSAGE.QUIZ,
+      FLOW_INTERRUPTED_ERROR_CODE.QUIZ,
+      FLOW_INTERRUPTED_ERROR_MESSAGE.QUIZ
+    );
 
   return (
     markStudyGuideInterrupted.changes +

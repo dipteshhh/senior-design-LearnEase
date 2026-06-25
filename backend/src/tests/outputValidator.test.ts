@@ -92,10 +92,10 @@ test("validateStudyGuideAgainstDocument rejects missing supporting quote", () =>
   );
 });
 
-test("validateStudyGuideAgainstDocument accepts grounded quotes with punctuation variants", () => {
+test("validateStudyGuideAgainstDocument accepts grounded quotes after documented normalization", () => {
   const text = "Note: • Work must be written in your own words — copied AI output will not be accepted.";
   const variantQuote =
-    "Note - Work must be written in your own words - copied AI output will not be accepted";
+    "Work must be written in your own words - copied AI output will not be accepted.";
 
   const variantGuide: StudyGuide = {
     ...BASE_STUDY_GUIDE,
@@ -124,7 +124,7 @@ test("validateStudyGuideAgainstDocument accepts grounded quotes with punctuation
   );
 });
 
-test("validateStudyGuideAgainstDocument accepts short grounded quotes with symbol variants", () => {
+test("validateStudyGuideAgainstDocument rejects short quotes with non-exact symbol variants", () => {
   const text = "Q = Query matrix. K = Key matrix. V = Value matrix.";
   const variantQuote = "Q Query matrix";
 
@@ -134,28 +134,34 @@ test("validateStudyGuideAgainstDocument accepts short grounded quotes with symbo
       {
         ...BASE_STUDY_GUIDE.key_actions[0],
         supporting_quote: variantQuote,
-        citations: [{ source_type: "pdf", page: 1, excerpt: variantQuote }],
+        citations: [{ source_type: "pdf", page: 1, excerpt: "Q = Query matrix." }],
       },
     ],
     sections: [
       {
         ...BASE_STUDY_GUIDE.sections[0],
-        citations: [{ source_type: "pdf", page: 1, excerpt: variantQuote }],
+        citations: [{ source_type: "pdf", page: 1, excerpt: "Q = Query matrix." }],
       },
     ],
   };
 
-  assert.doesNotThrow(() =>
-    validateStudyGuideAgainstDocument(variantGuide, {
-      text,
-      fileType: "PDF",
-      pageCount: 1,
-      paragraphCount: null,
-    })
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(variantGuide, {
+        text,
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "QUOTE_NOT_FOUND");
+      return true;
+    }
   );
 });
 
-test("validateStudyGuideAgainstDocument accepts quote when strongly aligned with grounded citation", () => {
+test("validateStudyGuideAgainstDocument rejects paraphrased quote even when citation is grounded", () => {
   const text = "Work must be written entirely in your own words and include your own reflections.";
   const citationExcerpt = "written entirely in your own words and include your own reflections";
   const paraphrasedQuote =
@@ -178,17 +184,23 @@ test("validateStudyGuideAgainstDocument accepts quote when strongly aligned with
     ],
   };
 
-  assert.doesNotThrow(() =>
-    validateStudyGuideAgainstDocument(guide, {
-      text,
-      fileType: "PDF",
-      pageCount: 1,
-      paragraphCount: null,
-    })
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(guide, {
+        text,
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "QUOTE_NOT_FOUND");
+      return true;
+    }
   );
 });
 
-test("validateStudyGuideAgainstDocument accepts extraction-item citation fallback to grounded supporting quote", () => {
+test("validateStudyGuideAgainstDocument rejects extraction-item citation fallback to grounded supporting quote", () => {
   const guide: StudyGuide = {
     ...BASE_STUDY_GUIDE,
     key_actions: [
@@ -206,17 +218,23 @@ test("validateStudyGuideAgainstDocument accepts extraction-item citation fallbac
     ],
   };
 
-  assert.doesNotThrow(() =>
-    validateStudyGuideAgainstDocument(guide, {
-      text: "Review the weekly schedule before class.",
-      fileType: "PDF",
-      pageCount: 1,
-      paragraphCount: null,
-    })
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(guide, {
+        text: "Review the weekly schedule before class.",
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "CITATION_EXCERPT_NOT_FOUND");
+      return true;
+    }
   );
 });
 
-test("validateStudyGuideAgainstDocument accepts citation excerpts with ordered ellipsis fragments", () => {
+test("validateStudyGuideAgainstDocument rejects citation excerpts with ordered ellipsis fragments", () => {
   const text = "Review the weekly schedule before class and discuss assignments with your group.";
   const guide: StudyGuide = {
     ...BASE_STUDY_GUIDE,
@@ -247,13 +265,19 @@ test("validateStudyGuideAgainstDocument accepts citation excerpts with ordered e
     ],
   };
 
-  assert.doesNotThrow(() =>
-    validateStudyGuideAgainstDocument(guide, {
-      text,
-      fileType: "PDF",
-      pageCount: 1,
-      paragraphCount: null,
-    })
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(guide, {
+        text,
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "CITATION_EXCERPT_NOT_FOUND");
+      return true;
+    }
   );
 });
 
@@ -1102,9 +1126,8 @@ test("validateStudyGuideAgainstDocument rejects 'follow these step-by-step' solv
   );
 });
 
-test("validateStudyGuideAgainstDocument accepts citation excerpt with token-overlap grounding (PDF extraction artifacts)", () => {
-  // Simulates a model-generated excerpt that is close to but not identical to the extracted text
-  // due to PDF extraction artifacts (e.g. ligatures, extra whitespace, minor reordering).
+test("validateStudyGuideAgainstDocument rejects citation excerpt with token-overlap but no exact match", () => {
+  // Simulates a model-generated excerpt that is close to but not identical to the extracted text.
   const text =
     "The transformer architecture uses self-attention mechanisms to process input sequences in parallel. " +
     "Multi-head attention allows the model to jointly attend to information from different representation subspaces. " +
@@ -1140,19 +1163,24 @@ test("validateStudyGuideAgainstDocument accepts citation excerpt with token-over
     ],
   };
 
-  assert.doesNotThrow(() =>
-    validateStudyGuideAgainstDocument(guide, {
-      text,
-      fileType: "PDF",
-      pageCount: 1,
-      paragraphCount: null,
-    })
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(guide, {
+        text,
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "CITATION_EXCERPT_NOT_FOUND");
+      return true;
+    }
   );
 });
 
-test("validateStudyGuideAgainstDocument still rejects completely fabricated section citation excerpts even with token-overlap", () => {
-  // Section citations do NOT have the groundedFallbackExcerpt path, so the
-  // fabricated excerpt must fail on its own merits (no supporting-quote bail-out).
+test("validateStudyGuideAgainstDocument rejects completely fabricated section citation excerpts", () => {
+  // Fabricated excerpts must fail on their own merits.
   const text =
     "Review the weekly schedule before class and prepare for the group discussion. " +
     "Students should complete all assigned readings prior to the lecture session. " +
