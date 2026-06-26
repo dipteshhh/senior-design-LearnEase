@@ -103,6 +103,30 @@ test("buildVisualInventory skips oversized DOCX images without failing", () => {
   assert.match(result.manifest.warnings[0], /max_image_bytes/);
 });
 
+test("buildVisualInventory stores partial DOCX inventory when max total bytes is reached", () => {
+  const docx = buildZip([
+    { name: "word/media/image1.png", data: tinyPng },
+    { name: "word/media/image2.png", data: tinyPng },
+  ]);
+
+  const result = buildVisualInventory({
+    documentId: "doc-visual-total-bytes-cap",
+    fileType: "DOCX",
+    fileBuffer: docx,
+    createdAt,
+    limits: { max_total_bytes: tinyPng.byteLength },
+  });
+
+  assert.equal(result.manifest.status, "partial");
+  assert.equal(result.manifest.items.length, 1);
+  assert.equal(result.assets.length, 1);
+  assert.match(result.manifest.warnings[0], /max_total_bytes/);
+
+  const warningsText = result.manifest.warnings.join("\n");
+  assert.equal(warningsText.includes(tinyPng.toString("base64")), false);
+  assert.equal(warningsText.includes(tinyPng.toString("hex")), false);
+});
+
 test("buildVisualInventory skips DOCX images over the pixel cap", () => {
   const docx = buildZip([{ name: "word/media/image1.png", data: tinyPng }]);
 

@@ -612,6 +612,65 @@ test("uploadDocumentHandler still succeeds when visual inventory throws", async 
   assert.equal(row, undefined);
 });
 
+test("uploadDocumentHandler reuses existing DOCX and does not create duplicate visual inventory", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const text = "Lecture slides for week 8 module on hashing.";
+  const uploadOptions = {
+    filename: "duplicate-lecture.docx",
+    userId,
+    mediaEntries: [{ name: "image1.png", data: tinyPng }],
+  };
+  const beforeArtifacts = countArtifactDirectories();
+
+  const firstReq = makeDocxUploadReq(text, uploadOptions);
+  const firstRes = makeRes();
+  await uploadDocumentHandler(firstReq as any, firstRes as any);
+
+  assert.equal(firstRes.statusCode, 201);
+  const firstBody = firstRes.body as { document_id: string };
+  assert.ok(firstBody.document_id);
+
+  const inventoryAfterFirst = sqlite.getDb()
+    .prepare(
+      `
+        SELECT COUNT(*) AS count
+        FROM document_artifacts
+        WHERE document_id = ? AND artifact_type = 'VISUAL_INVENTORY'
+      `
+    )
+    .get(firstBody.document_id) as { count: number };
+  assert.equal(inventoryAfterFirst.count, 1);
+  assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+
+  const secondReq = makeDocxUploadReq(text, uploadOptions);
+  const secondRes = makeRes();
+  await uploadDocumentHandler(secondReq as any, secondRes as any);
+
+  assert.equal(secondRes.statusCode, 200);
+  const secondBody = secondRes.body as {
+    document_id: string;
+    reused_existing: boolean;
+  };
+  assert.equal(secondBody.reused_existing, true);
+  assert.equal(secondBody.document_id, firstBody.document_id);
+
+  const docs = listDocumentsByUser(userId);
+  assert.equal(docs.length, 1);
+  assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+
+  const inventoryAfterSecond = sqlite.getDb()
+    .prepare(
+      `
+        SELECT COUNT(*) AS count
+        FROM document_artifacts
+        WHERE document_id = ? AND artifact_type = 'VISUAL_INVENTORY'
+      `
+    )
+    .get(firstBody.document_id) as { count: number };
+  assert.equal(inventoryAfterSecond.count, 1);
+});
+
 test("uploadDocumentHandler accepts lecture PDF 01A course introduction content", async () => {
   await assertSupportedLectureUploadAccepted({
     filename: "4560-S26 - Lecture 01A - Course Introduction.pdf",
