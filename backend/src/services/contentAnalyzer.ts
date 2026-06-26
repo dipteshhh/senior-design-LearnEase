@@ -89,11 +89,19 @@ Overview metadata fields:
 - due_date: the assignment or project due date as mentioned in the document (e.g. "February 28, 2026"). Set to null if no due date is found.
 - estimated_time: estimated time to complete the work if mentioned in the document (e.g. "8-10 hours"). Set to null if not mentioned.
 
+Study brief style requirements:
+- Write the visible user-facing fields as a concise student briefing, not as copied paragraphs.
+- overview.summary should be 2-4 short sentences that orient the student to the document's purpose and highest-priority themes.
+- key_actions[].label, checklist[].label, and important_details labels should be short, direct, and student-readable. Keep evidence in supporting_quote/citations, not in the label.
+- sections[].content should be compact and skimmable. Prefer short lines or brief bullet-like paragraphs separated by \n\n.
+- Do NOT add fields such as takeaways, rationale, why_it_matters, or source. Use only the exact schema above.
+- Do NOT infer missing requirements, hints, solution strategy, answers, or unstated next steps.
+
 Key actions rules:
 - key_actions MUST NOT be empty. Extract at least 3 key actions from the document.
 - Key actions are the most important things the student needs to know or do based on this document.
 - For homework/assignments: extract key requirements, constraints, submission instructions, and important directives (e.g. "Submit as a single PDF", "Use Python 3.x", "Include citations in APA format", "Work must be individual").
-- For lectures: extract key takeaways, main concepts to remember, and study recommendations.
+- For lectures: extract main ideas, named concepts to remember, and study recommendations.
 - For syllabi: extract critical policies, important deadlines, and key course requirements.
 - Key actions are NOT answers or solutions - they are high-level directives and requirements extracted from the document.
 
@@ -102,7 +110,7 @@ Sections rules:
 - Prefer concise descriptive titles (e.g. "Submission Requirements", "Key Concepts", "Exam Topics", "Project Scope").
 - When the source document has enough structure/content, produce at least 3 sections.
 - For short or sparse documents, fewer than 3 sections is acceptable if additional sections would be repetitive or low-value.
-- In section content, separate distinct concepts or list items with \n\n rather than joining them into a single run-on sentence with dashes or commas. Each distinct point, definition, or item should appear on its own line so it is readable in focus mode.
+- In section content, brief the student on what the section covers using concise source-faithful wording. Separate distinct concepts or list items with \n\n rather than joining them into a single run-on sentence with dashes or commas. Each distinct point, definition, or item should appear on its own line so it is readable in focus mode.
 
 IMPORTANT RULES:
 - Do NOT solve problems or provide answers
