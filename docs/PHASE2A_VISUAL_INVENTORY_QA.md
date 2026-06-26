@@ -50,7 +50,7 @@ Prepare small fixtures locally (preferably also committed under `backend/src/tes
 | **DOCX-2** | DOCX with **multiple** PNG/JPEG images | Ordering, asset IDs, cap headroom |
 | **DOCX-3** | DOCX with **unsupported media** (e.g. EMF/WMF in `word/media/`) | Verify skip without upload failure |
 | **DOCX-4** | DOCX with **one oversized raster** (above per-image byte or dimension cap) | Verify `partial` or asset skip; upload still succeeds |
-| **DOCX-5** | DOCX with **no images** (text only) | Manifest `assets: []`, status `ready` |
+| **DOCX-5** | DOCX with **no images** (text only) | Manifest `assets: []`, status `complete` |
 | **PDF-1** | PDF with embedded PNG (optional) | Confirm **no-op/skipped** inventory in Phase 2A; upload + study guide unchanged |
 
 ### Fixture labeling convention (recommended)
@@ -75,7 +75,7 @@ Run against a local or staging backend with `ARTIFACTS_DIR` visible to the teste
 ### Upload & inventory
 
 - [ ] Upload **DOCX-1** → HTTP 201 (or 200 if duplicate), `document_id` returned, no new user-facing error fields
-- [ ] Upload **DOCX-5** → upload succeeds; inventory manifest exists or is safely absent with `ready`/empty assets
+- [ ] Upload **DOCX-5** → upload succeeds; inventory manifest exists or is safely absent with `complete`/empty assets
 - [ ] Upload **DOCX-4** → upload succeeds; manifest reflects cap/skip (`partial` or omitted asset), not upload failure
 - [ ] Upload **DOCX-3** → upload succeeds; unsupported media skipped, text extraction unchanged
 - [ ] Upload **PDF-1** (if used) → upload succeeds; inventory skipped/no-op; no new API fields
@@ -153,7 +153,7 @@ Phase 2A is **done** when all of the following hold:
 
 - [ ] DOCX with embedded raster images produces a **`VISUAL_INVENTORY`** manifest artifact and encrypted `visuals/*` blobs
 - [ ] DOCX with no images produces a valid manifest with `assets: []` (or documented skip) without failing upload
-- [ ] **`partial`**, **`failed`**, and **`skipped`** manifest states are handled safely and do not fail upload
+- [ ] **`complete`**, **`partial`**, and **`skipped`** manifest states are handled safely and do not fail upload
 - [ ] PDF uploads behave as today; inventory is skipped or no-op with no user impact
 - [ ] Document deletion removes visual files (via directory cleanup and/or registered paths)
 
@@ -212,7 +212,7 @@ When inspecting encrypted manifest in dev (decrypt locally only):
 ```json
 {
   "extraction": {
-    "status": "ready | partial | failed | skipped",
+    "status": "complete | partial | skipped",
     "error_code": null,
     "error_message": null
   },
@@ -222,9 +222,8 @@ When inspecting encrypted manifest in dev (decrypt locally only):
 
 | Status | Expected upload HTTP | Notes |
 |--------|------------------------|-------|
-| `ready` | 201/200 | All eligible assets extracted |
+| `complete` | 201/200 | All eligible assets extracted (including zero-image DOCX) |
 | `partial` | 201/200 | Some assets skipped due to caps or corrupt entries |
-| `failed` | 201/200 | Sidecar failed; manifest may still exist with empty assets |
 | `skipped` | 201/200 | PDF deferral, non-DOCX, or feature flag off |
 
 ---
