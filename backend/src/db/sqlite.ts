@@ -31,6 +31,10 @@ interface TableInfoRow {
   name: string;
 }
 
+interface SqliteMasterRow {
+  sql: string | null;
+}
+
 function hasColumn(db: SqliteDatabase, tableName: string, columnName: string): boolean {
   const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as TableInfoRow[];
   return rows.some((row) => row.name === columnName);
@@ -110,6 +114,50 @@ function ensureDocumentContentHashColumn(db: SqliteDatabase): void {
   if (!hasColumn(db, "documents", "content_hash")) {
     db.exec("ALTER TABLE documents ADD COLUMN content_hash TEXT;");
   }
+}
+
+function ensureVisualInventoryArtifactType(db: SqliteDatabase): void {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'document_artifacts'")
+    .get() as SqliteMasterRow | undefined;
+
+  if (!row?.sql || row.sql.includes("'VISUAL_INVENTORY'")) {
+    return;
+  }
+
+  db.exec(`
+    ALTER TABLE document_artifacts RENAME TO document_artifacts_legacy;
+
+    CREATE TABLE document_artifacts (
+      id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL,
+      artifact_type TEXT NOT NULL CHECK (artifact_type IN ('ORIGINAL_FILE', 'EXTRACTED_TEXT', 'VISUAL_INVENTORY')),
+      encrypted_path TEXT NOT NULL,
+      content_hash TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+      UNIQUE (document_id, artifact_type)
+    );
+
+    INSERT INTO document_artifacts (
+      id,
+      document_id,
+      artifact_type,
+      encrypted_path,
+      content_hash,
+      created_at
+    )
+    SELECT
+      id,
+      document_id,
+      artifact_type,
+      encrypted_path,
+      content_hash,
+      created_at
+    FROM document_artifacts_legacy;
+
+    DROP TABLE document_artifacts_legacy;
+  `);
 }
 
 function backfillDocumentFlowState(db: SqliteDatabase): void {
@@ -229,7 +277,7 @@ export function initializeDatabase(): void {
     CREATE TABLE IF NOT EXISTS document_artifacts (
       id TEXT PRIMARY KEY,
       document_id TEXT NOT NULL,
-      artifact_type TEXT NOT NULL CHECK (artifact_type IN ('ORIGINAL_FILE', 'EXTRACTED_TEXT')),
+      artifact_type TEXT NOT NULL CHECK (artifact_type IN ('ORIGINAL_FILE', 'EXTRACTED_TEXT', 'VISUAL_INVENTORY')),
       encrypted_path TEXT NOT NULL,
       content_hash TEXT,
       created_at TEXT NOT NULL,
@@ -268,6 +316,7 @@ export function initializeDatabase(): void {
   ensureDocumentFlowColumns(db);
   ensureHomeworkDeadlineColumns(db);
   ensureDocumentContentHashColumn(db);
+  ensureVisualInventoryArtifactType(db);
   db.exec("DROP INDEX IF EXISTS idx_documents_user_content_hash;");
   db.exec(
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_user_content_hash

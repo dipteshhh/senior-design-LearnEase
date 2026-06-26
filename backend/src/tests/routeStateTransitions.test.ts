@@ -13,6 +13,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { randomUUID } from "crypto";
+import { readEncryptedText } from "../lib/encryption.js";
+import { buildMinimalDocxBuffer, tinyPng } from "./visualInventoryTestUtils.js";
 
 // Set up isolated test DB + encryption before any store imports
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "learnease-route-"));
@@ -96,6 +98,30 @@ function makeUploadReq(
     file: {
       buffer: buildPdfBuffer(text),
       mimetype: "application/pdf",
+      originalname: filename,
+    },
+  };
+}
+
+function makeDocxUploadReq(
+  text: string,
+  {
+    filename = "upload.docx",
+    userId = randomUUID(),
+    email = "upload@example.com",
+    mediaEntries = [],
+  }: {
+    filename?: string;
+    userId?: string;
+    email?: string;
+    mediaEntries?: Array<{ name: string; data: Buffer }>;
+  } = {}
+): MockReq {
+  return {
+    auth: { userId, email },
+    file: {
+      buffer: buildMinimalDocxBuffer(text, mediaEntries),
+      mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       originalname: filename,
     },
   };
@@ -505,6 +531,144 @@ test("uploadDocumentHandler stores supported lecture upload", async () => {
   assert.equal(docs.length, 1);
   assert.equal(docs[0]?.documentType, "LECTURE");
   assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+});
+
+test("uploadDocumentHandler stores DOCX visual inventory as an internal artifact", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const req = makeDocxUploadReq("Lecture slides for week 5 module on sorting.", {
+    filename: "lecture.docx",
+    userId,
+    mediaEntries: [{ name: "image1.png", data: tinyPng }],
+  });
+  const res = makeRes();
+
+  await uploadDocumentHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 201);
+  const body = res.body as { document_id?: string };
+  assert.ok(body.document_id);
+
+  const row = sqlite.getDb()
+    .prepare(
+      `
+        SELECT encrypted_path
+        FROM document_artifacts
+        WHERE document_id = ? AND artifact_type = 'VISUAL_INVENTORY'
+      `
+    )
+    .get(body.document_id) as { encrypted_path: string } | undefined;
+
+  assert.ok(row);
+  const manifest = JSON.parse(readEncryptedText(row.encrypted_path)) as {
+    source_file_type: string;
+    status: string;
+    items: Array<{ media_path?: string; encrypted_artifact_path: string }>;
+  };
+  assert.equal(manifest.source_file_type, "DOCX");
+  assert.equal(manifest.status, "complete");
+  assert.equal(manifest.items.length, 1);
+  assert.equal(manifest.items[0].media_path, "word/media/image1.png");
+  assert.equal(manifest.items[0].encrypted_artifact_path, "visuals/docx-image-1.png");
+});
+
+test("uploadDocumentHandler still succeeds when visual inventory throws", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const req = makeDocxUploadReq("Lecture slides for week 6 module on graphs.", {
+    filename: "lecture-visual-failure.docx",
+    userId,
+    mediaEntries: [{ name: "image1.png", data: tinyPng }],
+  });
+  const res = makeRes();
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "test";
+  process.env.LEARNEASE_TEST_FORCE_VISUAL_INVENTORY_FAILURE = "true";
+
+  try {
+    await uploadDocumentHandler(req as any, res as any);
+  } finally {
+    if (previousNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+    delete process.env.LEARNEASE_TEST_FORCE_VISUAL_INVENTORY_FAILURE;
+  }
+
+  assert.equal(res.statusCode, 201);
+  const docs = listDocumentsByUser(userId);
+  assert.equal(docs.length, 1);
+
+  const row = sqlite.getDb()
+    .prepare(
+      `
+        SELECT id
+        FROM document_artifacts
+        WHERE document_id = ? AND artifact_type = 'VISUAL_INVENTORY'
+      `
+    )
+    .get(docs[0].id);
+  assert.equal(row, undefined);
+});
+
+test("uploadDocumentHandler reuses existing DOCX and does not create duplicate visual inventory", async () => {
+  const { uploadDocumentHandler } = await loadHandlers();
+  const userId = randomUUID();
+  const text = "Lecture slides for week 8 module on hashing.";
+  const uploadOptions = {
+    filename: "duplicate-lecture.docx",
+    userId,
+    mediaEntries: [{ name: "image1.png", data: tinyPng }],
+  };
+  const beforeArtifacts = countArtifactDirectories();
+
+  const firstReq = makeDocxUploadReq(text, uploadOptions);
+  const firstRes = makeRes();
+  await uploadDocumentHandler(firstReq as any, firstRes as any);
+
+  assert.equal(firstRes.statusCode, 201);
+  const firstBody = firstRes.body as { document_id: string };
+  assert.ok(firstBody.document_id);
+
+  const inventoryAfterFirst = sqlite.getDb()
+    .prepare(
+      `
+        SELECT COUNT(*) AS count
+        FROM document_artifacts
+        WHERE document_id = ? AND artifact_type = 'VISUAL_INVENTORY'
+      `
+    )
+    .get(firstBody.document_id) as { count: number };
+  assert.equal(inventoryAfterFirst.count, 1);
+  assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+
+  const secondReq = makeDocxUploadReq(text, uploadOptions);
+  const secondRes = makeRes();
+  await uploadDocumentHandler(secondReq as any, secondRes as any);
+
+  assert.equal(secondRes.statusCode, 200);
+  const secondBody = secondRes.body as {
+    document_id: string;
+    reused_existing: boolean;
+  };
+  assert.equal(secondBody.reused_existing, true);
+  assert.equal(secondBody.document_id, firstBody.document_id);
+
+  const docs = listDocumentsByUser(userId);
+  assert.equal(docs.length, 1);
+  assert.equal(countArtifactDirectories(), beforeArtifacts + 1);
+
+  const inventoryAfterSecond = sqlite.getDb()
+    .prepare(
+      `
+        SELECT COUNT(*) AS count
+        FROM document_artifacts
+        WHERE document_id = ? AND artifact_type = 'VISUAL_INVENTORY'
+      `
+    )
+    .get(firstBody.document_id) as { count: number };
+  assert.equal(inventoryAfterSecond.count, 1);
 });
 
 test("uploadDocumentHandler accepts lecture PDF 01A course introduction content", async () => {
