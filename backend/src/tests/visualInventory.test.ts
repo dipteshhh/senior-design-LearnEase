@@ -103,6 +103,56 @@ test("buildVisualInventory skips oversized DOCX images without failing", () => {
   assert.match(result.manifest.warnings[0], /max_image_bytes/);
 });
 
+test("buildVisualInventory skips DOCX images over the pixel cap", () => {
+  const docx = buildZip([{ name: "word/media/image1.png", data: tinyPng }]);
+
+  const result = buildVisualInventory({
+    documentId: "doc-visual-pixel-cap",
+    fileType: "DOCX",
+    fileBuffer: docx,
+    createdAt,
+    limits: { max_image_pixels: 0 },
+  });
+
+  assert.equal(result.manifest.status, "partial");
+  assert.equal(result.manifest.items.length, 0);
+  assert.equal(result.assets.length, 0);
+  assert.match(result.manifest.warnings[0], /max_image_pixels/);
+});
+
+test("buildVisualInventory skips corrupt DOCX image bytes without failing", () => {
+  const docx = buildZip([{ name: "word/media/image1.png", data: Buffer.from("not a png") }]);
+
+  const result = buildVisualInventory({
+    documentId: "doc-visual-corrupt-image",
+    fileType: "DOCX",
+    fileBuffer: docx,
+    createdAt,
+  });
+
+  assert.equal(result.manifest.status, "partial");
+  assert.equal(result.manifest.items.length, 0);
+  assert.equal(result.assets.length, 0);
+  assert.match(result.manifest.warnings[0], /dimensions could not be read/);
+});
+
+test("buildVisualInventory records partial DOCX inventory when timeout is reached", () => {
+  const docx = buildZip([{ name: "word/media/image1.png", data: tinyPng }]);
+
+  const result = buildVisualInventory({
+    documentId: "doc-visual-timeout",
+    fileType: "DOCX",
+    fileBuffer: docx,
+    createdAt,
+    limits: { timeout_ms: 0 },
+  });
+
+  assert.equal(result.manifest.status, "partial");
+  assert.equal(result.manifest.items.length, 0);
+  assert.equal(result.assets.length, 0);
+  assert.match(result.manifest.warnings[0], /timeout_ms/);
+});
+
 test("buildVisualInventory leaves PDF visual inventory as a safe no-op", () => {
   const result = buildVisualInventory({
     documentId: "doc-visual-pdf",

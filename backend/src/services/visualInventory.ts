@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { performance } from "perf_hooks";
 import { inflateRawSync } from "zlib";
 
 export type VisualInventorySourceFileType = "PDF" | "DOCX";
@@ -8,6 +9,8 @@ export interface VisualInventoryLimits {
   max_images: number;
   max_total_bytes: number;
   max_image_bytes: number;
+  max_image_pixels: number;
+  timeout_ms: number;
 }
 
 export interface VisualInventoryItem {
@@ -67,6 +70,8 @@ const DEFAULT_LIMITS: VisualInventoryLimits = {
   max_images: 50,
   max_total_bytes: 25 * 1024 * 1024,
   max_image_bytes: 5 * 1024 * 1024,
+  max_image_pixels: 4096 * 4096,
+  timeout_ms: 15_000,
 };
 
 const SUPPORTED_DOCX_MEDIA: Record<string, { contentType: string; extension: string }> = {
@@ -82,6 +87,12 @@ const CENTRAL_DIRECTORY_SIGNATURE = 0x02014b50;
 const LOCAL_FILE_SIGNATURE = 0x04034b50;
 const ZIP64_SENTINEL_16 = 0xffff;
 const ZIP64_SENTINEL_32 = 0xffffffff;
+
+class VisualInventoryTimeoutError extends Error {
+  constructor() {
+    super("Visual inventory extraction timed out.");
+  }
+}
 
 export function buildVisualInventory(
   options: BuildVisualInventoryOptions
@@ -125,6 +136,8 @@ function normalizeLimits(limits?: Partial<VisualInventoryLimits>): VisualInvento
     max_images: limits?.max_images ?? DEFAULT_LIMITS.max_images,
     max_total_bytes: limits?.max_total_bytes ?? DEFAULT_LIMITS.max_total_bytes,
     max_image_bytes: limits?.max_image_bytes ?? DEFAULT_LIMITS.max_image_bytes,
+    max_image_pixels: limits?.max_image_pixels ?? DEFAULT_LIMITS.max_image_pixels,
+    timeout_ms: limits?.timeout_ms ?? DEFAULT_LIMITS.timeout_ms,
   };
 }
 
@@ -142,10 +155,31 @@ function buildDocxVisualInventory({
   const warnings: string[] = [];
   const items: VisualInventoryItem[] = [];
   const assets: VisualInventoryAsset[] = [];
-  const entries = readZipEntries(fileBuffer);
+  const startedAtMs = performance.now();
+  let entries: ZipEntry[];
   let totalBytes = 0;
 
+  try {
+    throwIfTimedOut(startedAtMs, limits.timeout_ms);
+    entries = readZipEntries(fileBuffer, () => throwIfTimedOut(startedAtMs, limits.timeout_ms));
+  } catch (error) {
+    if (error instanceof VisualInventoryTimeoutError) {
+      warnings.push(
+        `DOCX visual inventory reached timeout_ms (${limits.timeout_ms}); skipped media extraction.`
+      );
+      return buildDocxManifestResult(documentId, createdAt, limits, items, assets, warnings);
+    }
+    throw error;
+  }
+
   for (const entry of entries) {
+    if (isTimedOut(startedAtMs, limits.timeout_ms)) {
+      warnings.push(
+        `DOCX visual inventory reached timeout_ms (${limits.timeout_ms}); skipped remaining supported media.`
+      );
+      break;
+    }
+
     const mediaPath = entry.name.replace(/\\/g, "/");
     if (!mediaPath.startsWith("word/media/") || mediaPath.endsWith("/")) {
       continue;
@@ -163,12 +197,33 @@ function buildDocxVisualInventory({
       break;
     }
 
+    if (entry.uncompressedSize > limits.max_image_bytes) {
+      warnings.push(
+        `Skipped ${mediaPath}: image byte size ${entry.uncompressedSize} exceeds max_image_bytes (${limits.max_image_bytes}).`
+      );
+      continue;
+    }
+
+    if (totalBytes + entry.uncompressedSize > limits.max_total_bytes) {
+      warnings.push(
+        `DOCX visual inventory reached max_total_bytes (${limits.max_total_bytes}); skipped remaining supported media.`
+      );
+      break;
+    }
+
     let imageBytes: Buffer;
     try {
       imageBytes = readZipEntryContent(fileBuffer, entry);
     } catch {
       warnings.push(`Skipped ${mediaPath}: failed to extract media entry.`);
       continue;
+    }
+
+    if (isTimedOut(startedAtMs, limits.timeout_ms)) {
+      warnings.push(
+        `DOCX visual inventory reached timeout_ms (${limits.timeout_ms}); skipped remaining supported media.`
+      );
+      break;
     }
 
     if (imageBytes.byteLength > limits.max_image_bytes) {
@@ -191,6 +246,19 @@ function buildDocxVisualInventory({
     const encryptedArtifactPath = `visuals/${id}.${mediaType.extension}`;
     const dimensions = readImageDimensions(imageBytes, mediaType.contentType);
 
+    if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) {
+      warnings.push(`Skipped ${mediaPath}: image dimensions could not be read.`);
+      continue;
+    }
+
+    const pixelCount = dimensions.width * dimensions.height;
+    if (pixelCount > limits.max_image_pixels) {
+      warnings.push(
+        `Skipped ${mediaPath}: image pixel count ${pixelCount} exceeds max_image_pixels (${limits.max_image_pixels}).`
+      );
+      continue;
+    }
+
     items.push({
       id,
       source_file_type: "DOCX",
@@ -202,8 +270,8 @@ function buildDocxVisualInventory({
       byte_size: imageBytes.byteLength,
       image_hash: imageHash,
       encrypted_artifact_path: encryptedArtifactPath,
-      width: dimensions?.width ?? null,
-      height: dimensions?.height ?? null,
+      width: dimensions.width,
+      height: dimensions.height,
     });
     assets.push({
       encryptedArtifactPath,
@@ -212,6 +280,17 @@ function buildDocxVisualInventory({
     totalBytes += imageBytes.byteLength;
   }
 
+  return buildDocxManifestResult(documentId, createdAt, limits, items, assets, warnings);
+}
+
+function buildDocxManifestResult(
+  documentId: string,
+  createdAt: string,
+  limits: VisualInventoryLimits,
+  items: VisualInventoryItem[],
+  assets: VisualInventoryAsset[],
+  warnings: string[]
+): VisualInventoryBuildResult {
   return {
     manifest: {
       document_id: documentId,
@@ -236,7 +315,8 @@ function getSupportedDocxMediaType(
   return SUPPORTED_DOCX_MEDIA[lowerPath.slice(dotIndex)] ?? null;
 }
 
-function readZipEntries(buffer: Buffer): ZipEntry[] {
+function readZipEntries(buffer: Buffer, checkTimeout: () => void): ZipEntry[] {
+  checkTimeout();
   const eocdOffset = findEndOfCentralDirectory(buffer);
   if (eocdOffset === -1) {
     throw new Error("DOCX ZIP central directory not found.");
@@ -261,6 +341,7 @@ function readZipEntries(buffer: Buffer): ZipEntry[] {
   const centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize;
 
   while (offset < centralDirectoryEnd && entries.length < totalEntries) {
+    checkTimeout();
     ensureRange(buffer, offset, 46);
     if (buffer.readUInt32LE(offset) !== CENTRAL_DIRECTORY_SIGNATURE) {
       throw new Error("Invalid DOCX ZIP central directory entry.");
@@ -290,6 +371,16 @@ function readZipEntries(buffer: Buffer): ZipEntry[] {
   }
 
   return entries;
+}
+
+function isTimedOut(startedAtMs: number, timeoutMs: number): boolean {
+  return performance.now() - startedAtMs >= timeoutMs;
+}
+
+function throwIfTimedOut(startedAtMs: number, timeoutMs: number): void {
+  if (isTimedOut(startedAtMs, timeoutMs)) {
+    throw new VisualInventoryTimeoutError();
+  }
 }
 
 function findEndOfCentralDirectory(buffer: Buffer): number {
