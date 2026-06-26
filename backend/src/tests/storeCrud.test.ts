@@ -4,6 +4,9 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import type { DocumentRecord } from "../store/memoryStore.js";
+import { readEncryptedBuffer, readEncryptedText } from "../lib/encryption.js";
+import { buildVisualInventory } from "../services/visualInventory.js";
+import { buildZip, tinyPng } from "./visualInventoryTestUtils.js";
 
 // The memoryStore module captures `const db = getDb()` at module scope.
 // Calling closeDatabase() invalidates that reference for all subsequent calls.
@@ -304,6 +307,55 @@ test("saveDocument with studyGuide syncs checklist items to DB", () => {
 
   const notFound = store.updateChecklistItem("aaaaaaaa-6666-4aaa-8aaa-aaaaaaaaaaaa", "cl-999", true);
   assert.equal(notFound, false);
+});
+
+test("saveVisualInventoryArtifact stores encrypted manifest and is removed with document cleanup", () => {
+  const docId = "aaaaaaaa-8888-4aaa-8aaa-aaaaaaaaaaaa";
+  store.saveDocument(makeDoc(docId, "user-visual-store"));
+  const inventory = buildVisualInventory({
+    documentId: docId,
+    fileType: "DOCX",
+    fileBuffer: buildZip([{ name: "word/media/image1.png", data: tinyPng }]),
+    createdAt: "2026-06-26T12:00:00.000Z",
+  });
+
+  store.saveVisualInventoryArtifact(docId, inventory);
+
+  const row = sqlite.getDb()
+    .prepare(
+      `
+        SELECT artifact_type, encrypted_path, content_hash
+        FROM document_artifacts
+        WHERE document_id = ? AND artifact_type = 'VISUAL_INVENTORY'
+      `
+    )
+    .get(docId) as
+    | { artifact_type: string; encrypted_path: string; content_hash: string | null }
+    | undefined;
+
+  assert.ok(row);
+  assert.equal(row.artifact_type, "VISUAL_INVENTORY");
+  assert.ok(row.content_hash);
+
+  const manifest = JSON.parse(readEncryptedText(row.encrypted_path)) as {
+    status: string;
+    items: Array<{ encrypted_artifact_path: string; media_path: string }>;
+  };
+  assert.equal(manifest.status, "complete");
+  assert.equal(manifest.items.length, 1);
+  assert.equal(manifest.items[0].media_path, "word/media/image1.png");
+
+  const imagePath = path.resolve(
+    process.env.ARTIFACTS_DIR!,
+    docId,
+    manifest.items[0].encrypted_artifact_path
+  );
+  assert.deepEqual(readEncryptedBuffer(imagePath), tinyPng);
+
+  const artifactDir = path.resolve(process.env.ARTIFACTS_DIR!, docId);
+  assert.equal(fs.existsSync(artifactDir), true);
+  assert.equal(store.deleteDocumentById(docId), true);
+  assert.equal(fs.existsSync(artifactDir), false);
 });
 
 // Cleanup: close DB and remove temp dir after all tests in this file

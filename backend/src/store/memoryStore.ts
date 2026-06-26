@@ -9,11 +9,13 @@ import {
   writeEncryptedBuffer,
   writeEncryptedText,
 } from "../lib/encryption.js";
+import type { VisualInventoryBuildResult } from "../services/visualInventory.js";
 
 export type DocumentStatus = "uploaded" | "processing" | "ready" | "failed";
 export type GenerationStatus = "idle" | "processing" | "ready" | "failed";
 export type FileType = "PDF" | "DOCX";
 export type ReminderStatus = "pending" | "sending" | "sent" | "failed" | "skipped" | "past_due";
+export type DocumentArtifactType = "ORIGINAL_FILE" | "EXTRACTED_TEXT" | "VISUAL_INVENTORY";
 
 const FLOW_PROCESSING_CODE = {
   STUDY_GUIDE: "STUDY_GUIDE_PROCESSING",
@@ -259,6 +261,16 @@ function writeExtractedTextArtifact(doc: DocumentRecord): string {
   return artifactPath;
 }
 
+function resolveDocumentArtifactPath(documentId: string, relativePath: string): string {
+  const artifactDir = ensureDocumentArtifactDir(documentId);
+  const artifactPath = path.resolve(artifactDir, relativePath);
+  const artifactDirWithSeparator = `${artifactDir}${path.sep}`;
+  if (artifactPath !== artifactDir && !artifactPath.startsWith(artifactDirWithSeparator)) {
+    throw new Error("Artifact path escapes document artifact directory.");
+  }
+  return artifactPath;
+}
+
 function upsertUser(userId: string, email?: string, name?: string): void {
   const now = new Date().toISOString();
   db.prepare(
@@ -283,7 +295,7 @@ export function upsertAuthenticatedUser(userId: string, email: string, name?: st
 
 function upsertArtifact(
   documentId: string,
-  artifactType: "ORIGINAL_FILE" | "EXTRACTED_TEXT",
+  artifactType: DocumentArtifactType,
   encryptedPath: string,
   contentHash: string | null
 ): void {
@@ -678,6 +690,27 @@ export function saveDocument(doc: DocumentRecord): void {
     upsertDocument(normalizedDoc);
   });
   tx();
+}
+
+export function saveVisualInventoryArtifact(
+  documentId: string,
+  inventory: VisualInventoryBuildResult
+): void {
+  const artifactDir = ensureDocumentArtifactDir(documentId);
+  const visualsDir = path.resolve(artifactDir, "visuals");
+  fs.rmSync(visualsDir, { recursive: true, force: true });
+
+  for (const asset of inventory.assets) {
+    const assetPath = resolveDocumentArtifactPath(documentId, asset.encryptedArtifactPath);
+    fs.mkdirSync(path.dirname(assetPath), { recursive: true });
+    writeEncryptedBuffer(assetPath, asset.content);
+  }
+
+  const manifestJson = JSON.stringify(inventory.manifest, null, 2);
+  const manifestPath = path.resolve(artifactDir, "visual-inventory.json");
+  writeEncryptedText(manifestPath, manifestJson);
+  const contentHash = createHash("sha256").update(manifestJson).digest("hex");
+  upsertArtifact(documentId, "VISUAL_INVENTORY", manifestPath, contentHash);
 }
 
 export function getDocument(id: string): DocumentRecord | undefined {

@@ -14,6 +14,7 @@ import { generateQuiz } from "../services/quizGenerator.js";
 import { extractDueDeadline } from "../services/dueDateExtractor.js";
 import { buildDeadlineDatetime } from "../services/reminderScheduler.js";
 import { extractTextFromBuffer } from "../services/textExtractor.js";
+import { buildVisualInventory } from "../services/visualInventory.js";
 import {
   ContractValidationError,
   normalizeDocumentText,
@@ -29,6 +30,7 @@ import {
   findDocumentIdByUserAndContentHash,
   listDocumentSummariesByUser,
   saveDocument,
+  saveVisualInventoryArtifact,
   updateChecklistItem,
   updateAssignmentDueDate,
   updateAssignmentDueTime,
@@ -394,6 +396,22 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
     }
 
     const documentId = randomUUID();
+    let visualInventory: ReturnType<typeof buildVisualInventory> | null = null;
+    try {
+      visualInventory = buildVisualInventory({
+        documentId,
+        fileType: extracted.fileType,
+        fileBuffer: file.buffer,
+      });
+    } catch (visualInventoryError) {
+      logger.warn("Visual inventory extraction skipped", {
+        error: visualInventoryError,
+        documentId,
+        fileType: extracted.fileType,
+        filename: file.originalname,
+      });
+    }
+
     try {
       saveDocument({
         id: documentId,
@@ -427,6 +445,19 @@ export async function uploadDocumentHandler(req: Request, res: Response): Promis
         reminderLastError: null,
         reminderAttemptedAt: null,
       });
+      if (visualInventory) {
+        try {
+          saveVisualInventoryArtifact(documentId, visualInventory);
+        } catch (visualInventoryPersistError) {
+          logger.warn("Visual inventory artifact persistence skipped", {
+            error: visualInventoryPersistError,
+            documentId,
+            fileType: extracted.fileType,
+            itemCount: visualInventory.manifest.items.length,
+            status: visualInventory.manifest.status,
+          });
+        }
+      }
     } catch (persistError) {
       if (isContentHashUniqueConstraintError(persistError)) {
         const existingOnConflict = findDocumentIdByUserAndContentHash(userId, contentHash);
