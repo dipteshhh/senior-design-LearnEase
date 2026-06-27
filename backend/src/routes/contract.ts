@@ -15,6 +15,7 @@ import { extractDueDeadline } from "../services/dueDateExtractor.js";
 import { buildDeadlineDatetime } from "../services/reminderScheduler.js";
 import { extractTextFromBuffer } from "../services/textExtractor.js";
 import { buildVisualInventory } from "../services/visualInventory.js";
+import { generateVisualObservationsBestEffort } from "../services/visualObservationAnalyzer.js";
 import {
   ContractValidationError,
   normalizeDocumentText,
@@ -27,6 +28,7 @@ import {
   getDocumentMetadata,
   getDocumentOwnerId,
   getVisualInventoryManifest,
+  getVisualObservationsArtifact,
   backfillMissingContentHashesForUser,
   findDocumentIdByUserAndContentHash,
   listDocumentSummariesByUser,
@@ -683,6 +685,10 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
         studyGuideErrorCode: null,
         studyGuideErrorMessage: null,
       }));
+
+      if (classification.llmDocumentType === "LECTURE") {
+        await generateVisualObservationsBestEffort(documentId, doc.userId);
+      }
     } catch (error) {
       const failure = toFailureCode(error);
       updateDocumentStatus(documentId, {
@@ -784,6 +790,10 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
         studyGuideErrorCode: null,
         studyGuideErrorMessage: null,
       }));
+
+      if (llmDocumentType === "LECTURE") {
+        await generateVisualObservationsBestEffort(documentId, doc.userId);
+      }
     } catch (error) {
       const failure = toFailureCode(error);
       updateDocumentStatus(documentId, {
@@ -833,6 +843,21 @@ export async function getStudyGuideHandler(req: Request, res: Response): Promise
     ...doc.studyGuide,
     checklist_completion: checklistCompletion,
   });
+}
+
+export async function getVisualObservationsHandler(req: Request, res: Response): Promise<void> {
+  const documentId = readDocumentIdParam(req, res);
+  if (!documentId) return;
+
+  if (!ensureOwnershipOnly(req, res, documentId)) return;
+
+  const read = getVisualObservationsArtifact(documentId);
+  if (!read.ok) {
+    sendApiError(res, 404, "NOT_FOUND", "Visual observations not found.");
+    return;
+  }
+
+  res.status(200).json(read.artifact);
 }
 
 export async function createQuizHandler(req: Request, res: Response): Promise<void> {

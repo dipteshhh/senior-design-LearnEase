@@ -4,6 +4,7 @@ import type {
   DocumentListItem,
   Quiz,
   StudyGuideResponse,
+  VisualObservationsArtifact,
 } from "@/lib/contracts";
 
 export async function listDocuments(q?: string): Promise<DocumentListItem[]> {
@@ -41,6 +42,7 @@ export async function getDocument(id: string): Promise<DocumentDetail | null> {
   if (!document) return null;
 
   let studyGuide: StudyGuideResponse | null = null;
+  let visualObservations: VisualObservationsArtifact | null = null;
   if (document.study_guide_status === "ready" || document.has_study_guide) {
     try {
       studyGuide = await api<StudyGuideResponse>(`/api/study-guide/${id}`);
@@ -52,8 +54,19 @@ export async function getDocument(id: string): Promise<DocumentDetail | null> {
     }
   }
 
+  try {
+    visualObservations = await api<VisualObservationsArtifact>(
+      `/api/documents/${id}/visual-observations`
+    );
+  } catch (error) {
+    if (!(error instanceof ApiClientError && error.status === 404)) {
+      throw error;
+    }
+    visualObservations = null;
+  }
+
   if (!studyGuide) {
-    return { document, studyGuide: null, checklistCompletion: {} };
+    return { document, studyGuide: null, checklistCompletion: {}, visualObservations };
   }
 
   const { checklist_completion, ...guide } = studyGuide;
@@ -61,6 +74,7 @@ export async function getDocument(id: string): Promise<DocumentDetail | null> {
     document,
     studyGuide: guide,
     checklistCompletion: checklist_completion ?? {},
+    visualObservations,
   };
 }
 

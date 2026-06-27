@@ -4,8 +4,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-// Isolated DB so we can exercise the VISUAL_INVENTORY artifact-type migration
-// starting from the pre-Phase-2A schema (CHECK without VISUAL_INVENTORY).
+// Isolated DB so we can exercise artifact-type CHECK migrations starting from
+// the pre-Phase-2A schema (CHECK without visual artifact types).
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "learnease-migration-"));
 process.env.DATABASE_PATH = path.join(tmpDir, "test.sqlite");
 process.env.ARTIFACTS_DIR = path.join(tmpDir, "artifacts");
@@ -80,11 +80,13 @@ test("ensureVisualInventoryArtifactType migrates a legacy document_artifacts tab
   downgrade();
 
   assert.equal(tableSql("document_artifacts")?.includes("'VISUAL_INVENTORY'"), false);
+  assert.equal(tableSql("document_artifacts")?.includes("'VISUAL_OBSERVATIONS'"), false);
 
   // Re-run initialization: the migration should upgrade the CHECK in place.
   sqlite.initializeDatabase();
 
   assert.equal(tableSql("document_artifacts")?.includes("'VISUAL_INVENTORY'"), true);
+  assert.equal(tableSql("document_artifacts")?.includes("'VISUAL_OBSERVATIONS'"), true);
   assert.equal(tableExists("document_artifacts_legacy"), false);
 
   // Existing row preserved through the migration.
@@ -98,7 +100,7 @@ test("ensureVisualInventoryArtifactType migrates a legacy document_artifacts tab
   assert.equal(seeded.encrypted_path, "/tmp/original.docx");
   assert.equal(seeded.content_hash, "hash-original");
 
-  // The relaxed CHECK now accepts VISUAL_INVENTORY rows.
+  // The relaxed CHECK now accepts visual artifact rows.
   db.prepare(
     `INSERT INTO document_artifacts (id, document_id, artifact_type, encrypted_path, content_hash, created_at)
      VALUES (?, ?, 'VISUAL_INVENTORY', ?, ?, ?)`
@@ -113,6 +115,21 @@ test("ensureVisualInventoryArtifactType migrates a legacy document_artifacts tab
     .prepare("SELECT artifact_type FROM document_artifacts WHERE id = ?")
     .get("artifact-mig-visual") as { artifact_type: string } | undefined;
   assert.equal(visualRow?.artifact_type, "VISUAL_INVENTORY");
+
+  db.prepare(
+    `INSERT INTO document_artifacts (id, document_id, artifact_type, encrypted_path, content_hash, created_at)
+     VALUES (?, ?, 'VISUAL_OBSERVATIONS', ?, ?, ?)`
+  ).run(
+    "artifact-mig-visual-observations",
+    "doc-mig-1",
+    "/tmp/visual-observations.json",
+    "hash-visual-observations",
+    "2026-06-26T12:00:00.000Z"
+  );
+  const observationsRow = db
+    .prepare("SELECT artifact_type FROM document_artifacts WHERE id = ?")
+    .get("artifact-mig-visual-observations") as { artifact_type: string } | undefined;
+  assert.equal(observationsRow?.artifact_type, "VISUAL_OBSERVATIONS");
 });
 
 test("ensureVisualInventoryArtifactType is idempotent on an already-migrated database", () => {

@@ -89,10 +89,39 @@ export interface StudyGuideResponse extends StudyGuide {
   checklist_completion: Record<string, boolean>;
 }
 
+export interface VisualObservation {
+  id: string;
+  visual_inventory_item_id: string;
+  image_hash: string;
+  source_file_type: "DOCX" | "PDF";
+  origin: "docx_embedded_image" | "pdf_embedded_image";
+  media_path?: string;
+  page?: number | null;
+  image_index: number;
+  content_type: string;
+  type: "diagram" | "chart" | "screenshot" | "table_image" | "photo" | "other";
+  summary: string;
+  visible_text: string[];
+  academic_relevance: string;
+  confidence: "low" | "medium" | "high";
+  limitations: string[];
+}
+
+export interface VisualObservationsArtifact {
+  document_id: string;
+  status: "complete" | "partial" | "skipped";
+  created_at: string;
+  model: string;
+  source_inventory_artifact_hash?: string;
+  observations: VisualObservation[];
+  warnings: string[];
+}
+
 export interface DocumentDetail {
   document: DocumentListItem;
   studyGuide: StudyGuide | null;
   checklistCompletion: Record<string, boolean>;
+  visualObservations: VisualObservationsArtifact | null;
 }
 
 export interface AuthUser {
