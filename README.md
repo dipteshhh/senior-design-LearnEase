@@ -1,8 +1,10 @@
+# RESEARCH CO-OP PROJECT
+# University of Toledo · College of Engineering
+# Supervisor : Dr. Samia Tasnim
+
 # LearnEase
 
 **Accessibility-First Document Understanding for Academic Clarity**  
-EECS 4020 — Senior Design Project II  
-University of Toledo · College of Engineering
 
 LearnEase is a desktop-focused web application that helps students **understand academic documents** (homework, lecture notes, and class notes) by restructuring dense text into **clear, accessible, and traceable study views**.
 
@@ -10,7 +12,7 @@ LearnEase is **not** a homework solver. It does **not** generate answers, soluti
 
 ---
 
-## 🚫 What LearnEase Will Never Do
+## What LearnEase Will Never Do
 - Solve homework problems
 - Provide answers, hints, or solution steps
 - Generate essays, code, or computed results
@@ -20,7 +22,7 @@ Academic integrity is enforced at the **prompt**, **backend**, and **UI** levels
 
 ---
 
-## ✨ What LearnEase Does
+## What LearnEase Does
 
 - Allows users to log in with a Google account
 - Provides a dashboard where users can:
@@ -52,7 +54,7 @@ Academic integrity is enforced at the **prompt**, **backend**, and **UI** levels
 
 ---
 
-## 🧠 Study Guide & Core Features
+## Study Guide & Core Features
 
 When a user explicitly clicks **Create Study Guide**, LearnEase generates a **read-only Study Guide** that:
 
@@ -72,7 +74,7 @@ Tabs are shown or hidden based on document type and extracted content.
 
 ---
 
-### 🎯 Focus Mode
+### Focus Mode
 
 - Displays one section at a time
 - Provides a distraction-free reading experience
@@ -113,20 +115,7 @@ Users can view citations directly in the UI via a “View source citations” co
 
 ---
 
-## 👥 Team
-
-University of Toledo · College of Engineering
-
-- Sid Mahesh
-- Nishant Lamichhane
-- Habeeb Sowemimo
-- Darshan Pandey
-- Diptesh Shahi Thakuri
-- Prabin Sapkota
-
----
-
-## 📄 License
+## License
 
 Academic-only senior design project.  
 Not intended for commercial use.
