@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { StudyBriefNarrationControls } from "@/components/StudyBriefNarrationControls";
 import type {
   Citation,
   DocumentDetail,
@@ -19,6 +20,7 @@ import {
   updateReminderOptIn,
 } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
+import { buildStudyBriefNarrationText } from "@/lib/studyBriefNarration";
 
 type TabId = "overview" | "actions" | "checklist" | "details" | "sections";
 
@@ -691,6 +693,7 @@ export default function DocumentPage() {
   const detailItems = flattenImportantDetails(studyGuide.important_details);
   const focusSection = studyGuide.sections[focusIndex] ?? null;
   const canOpenQuiz = document.document_type === "LECTURE";
+  const narrationText = buildStudyBriefNarrationText(studyGuide);
   const overviewFacts = [
     studyGuide.overview.topic ? { label: "Topic", value: studyGuide.overview.topic } : null,
     studyGuide.overview.due_date && document.document_type !== "HOMEWORK"
@@ -1075,6 +1078,11 @@ export default function DocumentPage() {
                   icon={<SummaryIcon />}
                   title="Study Brief"
                   description="A concise orientation to what matters in this document."
+                />
+
+                <StudyBriefNarrationControls
+                  key={document.id}
+                  narrationText={narrationText}
                 />
 
                 <div className="mt-8 space-y-3">
