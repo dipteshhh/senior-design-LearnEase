@@ -245,9 +245,7 @@ function sendAlreadyProcessingError(res: Response, message: string): void {
 
 function isInternalDebugRoutesEnabled(): boolean {
   const flag = process.env.ENABLE_INTERNAL_DEBUG_ROUTES?.trim().toLowerCase();
-  if (flag === "true") return true;
-  if (flag === "false") return false;
-  return process.env.NODE_ENV !== "production";
+  return process.env.NODE_ENV !== "production" && flag === "true";
 }
 
 interface QuizGenerationTaskInput {

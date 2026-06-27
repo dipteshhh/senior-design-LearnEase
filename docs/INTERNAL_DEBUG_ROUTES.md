@@ -8,10 +8,16 @@ Internal debug routes are for local development and test verification only. They
 
 Availability:
 
-- Enabled by default when `NODE_ENV !== "production"`.
-- Disabled when `ENABLE_INTERNAL_DEBUG_ROUTES=false`.
-- Can be explicitly enabled with `ENABLE_INTERNAL_DEBUG_ROUTES=true`.
+- Disabled by default.
+- Enabled only when `ENABLE_INTERNAL_DEBUG_ROUTES=true` and `NODE_ENV !== "production"`.
+- Always disabled in production, even if `ENABLE_INTERNAL_DEBUG_ROUTES=true`.
 - Returns `404` when disabled.
+
+Local dev example:
+
+```sh
+ENABLE_INTERNAL_DEBUG_ROUTES=true npm run dev
+```
 
 Access:
 

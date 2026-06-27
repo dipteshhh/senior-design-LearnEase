@@ -126,6 +126,20 @@ function restoreEnv(
   }
 }
 
+async function withInternalDebugRoutesEnabled(run: () => Promise<void>): Promise<void> {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousFlag = process.env.ENABLE_INTERNAL_DEBUG_ROUTES;
+  process.env.NODE_ENV = "test";
+  process.env.ENABLE_INTERNAL_DEBUG_ROUTES = "true";
+
+  try {
+    await run();
+  } finally {
+    restoreEnv("NODE_ENV", previousNodeEnv);
+    restoreEnv("ENABLE_INTERNAL_DEBUG_ROUTES", previousFlag);
+  }
+}
+
 test("getVisualInventoryManifest returns the manifest for a DOCX with an image", () => {
   const docId = "aaaaaaaa-b001-4aaa-8aaa-aaaaaaaaaaaa";
   seedDocWithInventory(docId, "user-inspect-happy");
@@ -296,10 +310,10 @@ test("runInspection succeeds (exit 0) for a healthy document", () => {
   assert.equal(result.exitCode, 0);
 });
 
-test("internal visual inventory route returns 404 when disabled", async () => {
+test("internal visual inventory route returns 404 by default without opt-in", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   const previousFlag = process.env.ENABLE_INTERNAL_DEBUG_ROUTES;
-  process.env.NODE_ENV = "production";
+  process.env.NODE_ENV = "test";
   delete process.env.ENABLE_INTERNAL_DEBUG_ROUTES;
 
   try {
@@ -317,93 +331,118 @@ test("internal visual inventory route returns 404 when disabled", async () => {
   }
 });
 
+test("internal visual inventory route stays disabled in production even with opt-in flag", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousFlag = process.env.ENABLE_INTERNAL_DEBUG_ROUTES;
+  process.env.NODE_ENV = "production";
+  process.env.ENABLE_INTERNAL_DEBUG_ROUTES = "true";
+
+  try {
+    const req = makeReq("aaaaaaaa-b012-4aaa-8aaa-aaaaaaaaaaaa", "user-route-production");
+    const res = makeRes();
+    await getInternalVisualInventoryHandler(req as any, res as any);
+
+    assert.equal(res.statusCode, 404);
+    assert.deepEqual(res.body, {
+      error: { code: "NOT_FOUND", message: "Not found.", details: {} },
+    });
+  } finally {
+    restoreEnv("NODE_ENV", previousNodeEnv);
+    restoreEnv("ENABLE_INTERNAL_DEBUG_ROUTES", previousFlag);
+  }
+});
+
 test("internal visual inventory route returns DOCX manifest metadata only when enabled", async () => {
   const docId = "aaaaaaaa-b00d-4aaa-8aaa-aaaaaaaaaaaa";
   const userId = "user-route-enabled";
   seedDocWithInventory(docId, userId);
-  process.env.ENABLE_INTERNAL_DEBUG_ROUTES = "true";
 
-  const req = makeReq(docId, userId);
-  const res = makeRes();
-  await getInternalVisualInventoryHandler(req as any, res as any);
+  await withInternalDebugRoutesEnabled(async () => {
+    const req = makeReq(docId, userId);
+    const res = makeRes();
+    await getInternalVisualInventoryHandler(req as any, res as any);
 
-  assert.equal(res.statusCode, 200);
-  const body = res.body as {
-    document_id?: string;
-    status?: string;
-    source_file_type?: string;
-    extraction_version?: string;
-    item_count?: number;
-    items?: Array<Record<string, unknown>>;
-  };
-  assert.equal(body.document_id, docId);
-  assert.equal(body.status, "complete");
-  assert.equal(body.source_file_type, "DOCX");
-  assert.equal(body.extraction_version, "phase2a-docx-embedded-images-v1");
-  assert.equal(body.item_count, 1);
-  assert.equal(body.items?.length, 1);
-  assert.equal(body.items?.[0]?.media_path, "word/media/image1.png");
-  assert.equal(body.items?.[0]?.content_type, "image/png");
-  assert.equal(body.items?.[0]?.byte_size, tinyPng.byteLength);
-  assert.equal(
-    Object.prototype.hasOwnProperty.call(
-      body.items?.[0] ?? {},
-      "encrypted_artifact_path"
-    ),
-    false
-  );
+    assert.equal(res.statusCode, 200);
+    const body = res.body as {
+      document_id?: string;
+      status?: string;
+      source_file_type?: string;
+      extraction_version?: string;
+      item_count?: number;
+      items?: Array<Record<string, unknown>>;
+    };
+    assert.equal(body.document_id, docId);
+    assert.equal(body.status, "complete");
+    assert.equal(body.source_file_type, "DOCX");
+    assert.equal(body.extraction_version, "phase2a-docx-embedded-images-v1");
+    assert.equal(body.item_count, 1);
+    assert.equal(body.items?.length, 1);
+    assert.equal(body.items?.[0]?.media_path, "word/media/image1.png");
+    assert.equal(body.items?.[0]?.content_type, "image/png");
+    assert.equal(body.items?.[0]?.byte_size, tinyPng.byteLength);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(
+        body.items?.[0] ?? {},
+        "encrypted_artifact_path"
+      ),
+      false
+    );
+  });
 });
 
 test("internal visual inventory route never returns image bytes or base64", async () => {
   const docId = "aaaaaaaa-b00e-4aaa-8aaa-aaaaaaaaaaaa";
   const userId = "user-route-no-bytes";
   seedDocWithInventory(docId, userId);
-  process.env.ENABLE_INTERNAL_DEBUG_ROUTES = "true";
 
-  const req = makeReq(docId, userId);
-  const res = makeRes();
-  await getInternalVisualInventoryHandler(req as any, res as any);
+  await withInternalDebugRoutesEnabled(async () => {
+    const req = makeReq(docId, userId);
+    const res = makeRes();
+    await getInternalVisualInventoryHandler(req as any, res as any);
 
-  assert.equal(res.statusCode, 200);
-  const responseText = JSON.stringify(res.body);
-  assert.equal(responseText.includes(tinyPng.toString("base64")), false);
-  assert.equal(responseText.includes(tinyPng.toString("hex")), false);
-  assert.equal(responseText.includes("data:image"), false);
-  assert.equal(responseText.includes("encrypted_artifact_path"), false);
+    assert.equal(res.statusCode, 200);
+    const responseText = JSON.stringify(res.body);
+    assert.equal(responseText.includes(tinyPng.toString("base64")), false);
+    assert.equal(responseText.includes(tinyPng.toString("hex")), false);
+    assert.equal(responseText.includes("data:image"), false);
+    assert.equal(responseText.includes("encrypted_artifact_path"), false);
+  });
 });
 
 test("internal visual inventory route rejects non-owner access", async () => {
   const docId = "aaaaaaaa-b00f-4aaa-8aaa-aaaaaaaaaaaa";
   seedDocWithInventory(docId, "user-route-owner");
-  process.env.ENABLE_INTERNAL_DEBUG_ROUTES = "true";
 
-  const req = makeReq(docId, "user-route-other");
-  const res = makeRes();
-  await getInternalVisualInventoryHandler(req as any, res as any);
+  await withInternalDebugRoutesEnabled(async () => {
+    const req = makeReq(docId, "user-route-other");
+    const res = makeRes();
+    await getInternalVisualInventoryHandler(req as any, res as any);
 
-  assert.equal(res.statusCode, 403);
-  const responseText = JSON.stringify(res.body);
-  assert.equal(responseText.includes("word/media/image1.png"), false);
-  assert.equal(responseText.includes("image_hash"), false);
+    assert.equal(res.statusCode, 403);
+    const responseText = JSON.stringify(res.body);
+    assert.equal(responseText.includes("word/media/image1.png"), false);
+    assert.equal(responseText.includes("image_hash"), false);
+  });
 });
 
 test("internal visual inventory route returns 404 when manifest is missing", async () => {
   const docId = "aaaaaaaa-b010-4aaa-8aaa-aaaaaaaaaaaa";
   const userId = "user-route-missing";
   store.saveDocument(makeDoc(docId, userId));
-  process.env.ENABLE_INTERNAL_DEBUG_ROUTES = "true";
 
-  const req = makeReq(docId, userId);
-  const res = makeRes();
-  await getInternalVisualInventoryHandler(req as any, res as any);
+  await withInternalDebugRoutesEnabled(async () => {
+    const req = makeReq(docId, userId);
+    const res = makeRes();
+    await getInternalVisualInventoryHandler(req as any, res as any);
 
-  assert.equal(res.statusCode, 404);
-  assert.deepEqual(res.body, {
-    error: {
-      code: "VISUAL_INVENTORY_NOT_FOUND",
-      message: "Visual inventory not found.",
-      details: {},
-    },
+    assert.equal(res.statusCode, 404);
+    assert.deepEqual(res.body, {
+      error: {
+        code: "VISUAL_INVENTORY_NOT_FOUND",
+        message: "Visual inventory not found.",
+        details: {},
+      },
+    });
   });
 });
 
@@ -412,17 +451,18 @@ test("internal visual inventory route returns a safe error for corrupt manifests
   const userId = "user-route-corrupt";
   seedDocWithInventory(docId, userId);
   encryption.writeEncryptedText(manifestPathFor(docId), "{ not valid json");
-  process.env.ENABLE_INTERNAL_DEBUG_ROUTES = "true";
 
-  const req = makeReq(docId, userId);
-  const res = makeRes();
-  await getInternalVisualInventoryHandler(req as any, res as any);
+  await withInternalDebugRoutesEnabled(async () => {
+    const req = makeReq(docId, userId);
+    const res = makeRes();
+    await getInternalVisualInventoryHandler(req as any, res as any);
 
-  assert.equal(res.statusCode, 422);
-  const responseText = JSON.stringify(res.body);
-  assert.match(responseText, /VISUAL_INVENTORY_INVALID/);
-  assert.equal(responseText.includes("{ not valid json"), false);
-  assert.equal(responseText.includes(tinyPng.toString("base64")), false);
+    assert.equal(res.statusCode, 422);
+    const responseText = JSON.stringify(res.body);
+    assert.match(responseText, /VISUAL_INVENTORY_INVALID/);
+    assert.equal(responseText.includes("{ not valid json"), false);
+    assert.equal(responseText.includes(tinyPng.toString("base64")), false);
+  });
 });
 
 test("cleanup inspect test environment", () => {
