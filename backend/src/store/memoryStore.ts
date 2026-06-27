@@ -2,6 +2,10 @@ import fs from "fs";
 import path from "path";
 import { createHash, randomUUID } from "crypto";
 import type { DocumentType, Quiz, StudyGuide } from "../schemas/analyze.js";
+import {
+  VisualObservationsArtifact,
+  type VisualObservationsArtifact as VisualObservationsArtifactType,
+} from "../schemas/visualObservations.js";
 import { getDb } from "../db/sqlite.js";
 import {
   readEncryptedBuffer,
@@ -19,7 +23,11 @@ export type DocumentStatus = "uploaded" | "processing" | "ready" | "failed";
 export type GenerationStatus = "idle" | "processing" | "ready" | "failed";
 export type FileType = "PDF" | "DOCX";
 export type ReminderStatus = "pending" | "sending" | "sent" | "failed" | "skipped" | "past_due";
-export type DocumentArtifactType = "ORIGINAL_FILE" | "EXTRACTED_TEXT" | "VISUAL_INVENTORY";
+export type DocumentArtifactType =
+  | "ORIGINAL_FILE"
+  | "EXTRACTED_TEXT"
+  | "VISUAL_INVENTORY"
+  | "VISUAL_OBSERVATIONS";
 
 const FLOW_PROCESSING_CODE = {
   STUDY_GUIDE: "STUDY_GUIDE_PROCESSING",
@@ -717,6 +725,19 @@ export function saveVisualInventoryArtifact(
   upsertArtifact(documentId, "VISUAL_INVENTORY", manifestPath, contentHash);
 }
 
+export function saveVisualObservationsArtifact(
+  documentId: string,
+  artifact: VisualObservationsArtifactType
+): void {
+  const validated = VisualObservationsArtifact.parse(artifact);
+  const artifactDir = ensureDocumentArtifactDir(documentId);
+  const artifactJson = JSON.stringify(validated, null, 2);
+  const artifactPath = path.resolve(artifactDir, "visual-observations.json");
+  writeEncryptedText(artifactPath, artifactJson);
+  const contentHash = createHash("sha256").update(artifactJson).digest("hex");
+  upsertArtifact(documentId, "VISUAL_OBSERVATIONS", artifactPath, contentHash);
+}
+
 export type VisualInventoryManifestReadResult =
   | { ok: true; manifest: VisualInventoryManifest }
   | { ok: false; reason: "missing" | "decrypt_failed" | "parse_failed"; message?: string };
@@ -764,17 +785,36 @@ function resolveExistingArtifactPath(documentId: string, relativePath: string): 
   return artifactPath;
 }
 
-function readVisualInventoryArtifactPath(documentId: string): string | undefined {
+function readArtifactMetadata(
+  documentId: string,
+  artifactType: DocumentArtifactType
+): { encryptedPath: string; contentHash?: string } | undefined {
   const row = db
     .prepare(
       `
-        SELECT encrypted_path
+        SELECT encrypted_path, content_hash
         FROM document_artifacts
-        WHERE document_id = ? AND artifact_type = 'VISUAL_INVENTORY'
+        WHERE document_id = ? AND artifact_type = ?
       `
     )
-    .get(documentId) as { encrypted_path: string | null } | undefined;
-  return row?.encrypted_path ?? undefined;
+    .get(documentId, artifactType) as
+    | { encrypted_path: string | null; content_hash: string | null }
+    | undefined;
+
+  if (!row?.encrypted_path) {
+    return undefined;
+  }
+
+  return {
+    encryptedPath: row.encrypted_path,
+    contentHash: row.content_hash ?? undefined,
+  };
+}
+
+function readVisualInventoryArtifactMetadata(
+  documentId: string
+): { encryptedPath: string; contentHash?: string } | undefined {
+  return readArtifactMetadata(documentId, "VISUAL_INVENTORY");
 }
 
 /**
@@ -785,14 +825,14 @@ function readVisualInventoryArtifactPath(documentId: string): string | undefined
 export function getVisualInventoryManifest(
   documentId: string
 ): VisualInventoryManifestReadResult {
-  const manifestPath = readVisualInventoryArtifactPath(documentId);
-  if (!manifestPath) {
+  const metadata = readVisualInventoryArtifactMetadata(documentId);
+  if (!metadata) {
     return { ok: false, reason: "missing" };
   }
 
   let manifestJson: string;
   try {
-    manifestJson = readEncryptedText(manifestPath);
+    manifestJson = readEncryptedText(metadata.encryptedPath);
   } catch {
     return { ok: false, reason: "decrypt_failed" };
   }
@@ -802,6 +842,50 @@ export function getVisualInventoryManifest(
     return { ok: true, manifest };
   } catch {
     return { ok: false, reason: "parse_failed" };
+  }
+}
+
+export function getVisualInventoryArtifactHash(documentId: string): string | undefined {
+  return readVisualInventoryArtifactMetadata(documentId)?.contentHash;
+}
+
+export function readVisualInventoryAssetBytes(
+  documentId: string,
+  relativePath: string
+): Buffer {
+  const assetPath = resolveExistingArtifactPath(documentId, relativePath);
+  return readEncryptedBuffer(assetPath);
+}
+
+export type VisualObservationsReadResult =
+  | { ok: true; artifact: VisualObservationsArtifactType }
+  | { ok: false; reason: "missing" | "decrypt_failed" | "parse_failed"; message?: string };
+
+export function getVisualObservationsArtifact(
+  documentId: string
+): VisualObservationsReadResult {
+  const metadata = readArtifactMetadata(documentId, "VISUAL_OBSERVATIONS");
+  if (!metadata) {
+    return { ok: false, reason: "missing" };
+  }
+
+  let artifactJson: string;
+  try {
+    artifactJson = readEncryptedText(metadata.encryptedPath);
+  } catch {
+    return { ok: false, reason: "decrypt_failed" };
+  }
+
+  try {
+    const parsed = JSON.parse(artifactJson) as unknown;
+    const validated = VisualObservationsArtifact.parse(parsed);
+    return { ok: true, artifact: validated };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "parse_failed",
+      message: error instanceof Error ? error.message : undefined,
+    };
   }
 }
 
