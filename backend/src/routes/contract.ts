@@ -27,6 +27,7 @@ import {
   getDocument,
   getDocumentMetadata,
   getDocumentOwnerId,
+  getVisualInventoryManifest,
   getVisualObservationsArtifact,
   backfillMissingContentHashesForUser,
   findDocumentIdByUserAndContentHash,
@@ -242,6 +243,11 @@ function toPublicErrorMessage(errorCode: string | null): string | null {
 function sendAlreadyProcessingError(res: Response, message: string): void {
   res.setHeader("Retry-After", ALREADY_PROCESSING_RETRY_AFTER_SECONDS);
   sendApiError(res, 409, "ALREADY_PROCESSING", message);
+}
+
+function isInternalDebugRoutesEnabled(): boolean {
+  const flag = process.env.ENABLE_INTERNAL_DEBUG_ROUTES?.trim().toLowerCase();
+  return process.env.NODE_ENV !== "production" && flag === "true";
 }
 
 interface QuizGenerationTaskInput {
@@ -1145,4 +1151,77 @@ export async function deleteDocumentHandler(req: Request, res: Response): Promis
 
   deleteDocumentById(documentId);
   res.status(200).json({ success: true });
+}
+
+export async function getInternalVisualInventoryHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!isInternalDebugRoutesEnabled()) {
+    sendApiError(res, 404, "NOT_FOUND", "Not found.");
+    return;
+  }
+
+  const documentId = readDocumentIdParam(req, res);
+  if (!documentId) return;
+
+  if (!ensureOwnershipOnly(req, res, documentId)) return;
+
+  const read = getVisualInventoryManifest(documentId);
+  if (!read.ok) {
+    if (read.reason === "missing") {
+      sendApiError(
+        res,
+        404,
+        "VISUAL_INVENTORY_NOT_FOUND",
+        "Visual inventory not found."
+      );
+      return;
+    }
+
+    if (read.reason === "parse_failed") {
+      sendApiError(
+        res,
+        422,
+        "VISUAL_INVENTORY_INVALID",
+        "Visual inventory manifest is invalid.",
+        { reason: read.reason }
+      );
+      return;
+    }
+
+    sendApiError(
+      res,
+      500,
+      "VISUAL_INVENTORY_UNREADABLE",
+      "Visual inventory could not be read.",
+      { reason: read.reason }
+    );
+    return;
+  }
+
+  const { manifest } = read;
+  res.status(200).json({
+    document_id: manifest.document_id,
+    status: manifest.status,
+    source_file_type: manifest.source_file_type,
+    extraction_version: manifest.extraction_version,
+    created_at: manifest.created_at,
+    limits: manifest.limits,
+    item_count: manifest.items.length,
+    warnings: manifest.warnings,
+    items: manifest.items.map((item) => ({
+      id: item.id,
+      origin: item.origin,
+      source_file_type: item.source_file_type,
+      image_index: item.image_index,
+      media_path: item.media_path,
+      page: item.page ?? null,
+      content_type: item.content_type,
+      byte_size: item.byte_size,
+      image_hash: item.image_hash,
+      width: item.width ?? null,
+      height: item.height ?? null,
+    })),
+  });
 }

@@ -8,6 +8,7 @@ import {
   deleteDocumentHandler,
   deleteUserDataHandler,
   getDocumentHandler,
+  getInternalVisualInventoryHandler,
   getQuizHandler,
   getStudyGuideHandler,
   getVisualObservationsHandler,
@@ -144,6 +145,11 @@ app.post("/api/auth/logout", logoutHandler);
 app.use(requireAuth);
 
 app.get("/api/auth/me", meHandler);
+
+app.get(
+  "/api/internal/documents/:documentId/visual-inventory",
+  getInternalVisualInventoryHandler
+);
 
 app.post("/api/upload", upload.single("file"), handleMulterError, uploadDocumentHandler);
 app.get("/api/documents", listDocumentsHandler);
