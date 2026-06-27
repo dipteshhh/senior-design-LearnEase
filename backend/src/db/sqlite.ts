@@ -116,12 +116,15 @@ function ensureDocumentContentHashColumn(db: SqliteDatabase): void {
   }
 }
 
-function ensureVisualInventoryArtifactType(db: SqliteDatabase): void {
+function ensureDocumentArtifactTypes(db: SqliteDatabase): void {
   const row = db
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'document_artifacts'")
     .get() as SqliteMasterRow | undefined;
 
-  if (!row?.sql || row.sql.includes("'VISUAL_INVENTORY'")) {
+  if (
+    !row?.sql ||
+    (row.sql.includes("'VISUAL_INVENTORY'") && row.sql.includes("'VISUAL_OBSERVATIONS'"))
+  ) {
     return;
   }
 
@@ -136,7 +139,7 @@ function ensureVisualInventoryArtifactType(db: SqliteDatabase): void {
       CREATE TABLE document_artifacts (
         id TEXT PRIMARY KEY,
         document_id TEXT NOT NULL,
-        artifact_type TEXT NOT NULL CHECK (artifact_type IN ('ORIGINAL_FILE', 'EXTRACTED_TEXT', 'VISUAL_INVENTORY')),
+        artifact_type TEXT NOT NULL CHECK (artifact_type IN ('ORIGINAL_FILE', 'EXTRACTED_TEXT', 'VISUAL_INVENTORY', 'VISUAL_OBSERVATIONS')),
         encrypted_path TEXT NOT NULL,
         content_hash TEXT,
         created_at TEXT NOT NULL,
@@ -285,7 +288,7 @@ export function initializeDatabase(): void {
     CREATE TABLE IF NOT EXISTS document_artifacts (
       id TEXT PRIMARY KEY,
       document_id TEXT NOT NULL,
-      artifact_type TEXT NOT NULL CHECK (artifact_type IN ('ORIGINAL_FILE', 'EXTRACTED_TEXT', 'VISUAL_INVENTORY')),
+      artifact_type TEXT NOT NULL CHECK (artifact_type IN ('ORIGINAL_FILE', 'EXTRACTED_TEXT', 'VISUAL_INVENTORY', 'VISUAL_OBSERVATIONS')),
       encrypted_path TEXT NOT NULL,
       content_hash TEXT,
       created_at TEXT NOT NULL,
@@ -324,7 +327,7 @@ export function initializeDatabase(): void {
   ensureDocumentFlowColumns(db);
   ensureHomeworkDeadlineColumns(db);
   ensureDocumentContentHashColumn(db);
-  ensureVisualInventoryArtifactType(db);
+  ensureDocumentArtifactTypes(db);
   db.exec("DROP INDEX IF EXISTS idx_documents_user_content_hash;");
   db.exec(
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_user_content_hash

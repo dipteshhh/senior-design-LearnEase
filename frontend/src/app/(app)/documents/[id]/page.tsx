@@ -10,6 +10,7 @@ import type {
   DocumentListItem,
   ExtractionItem,
   StudyGuideSection,
+  VisualObservation,
 } from "@/lib/contracts";
 import {
   deleteDocument,
@@ -22,7 +23,13 @@ import {
 import { getErrorMessage } from "@/lib/errorUx";
 import { buildStudyBriefNarrationText } from "@/lib/studyBriefNarration";
 
-type TabId = "overview" | "actions" | "checklist" | "details" | "sections";
+type TabId = "overview" | "actions" | "checklist" | "details" | "sections" | "visuals";
+type StudyGuideTab = {
+  id: TabId;
+  label: string;
+  badge?: string;
+  badgeTone?: "default" | "success";
+};
 
 function StatusPill({ status }: { status: DocumentListItem["status"] }) {
   const base =
@@ -226,6 +233,25 @@ function SectionsIcon() {
   );
 }
 
+function VisualNotesIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="4" y="5" width="16" height="14" rx="2" />
+      <path d="m8 13 2.25-2.25L13 13.5l1.5-1.5L18 15.5" />
+      <path d="M8 8.5h.01" />
+    </svg>
+  );
+}
+
 function WarningIcon() {
   return (
     <svg
@@ -392,6 +418,28 @@ function isDeadlineLike(item: ExtractionItem): boolean {
   );
 }
 
+function formatVisualObservationType(type: VisualObservation["type"]): string {
+  return type
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatVisualConfidence(confidence: VisualObservation["confidence"]): string {
+  return confidence.charAt(0).toUpperCase() + confidence.slice(1);
+}
+
+function formatVisualSource(observation: VisualObservation): string {
+  const parts = [`Image ${observation.image_index}`];
+  if (observation.media_path) {
+    parts.push(observation.media_path);
+  }
+  if (observation.page != null) {
+    parts.push(`Page ${observation.page}`);
+  }
+  return parts.join(" · ");
+}
+
 function getTabBadgeStyles(active: boolean, emphasis: "default" | "success" = "default") {
   if (emphasis === "success") {
     return "bg-emerald-100 text-emerald-700";
@@ -491,6 +539,7 @@ export default function DocumentPage() {
 
   const document = detail?.document ?? null;
   const studyGuide = detail?.studyGuide ?? null;
+  const visualObservations = detail?.visualObservations ?? null;
 
   useEffect(() => {
     if (!detail) return;
@@ -663,13 +712,10 @@ export default function DocumentPage() {
     (item) => checklistCompleted[item.id] ?? false
   ).length;
   const checklistProgress = checklistTotal > 0 ? (checklistDone / checklistTotal) * 100 : 0;
+  const visualObservationItems = visualObservations?.observations ?? [];
+  const hasVisualObservations = visualObservationItems.length > 0;
 
-  const tabs: Array<{
-    id: TabId;
-    label: string;
-    badge?: string;
-    badgeTone?: "default" | "success";
-  }> = [
+  const tabs: StudyGuideTab[] = [
     { id: "overview", label: "Overview" },
     { id: "actions", label: "Key Actions" },
     {
@@ -680,11 +726,21 @@ export default function DocumentPage() {
     },
     { id: "details", label: "Important Details" },
     {
-      id: "sections" as TabId,
+      id: "sections",
       label: document.document_type === "HOMEWORK" ? "Problem Guide" : "Sections",
       badge: studyGuide.sections.length > 0 ? String(studyGuide.sections.length) : undefined,
-      badgeTone: "default" as const,
+      badgeTone: "default",
     },
+    ...(hasVisualObservations
+      ? [
+          {
+            id: "visuals" as const,
+            label: "Visual Notes Beta",
+            badge: String(visualObservationItems.length),
+            badgeTone: "default" as const,
+          },
+        ]
+      : []),
   ];
 
   const validTabs = new Set<TabId>(tabs.map((tab) => tab.id));
@@ -1659,6 +1715,91 @@ export default function DocumentPage() {
                 )}
               </>
             )}
+          </Card>
+        ) : null}
+
+        {tab === "visuals" && hasVisualObservations ? (
+          <Card className="space-y-6">
+            <SectionHeading
+              icon={<VisualNotesIcon />}
+              title="Visual Notes Beta"
+              description="AI-generated interpretation of images/diagrams. Verify against the original document."
+            />
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+              Visual notes describe what the AI could interpret from embedded visuals. They are not
+              exact source quotes and are not part of the text citation evidence.
+            </div>
+
+            <div className="space-y-4">
+              {visualObservationItems.map((observation) => (
+                <article
+                  key={observation.id}
+                  className="rounded-3xl border border-gray-200 bg-white px-6 py-6"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
+                        {formatVisualSource(observation)}
+                      </p>
+                      <h3 className="mt-2 text-xl font-semibold tracking-tight text-gray-950">
+                        {formatVisualObservationType(observation.type)}
+                      </h3>
+                    </div>
+                    <span className="inline-flex w-fit rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+                      {formatVisualConfidence(observation.confidence)} confidence
+                    </span>
+                  </div>
+
+                  <div className="mt-5 grid gap-5 lg:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
+                        Summary
+                      </p>
+                      <p className="mt-2 text-[15px] leading-7 text-gray-700">
+                        {observation.summary}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
+                        Academic relevance
+                      </p>
+                      <p className="mt-2 text-[15px] leading-7 text-gray-700">
+                        {observation.academic_relevance}
+                      </p>
+                    </div>
+                  </div>
+
+                  {observation.visible_text.length > 0 ? (
+                    <div className="mt-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
+                        Visible text
+                      </p>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-[15px] leading-7 text-gray-700">
+                        {observation.visible_text.map((text, index) => (
+                          <li key={`${observation.id}-text-${index}`}>{text}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {observation.limitations.length > 0 ? (
+                    <div className="mt-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
+                        Limitations
+                      </p>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-7 text-gray-500">
+                        {observation.limitations.map((limitation, index) => (
+                          <li key={`${observation.id}-limitation-${index}`}>
+                            {limitation}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
           </Card>
         ) : null}
 
