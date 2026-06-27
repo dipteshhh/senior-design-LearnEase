@@ -12,6 +12,8 @@ test("buildAnalysisPrompt keeps study-guide contract shape in prompt", () => {
 
   assert.match(prompt, /important_details: \{ dates: ExtractionItem\[], policies: ExtractionItem\[], contacts: ExtractionItem\[], logistics: ExtractionItem\[] \}/);
   assert.match(prompt, /overview: \{ title, document_type, summary, topic, due_date, estimated_time \}/);
+  assert.match(prompt, /Write the visible user-facing fields as a concise student briefing/);
+  assert.match(prompt, /Do NOT add fields such as takeaways, rationale, why_it_matters, or source/);
   assert.match(prompt, /When the source document has enough structure\/content, produce at least 3 sections/);
   assert.match(prompt, /not generic placeholders like "Section 1" or "Part 2"/);
 });

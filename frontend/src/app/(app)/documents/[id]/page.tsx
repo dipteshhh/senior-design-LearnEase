@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { StudyBriefNarrationControls } from "@/components/StudyBriefNarrationControls";
 import type {
   Citation,
   DocumentDetail,
@@ -19,6 +20,7 @@ import {
   updateReminderOptIn,
 } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
+import { buildStudyBriefNarrationText } from "@/lib/studyBriefNarration";
 
 type TabId = "overview" | "actions" | "checklist" | "details" | "sections";
 
@@ -115,9 +117,9 @@ function MetricCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-gray-50 px-5 py-5">
-      <p className="text-sm font-medium text-gray-400">{label}</p>
-      <p className="mt-2 text-[24px] font-semibold leading-snug tracking-tight text-gray-950 sm:text-[20px]">
+    <div className="rounded-2xl border border-gray-200 bg-white px-5 py-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">{label}</p>
+      <p className="mt-2 text-base font-semibold leading-snug tracking-tight text-gray-950">
         {value}
       </p>
     </div>
@@ -398,6 +400,33 @@ function getTabBadgeStyles(active: boolean, emphasis: "default" | "success" = "d
   return active ? "bg-gray-950 text-white" : "bg-gray-100 text-gray-600";
 }
 
+function EvidenceButton({
+  citationCount,
+  onClick,
+  className = "",
+  itemLabel,
+}: {
+  citationCount: number;
+  onClick: () => void;
+  className?: string;
+  itemLabel?: string;
+}) {
+  const label =
+    citationCount > 0 ? `View evidence (${citationCount})` : "View evidence";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={itemLabel ? `${label} for ${itemLabel}` : label}
+      className={`inline-flex items-center gap-2 text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800 ${className}`}
+    >
+      <QuoteIcon />
+      {label}
+    </button>
+  );
+}
+
 export default function DocumentPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -415,8 +444,9 @@ export default function DocumentPage() {
   const [focusIndex, setFocusIndex] = useState(0);
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
   const [citationDrawerOpen, setCitationDrawerOpen] = useState(false);
-  const [citationDrawerTitle, setCitationDrawerTitle] = useState("Source Citations");
+  const [citationDrawerTitle, setCitationDrawerTitle] = useState("Source Evidence");
   const [activeCitations, setActiveCitations] = useState<Citation[]>([]);
+  const [activeEvidenceQuote, setActiveEvidenceQuote] = useState<string | null>(null);
   const [dueTimeInput, setDueTimeInput] = useState("");
   const [dueTimeSaving, setDueTimeSaving] = useState(false);
   const [savedDueTime, setSavedDueTime] = useState<string | null>(null);
@@ -476,6 +506,19 @@ export default function DocumentPage() {
     setDueDateInput("");
     setIsEditingDeadline(false);
   }, [detail]);
+
+  useEffect(() => {
+    if (!citationDrawerOpen) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setCitationDrawerOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [citationDrawerOpen]);
 
   useEffect(() => {
     if (!studyGuide) return;
@@ -650,6 +693,16 @@ export default function DocumentPage() {
   const detailItems = flattenImportantDetails(studyGuide.important_details);
   const focusSection = studyGuide.sections[focusIndex] ?? null;
   const canOpenQuiz = document.document_type === "LECTURE";
+  const narrationText = buildStudyBriefNarrationText(studyGuide);
+  const overviewFacts = [
+    studyGuide.overview.topic ? { label: "Topic", value: studyGuide.overview.topic } : null,
+    studyGuide.overview.due_date && document.document_type !== "HOMEWORK"
+      ? { label: "Due Date", value: studyGuide.overview.due_date }
+      : null,
+    studyGuide.overview.estimated_time
+      ? { label: "Estimated Time", value: studyGuide.overview.estimated_time }
+      : null,
+  ].filter((fact): fact is { label: string; value: string } => fact !== null);
 
   async function handleChecklistToggle(itemId: string, completed: boolean) {
     if (!document) return;
@@ -798,9 +851,14 @@ export default function DocumentPage() {
     }
   }
 
-  function openCitationDrawer(title: string, citations: Citation[]) {
+  function openCitationDrawer(
+    title: string,
+    citations: Citation[],
+    supportingQuote: string | null = null
+  ) {
     setCitationDrawerTitle(title);
     setActiveCitations(citations);
+    setActiveEvidenceQuote(supportingQuote);
     setCitationDrawerOpen(true);
   }
 
@@ -814,6 +872,8 @@ export default function DocumentPage() {
       >
         <button
           type="button"
+          aria-expanded={isOpen}
+          aria-controls={`section-panel-${section.id}`}
           onClick={() =>
             setOpenSectionId((current) => (current === section.id ? null : section.id))
           }
@@ -865,7 +925,7 @@ export default function DocumentPage() {
         </button>
 
         {isOpen ? (
-          <div className="border-t border-gray-200 px-6 py-5">
+          <div id={`section-panel-${section.id}`} className="border-t border-gray-200 px-6 py-5">
             <p className="whitespace-pre-line text-[15px] leading-8 text-gray-700">{section.content}</p>
 
             <button
@@ -893,7 +953,10 @@ export default function DocumentPage() {
 
         <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <h1 className="truncate text-3xl font-semibold tracking-tight text-gray-950 sm:text-4xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+              Study Brief
+            </p>
+            <h1 className="mt-2 truncate text-3xl font-semibold tracking-tight text-gray-950 sm:text-4xl">
               {document.filename}
             </h1>
             <p className="mt-3 text-[15px] text-gray-500">
@@ -1008,31 +1071,43 @@ export default function DocumentPage() {
         </nav>
 
         {tab === "overview" ? (
-          <Card className="space-y-10">
-            <SectionHeading icon={<SummaryIcon />} title="Document Summary" />
+          <Card className="space-y-8">
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+              <div>
+                <SectionHeading
+                  icon={<SummaryIcon />}
+                  title="Study Brief"
+                  description="A concise orientation to what matters in this document."
+                />
 
-            <p className="max-w-3xl text-[17px] leading-8 text-gray-700">
-              {studyGuide.overview.summary}
-            </p>
+                <StudyBriefNarrationControls
+                  key={document.id}
+                  narrationText={narrationText}
+                />
 
-            {(studyGuide.overview.topic ||
-              (studyGuide.overview.due_date && document.document_type !== "HOMEWORK") ||
-              studyGuide.overview.estimated_time) ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                {studyGuide.overview.topic ? (
-                  <MetricCard label="Topic" value={studyGuide.overview.topic} />
-                ) : null}
-                {studyGuide.overview.due_date && document.document_type !== "HOMEWORK" ? (
-                  <MetricCard label="Due Date" value={studyGuide.overview.due_date} />
-                ) : null}
-                {studyGuide.overview.estimated_time ? (
-                  <MetricCard
-                    label="Estimated Time"
-                    value={studyGuide.overview.estimated_time}
-                  />
-                ) : null}
+                <div className="mt-8 space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                    What this document is about
+                  </p>
+                  <p className="max-w-3xl text-[18px] leading-8 text-gray-800">
+                    {studyGuide.overview.summary}
+                  </p>
+                </div>
               </div>
-            ) : null}
+
+              {overviewFacts.length > 0 ? (
+                <aside className="rounded-3xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="px-1 pb-3 text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                    At a glance
+                  </p>
+                  <div className="space-y-3">
+                    {overviewFacts.map((fact) => (
+                      <MetricCard key={fact.label} label={fact.label} value={fact.value} />
+                    ))}
+                  </div>
+                </aside>
+              ) : null}
+            </div>
 
             {document.document_type === "HOMEWORK" ? (
               <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 space-y-4">
@@ -1248,7 +1323,7 @@ export default function DocumentPage() {
             <SectionHeading
               icon={<ActionsIcon />}
               title="Key Actions"
-              description="The most important directives, takeaways, and requirements extracted from this document."
+              description="The most important directives, themes, and requirements extracted from this document."
             />
 
             {studyGuide.key_actions.length === 0 ? (
@@ -1268,9 +1343,14 @@ export default function DocumentPage() {
                         <p className="text-lg font-semibold tracking-tight text-gray-950">
                           {item.label}
                         </p>
-                        <p className="mt-2 text-[15px] leading-7 text-gray-500">
-                          {item.supporting_quote}
-                        </p>
+                        <EvidenceButton
+                          citationCount={item.citations.length}
+                          itemLabel={item.label}
+                          onClick={() =>
+                            openCitationDrawer(item.label, item.citations, item.supporting_quote)
+                          }
+                          className="mt-3"
+                        />
                       </div>
                     </div>
                   </div>
@@ -1300,7 +1380,14 @@ export default function DocumentPage() {
 
             {checklistTotal > 0 ? (
               <div className="space-y-3">
-                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                <div
+                  role="progressbar"
+                  aria-valuenow={checklistDone}
+                  aria-valuemin={0}
+                  aria-valuemax={checklistTotal}
+                  aria-label={`Checklist progress: ${checklistDone} of ${checklistTotal} completed`}
+                  className="h-2 w-full overflow-hidden rounded-full bg-gray-100"
+                >
                   <div
                     className="h-full rounded-full bg-emerald-600 transition-all"
                     style={{ width: `${checklistProgress}%` }}
@@ -1324,28 +1411,35 @@ export default function DocumentPage() {
                 const checked = checklistCompleted[item.id] ?? false;
                 return (
                   <li key={item.id}>
-                    <label className="flex cursor-pointer items-start gap-4">
+                    <div className="flex items-start gap-4">
                       <input
+                        id={`checklist-${item.id}`}
                         type="checkbox"
                         checked={checked}
                         onChange={(event) => {
                           void handleChecklistToggle(item.id, event.target.checked);
                         }}
-                        className="mt-1 h-5 w-5 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                        className="mt-1.5 h-5 w-5 shrink-0 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
                       />
-                      <span className="min-w-0">
-                        <span
-                          className={`block text-lg font-semibold tracking-tight ${
+                      <div className="min-w-0">
+                        <label
+                          htmlFor={`checklist-${item.id}`}
+                          className={`block cursor-pointer text-lg font-semibold tracking-tight ${
                             checked ? "text-gray-500 line-through" : "text-gray-950"
                           }`}
                         >
                           {item.label}
-                        </span>
-                        <span className="mt-1 block text-sm leading-7 text-gray-500">
-                          {item.supporting_quote}
-                        </span>
-                      </span>
-                    </label>
+                        </label>
+                        <EvidenceButton
+                          citationCount={item.citations.length}
+                          itemLabel={item.label}
+                          onClick={() =>
+                            openCitationDrawer(item.label, item.citations, item.supporting_quote)
+                          }
+                          className="mt-2"
+                        />
+                      </div>
+                    </div>
                   </li>
                 );
               };
@@ -1423,9 +1517,18 @@ export default function DocumentPage() {
                           <h3 className="text-xl font-semibold tracking-tight text-gray-950">
                             {item.label}
                           </h3>
-                          <p className="mt-2 text-[15px] leading-8 text-gray-700">
-                            {item.supporting_quote}
-                          </p>
+                          <EvidenceButton
+                            citationCount={item.citations.length}
+                            itemLabel={item.label}
+                            onClick={() =>
+                              openCitationDrawer(
+                                item.label,
+                                item.citations,
+                                item.supporting_quote
+                              )
+                            }
+                            className="mt-3"
+                          />
                         </div>
                       </div>
                     </div>
@@ -1577,14 +1680,22 @@ export default function DocumentPage() {
             onClick={() => setCitationDrawerOpen(false)}
             className="absolute inset-0 bg-black/10"
           />
-          <aside className="relative z-10 h-full w-full max-w-md border-l border-gray-200 bg-white shadow-2xl">
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="citation-drawer-title"
+            className="relative z-10 h-full w-full max-w-md border-l border-gray-200 bg-white shadow-2xl"
+          >
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
               <div>
-                <p className="text-lg font-semibold text-gray-950">Source Citations</p>
+                <p id="citation-drawer-title" className="text-lg font-semibold text-gray-950">
+                  Source Evidence
+                </p>
                 <p className="mt-1 text-sm text-gray-500">{citationDrawerTitle}</p>
               </div>
               <button
                 type="button"
+                aria-label="Close source evidence panel"
                 onClick={() => setCitationDrawerOpen(false)}
                 className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
               >
@@ -1605,35 +1716,60 @@ export default function DocumentPage() {
             </div>
 
             <div className="h-[calc(100%-88px)] overflow-y-auto px-5 py-5">
-              {activeCitations.length === 0 ? (
+              {!activeEvidenceQuote && activeCitations.length === 0 ? (
                 <EmptyState text="No citations available." />
               ) : (
-                <div className="space-y-4">
-                  {activeCitations.map((citation, index) => (
-                    <div
-                      key={`${citation.source_type}-${index}-${formatCitationLabel(citation)}`}
-                      className="rounded-2xl border border-gray-200 bg-white p-4"
-                    >
+                <div className="space-y-5">
+                  {activeEvidenceQuote ? (
+                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5 text-gray-400">
                           <QuoteIcon />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-950">
-                            {formatCitationLabel(citation)}
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
+                            Supporting quote
                           </p>
-                          {formatCitationSubLabel(citation) ? (
-                            <p className="mt-1 text-xs uppercase tracking-wide text-gray-400">
-                              {formatCitationSubLabel(citation)}
-                            </p>
-                          ) : null}
-                          <p className="mt-3 text-sm leading-7 text-gray-600">
-                            {citation.excerpt}
+                          <p className="mt-3 text-sm leading-7 text-gray-700">
+                            {activeEvidenceQuote}
                           </p>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  ) : null}
+
+                  {activeCitations.length > 0 ? (
+                    <div className="space-y-4">
+                      <p className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
+                        Source citations
+                      </p>
+                      {activeCitations.map((citation, index) => (
+                        <div
+                          key={`${citation.source_type}-${index}-${formatCitationLabel(citation)}`}
+                          className="rounded-2xl border border-gray-200 bg-white p-4"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5 text-gray-400">
+                              <QuoteIcon />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-950">
+                                {formatCitationLabel(citation)}
+                              </p>
+                              {formatCitationSubLabel(citation) ? (
+                                <p className="mt-1 text-xs uppercase tracking-wide text-gray-400">
+                                  {formatCitationSubLabel(citation)}
+                                </p>
+                              ) : null}
+                              <p className="mt-3 text-sm leading-7 text-gray-600">
+                                {citation.excerpt}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
