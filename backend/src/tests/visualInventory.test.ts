@@ -160,6 +160,38 @@ test("buildVisualInventory skips corrupt DOCX image bytes without failing", () =
   assert.match(result.manifest.warnings[0], /dimensions could not be read/);
 });
 
+test("buildVisualInventory skips DOCX entries whose inflated size exceeds the byte cap", () => {
+  // Dishonest ZIP metadata: declared uncompressed size (4) sneaks past the
+  // pre-extraction byte-cap check, but the real deflate payload inflates well
+  // beyond max_image_bytes. The bounded inflate must throw and be skipped.
+  const inflatedPayload = Buffer.alloc(4096, 0x41);
+  const docx = buildZip([
+    {
+      name: "word/media/image1.png",
+      data: inflatedPayload,
+      compressionMethod: 8,
+      declaredUncompressedSize: 4,
+    },
+  ]);
+
+  const result = buildVisualInventory({
+    documentId: "doc-visual-inflate-bomb",
+    fileType: "DOCX",
+    fileBuffer: docx,
+    createdAt,
+    limits: { max_image_bytes: 64 },
+  });
+
+  assert.equal(result.manifest.status, "partial");
+  assert.equal(result.manifest.items.length, 0);
+  assert.equal(result.assets.length, 0);
+  assert.match(result.manifest.warnings[0], /max_image_bytes/);
+
+  const warningsText = result.manifest.warnings.join("\n");
+  assert.equal(warningsText.includes(inflatedPayload.toString("base64")), false);
+  assert.equal(warningsText.includes(inflatedPayload.toString("hex")), false);
+});
+
 test("buildVisualInventory records partial DOCX inventory when timeout is reached", () => {
   const docx = buildZip([{ name: "word/media/image1.png", data: tinyPng }]);
 

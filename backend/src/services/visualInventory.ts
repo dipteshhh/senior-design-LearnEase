@@ -213,9 +213,11 @@ function buildDocxVisualInventory({
 
     let imageBytes: Buffer;
     try {
-      imageBytes = readZipEntryContent(fileBuffer, entry);
+      imageBytes = readZipEntryContent(fileBuffer, entry, limits.max_image_bytes);
     } catch {
-      warnings.push(`Skipped ${mediaPath}: failed to extract media entry.`);
+      warnings.push(
+        `Skipped ${mediaPath}: failed to extract media entry within max_image_bytes (${limits.max_image_bytes}).`
+      );
       continue;
     }
 
@@ -401,7 +403,7 @@ function findEndOfCentralDirectory(buffer: Buffer): number {
   return -1;
 }
 
-function readZipEntryContent(buffer: Buffer, entry: ZipEntry): Buffer {
+function readZipEntryContent(buffer: Buffer, entry: ZipEntry, maxOutputLength: number): Buffer {
   ensureRange(buffer, entry.localHeaderOffset, 30);
   if (buffer.readUInt32LE(entry.localHeaderOffset) !== LOCAL_FILE_SIGNATURE) {
     throw new Error("Invalid DOCX ZIP local file header.");
@@ -414,11 +416,17 @@ function readZipEntryContent(buffer: Buffer, entry: ZipEntry): Buffer {
   const compressed = buffer.subarray(contentOffset, contentOffset + entry.compressedSize);
 
   if (entry.compressionMethod === 0) {
+    if (compressed.byteLength > maxOutputLength) {
+      throw new Error("DOCX ZIP entry exceeds max output length.");
+    }
     return Buffer.from(compressed);
   }
 
   if (entry.compressionMethod === 8) {
-    const inflated = inflateRawSync(compressed);
+    // Bound the inflated output so a zip-bomb or dishonest uncompressed size
+    // cannot amplify a small upload into unbounded memory. Exceeding the cap
+    // throws and the caller skips the media item with a partial-inventory warning.
+    const inflated = inflateRawSync(compressed, { maxOutputLength });
     if (entry.uncompressedSize !== 0 && inflated.byteLength !== entry.uncompressedSize) {
       throw new Error("DOCX ZIP entry size mismatch.");
     }

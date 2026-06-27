@@ -4,6 +4,10 @@ interface ZipEntryInput {
   name: string;
   data: Buffer | string;
   compressionMethod?: 0 | 8;
+  // Override the uncompressed size recorded in the ZIP headers. Used to
+  // simulate dishonest ZIP metadata (declared size smaller than the real
+  // inflated payload) for inflation-bound hardening tests.
+  declaredUncompressedSize?: number;
 }
 
 export const tinyPng = Buffer.from(
@@ -28,6 +32,7 @@ export function buildZip(entries: ZipEntryInput[]): Buffer {
     const data = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data, "utf8");
     const compressionMethod = entry.compressionMethod ?? 0;
     const compressedData = compressionMethod === 8 ? deflateRawSync(data) : data;
+    const declaredUncompressedSize = entry.declaredUncompressedSize ?? data.byteLength;
     const localHeader = Buffer.alloc(30);
     const localOffset = offset;
 
@@ -39,7 +44,7 @@ export function buildZip(entries: ZipEntryInput[]): Buffer {
     localHeader.writeUInt16LE(0, 12);
     localHeader.writeUInt32LE(0, 14);
     localHeader.writeUInt32LE(compressedData.byteLength, 18);
-    localHeader.writeUInt32LE(data.byteLength, 22);
+    localHeader.writeUInt32LE(declaredUncompressedSize, 22);
     localHeader.writeUInt16LE(name.byteLength, 26);
     localHeader.writeUInt16LE(0, 28);
 
@@ -56,7 +61,7 @@ export function buildZip(entries: ZipEntryInput[]): Buffer {
     centralHeader.writeUInt16LE(0, 14);
     centralHeader.writeUInt32LE(0, 16);
     centralHeader.writeUInt32LE(compressedData.byteLength, 20);
-    centralHeader.writeUInt32LE(data.byteLength, 24);
+    centralHeader.writeUInt32LE(declaredUncompressedSize, 24);
     centralHeader.writeUInt16LE(name.byteLength, 28);
     centralHeader.writeUInt16LE(0, 30);
     centralHeader.writeUInt16LE(0, 32);

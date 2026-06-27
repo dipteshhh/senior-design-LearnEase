@@ -9,7 +9,11 @@ import {
   writeEncryptedBuffer,
   writeEncryptedText,
 } from "../lib/encryption.js";
-import type { VisualInventoryBuildResult } from "../services/visualInventory.js";
+import type {
+  VisualInventoryBuildResult,
+  VisualInventoryManifest,
+  VisualInventoryStatus,
+} from "../services/visualInventory.js";
 
 export type DocumentStatus = "uploaded" | "processing" | "ready" | "failed";
 export type GenerationStatus = "idle" | "processing" | "ready" | "failed";
@@ -711,6 +715,161 @@ export function saveVisualInventoryArtifact(
   writeEncryptedText(manifestPath, manifestJson);
   const contentHash = createHash("sha256").update(manifestJson).digest("hex");
   upsertArtifact(documentId, "VISUAL_INVENTORY", manifestPath, contentHash);
+}
+
+export type VisualInventoryManifestReadResult =
+  | { ok: true; manifest: VisualInventoryManifest }
+  | { ok: false; reason: "missing" | "decrypt_failed" | "parse_failed"; message?: string };
+
+export type VisualInventoryAssetVerificationReason =
+  | "missing_asset"
+  | "decrypt_failed"
+  | "byte_size_mismatch"
+  | "hash_mismatch";
+
+export interface VisualInventoryAssetVerification {
+  id: string;
+  image_index: number;
+  ok: boolean;
+  reason?: VisualInventoryAssetVerificationReason;
+  expected_byte_size?: number;
+  actual_byte_size?: number;
+  expected_hash?: string;
+  actual_hash?: string;
+}
+
+export type VisualInventoryVerifyResult =
+  | {
+      ok: boolean;
+      manifest_status: VisualInventoryStatus;
+      items: VisualInventoryAssetVerification[];
+    }
+  | {
+      ok: false;
+      manifest_read_error: "missing" | "decrypt_failed" | "parse_failed";
+      message?: string;
+    };
+
+/**
+ * Read-only resolver that mirrors resolveDocumentArtifactPath's traversal guard
+ * but never creates directories. Used by inspection/verification helpers.
+ */
+function resolveExistingArtifactPath(documentId: string, relativePath: string): string {
+  const artifactDir = path.resolve(resolveArtifactsRoot(), documentId);
+  const artifactPath = path.resolve(artifactDir, relativePath);
+  const artifactDirWithSeparator = `${artifactDir}${path.sep}`;
+  if (artifactPath !== artifactDir && !artifactPath.startsWith(artifactDirWithSeparator)) {
+    throw new Error("Artifact path escapes document artifact directory.");
+  }
+  return artifactPath;
+}
+
+function readVisualInventoryArtifactPath(documentId: string): string | undefined {
+  const row = db
+    .prepare(
+      `
+        SELECT encrypted_path
+        FROM document_artifacts
+        WHERE document_id = ? AND artifact_type = 'VISUAL_INVENTORY'
+      `
+    )
+    .get(documentId) as { encrypted_path: string | null } | undefined;
+  return row?.encrypted_path ?? undefined;
+}
+
+/**
+ * Read-only, metadata-only manifest read for the dev/admin inspection tooling.
+ * Never throws for missing/corrupt/undecryptable manifests and never logs
+ * decrypted content.
+ */
+export function getVisualInventoryManifest(
+  documentId: string
+): VisualInventoryManifestReadResult {
+  const manifestPath = readVisualInventoryArtifactPath(documentId);
+  if (!manifestPath) {
+    return { ok: false, reason: "missing" };
+  }
+
+  let manifestJson: string;
+  try {
+    manifestJson = readEncryptedText(manifestPath);
+  } catch {
+    return { ok: false, reason: "decrypt_failed" };
+  }
+
+  try {
+    const manifest = JSON.parse(manifestJson) as VisualInventoryManifest;
+    return { ok: true, manifest };
+  } catch {
+    return { ok: false, reason: "parse_failed" };
+  }
+}
+
+/**
+ * Verifies that each manifest item's encrypted asset exists and matches the
+ * recorded byte size and SHA-256. Returns metadata-only results; never returns,
+ * prints, or writes raw image bytes.
+ */
+export function verifyVisualInventoryAssets(
+  documentId: string
+): VisualInventoryVerifyResult {
+  const read = getVisualInventoryManifest(documentId);
+  if (!read.ok) {
+    return { ok: false, manifest_read_error: read.reason, message: read.message };
+  }
+
+  const { manifest } = read;
+  const items: VisualInventoryAssetVerification[] = manifest.items.map((item) => {
+    const base = { id: item.id, image_index: item.image_index };
+
+    let assetPath: string;
+    try {
+      assetPath = resolveExistingArtifactPath(documentId, item.encrypted_artifact_path);
+    } catch {
+      return { ...base, ok: false, reason: "missing_asset" };
+    }
+
+    if (!fs.existsSync(assetPath)) {
+      return { ...base, ok: false, reason: "missing_asset" };
+    }
+
+    let content: Buffer;
+    try {
+      content = readEncryptedBuffer(assetPath);
+    } catch {
+      return { ...base, ok: false, reason: "decrypt_failed" };
+    }
+
+    const actualByteSize = content.byteLength;
+    if (actualByteSize !== item.byte_size) {
+      return {
+        ...base,
+        ok: false,
+        reason: "byte_size_mismatch",
+        expected_byte_size: item.byte_size,
+        actual_byte_size: actualByteSize,
+      };
+    }
+
+    const actualHash = createHash("sha256").update(content).digest("hex");
+    if (actualHash !== item.image_hash) {
+      return {
+        ...base,
+        ok: false,
+        reason: "hash_mismatch",
+        expected_hash: item.image_hash,
+        actual_hash: actualHash,
+      };
+    }
+
+    return { ...base, ok: true };
+  });
+
+  return {
+    ok: items.every((item) => item.ok),
+    manifest_status: manifest.status,
+    items,
+  };
 }
 
 export function getDocument(id: string): DocumentRecord | undefined {

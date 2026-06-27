@@ -125,39 +125,47 @@ function ensureVisualInventoryArtifactType(db: SqliteDatabase): void {
     return;
   }
 
-  db.exec(`
-    ALTER TABLE document_artifacts RENAME TO document_artifacts_legacy;
+  // Run the rename/recreate/copy/drop as a single transaction so a failure
+  // rolls back cleanly and never strands document_artifacts_legacy.
+  const migrate = db.transaction(() => {
+    db.exec(`
+      DROP TABLE IF EXISTS document_artifacts_legacy;
 
-    CREATE TABLE document_artifacts (
-      id TEXT PRIMARY KEY,
-      document_id TEXT NOT NULL,
-      artifact_type TEXT NOT NULL CHECK (artifact_type IN ('ORIGINAL_FILE', 'EXTRACTED_TEXT', 'VISUAL_INVENTORY')),
-      encrypted_path TEXT NOT NULL,
-      content_hash TEXT,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
-      UNIQUE (document_id, artifact_type)
-    );
+      ALTER TABLE document_artifacts RENAME TO document_artifacts_legacy;
 
-    INSERT INTO document_artifacts (
-      id,
-      document_id,
-      artifact_type,
-      encrypted_path,
-      content_hash,
-      created_at
-    )
-    SELECT
-      id,
-      document_id,
-      artifact_type,
-      encrypted_path,
-      content_hash,
-      created_at
-    FROM document_artifacts_legacy;
+      CREATE TABLE document_artifacts (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL,
+        artifact_type TEXT NOT NULL CHECK (artifact_type IN ('ORIGINAL_FILE', 'EXTRACTED_TEXT', 'VISUAL_INVENTORY')),
+        encrypted_path TEXT NOT NULL,
+        content_hash TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+        UNIQUE (document_id, artifact_type)
+      );
 
-    DROP TABLE document_artifacts_legacy;
-  `);
+      INSERT INTO document_artifacts (
+        id,
+        document_id,
+        artifact_type,
+        encrypted_path,
+        content_hash,
+        created_at
+      )
+      SELECT
+        id,
+        document_id,
+        artifact_type,
+        encrypted_path,
+        content_hash,
+        created_at
+      FROM document_artifacts_legacy;
+
+      DROP TABLE document_artifacts_legacy;
+    `);
+  });
+
+  migrate();
 }
 
 function backfillDocumentFlowState(db: SqliteDatabase): void {

@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "start": "node dist/index.js",
     "test": "node --import tsx --test src/tests/*.test.ts",
-    "test:integration": "node --import tsx --test src/tests/integration/*.test.ts"
+    "test:integration": "node --import tsx --test src/tests/integration/*.test.ts",
+    "inspect:visual-inventory": "tsx src/cli/inspectVisualInventory.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
