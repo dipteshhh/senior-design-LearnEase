@@ -42,6 +42,7 @@ import { sendApiError } from "./lib/apiError.js";
 import { checkAndSendReminders } from "./services/reminderScheduler.js";
 
 const app = express();
+app.disable("x-powered-by");
 const PORT = process.env.PORT ?? 3001;
 const RETENTION_DAYS = (() => {
   const raw = process.env.RETENTION_DAYS;

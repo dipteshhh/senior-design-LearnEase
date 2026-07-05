@@ -13,7 +13,7 @@ Canonical contract docs:
 - Frontend: `http://localhost:3000`
 - Backend: `http://localhost:3001`
 - Required frontend env:
-  - `NEXT_PUBLIC_API_BASE_URL`
+  - `BACKEND_API_BASE_URL`
   - `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
 - Required backend env:
   - `GOOGLE_CLIENT_ID`

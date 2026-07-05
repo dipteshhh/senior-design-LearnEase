@@ -5,9 +5,7 @@ function normalizeBaseUrl(value: string): string {
 const DEFAULT_DEV_BACKEND_API_BASE_URL = "http://localhost:3001";
 
 export function getBackendApiBaseUrl(): string {
-  const configured =
-    process.env.BACKEND_API_BASE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  const configured = process.env.BACKEND_API_BASE_URL?.trim();
 
   if (configured) {
     return normalizeBaseUrl(configured);
