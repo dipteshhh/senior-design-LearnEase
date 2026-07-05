@@ -3,12 +3,16 @@
 # LearnEase Backend — End-to-End Lifecycle Test
 # ─────────────────────────────────────────────────────────────
 # Prerequisites:
-#   1. backend/.env must have:
+#   1. backend/.env with:
 #        OPENAI_API_KEY=<real key>
 #        FILE_ENCRYPTION_KEY=<64-char hex>
-#        SESSION_SECRET=<strong secret> (required for signed-session auth in tests)
+#        SESSION_SECRET=<strong secret>
 #        GOOGLE_TEST_ID_TOKEN=<optional real Google ID token to exercise /api/auth/google>
-#   2. No other process on PORT (default 3001)
+#      The script loads .env automatically (shell exports take precedence).
+#   2. No other process on PORT (default 3001, or PORT from .env / shell)
+#   3. E2E uses an isolated temp SQLite DB and artifacts dir by default
+#      (does not touch backend/data/). Override by exporting DATABASE_PATH /
+#      ARTIFACTS_DIR before running the script.
 #
 # Usage:
 #   cd backend && bash scripts/e2e-test.sh
@@ -16,7 +20,59 @@
 
 set -euo pipefail
 
-PORT="${PORT:-3001}"
+green()  { printf "\033[32m%s\033[0m\n" "$1"; }
+red()    { printf "\033[31m%s\033[0m\n" "$1"; }
+yellow() { printf "\033[33m%s\033[0m\n" "$1"; }
+bold()   { printf "\033[1m%s\033[0m\n" "$1"; }
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "$BACKEND_DIR"
+
+# Preserve shell overrides before .env load (.env must not repoint E2E storage).
+E2E_SHELL_DATABASE_PATH="${DATABASE_PATH-}"
+E2E_SHELL_ARTIFACTS_DIR="${ARTIFACTS_DIR-}"
+E2E_SHELL_PORT="${PORT-}"
+
+load_backend_env() {
+  local env_file="${BACKEND_DIR}/.env"
+  local exports
+  local load_status=0
+
+  exports="$(node "${SCRIPT_DIR}/load-dotenv-for-shell.mjs" "$env_file" 2>&1)" || load_status=$?
+  if [[ $load_status -ne 0 ]]; then
+    red "$exports"
+    exit 1
+  fi
+
+  if [[ -n "$exports" ]]; then
+    # shellcheck disable=SC1090
+    eval "$exports"
+  fi
+
+  yellow "Loaded environment from ${env_file} (existing shell exports preserved)."
+}
+
+require_env_value() {
+  local name="$1"
+  local hint="$2"
+  local value="${!name:-}"
+
+  if [[ -z "$value" ]]; then
+    red "${name} is required for E2E."
+    red "Set it in backend/.env or export it before running:"
+    red "  ${hint}"
+    exit 1
+  fi
+}
+
+load_backend_env
+
+if [[ -n "$E2E_SHELL_PORT" ]]; then
+  PORT="$E2E_SHELL_PORT"
+else
+  PORT="${PORT:-3001}"
+fi
 BASE="http://localhost:${PORT}"
 PRIMARY_USER_ID="e2e-test-user"
 PRIMARY_USER_EMAIL="e2e@test.edu"
@@ -44,11 +100,6 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-
-green()  { printf "\033[32m%s\033[0m\n" "$1"; }
-red()    { printf "\033[31m%s\033[0m\n" "$1"; }
-yellow() { printf "\033[33m%s\033[0m\n" "$1"; }
-bold()   { printf "\033[1m%s\033[0m\n" "$1"; }
 
 assert() {
   local label="$1" actual="$2" expected="$3"
@@ -181,17 +232,30 @@ ensure_port_free() {
   fi
 }
 
-# ── Create test DOCX fixtures ────────────────────────────────
+# ── Isolated temp storage + test DOCX fixtures ───────────────
 
 TMPDIR_E2E=$(mktemp -d)
+
+# Keep E2E off the developer's normal backend/data/ store unless explicitly overridden.
+DATABASE_PATH="${E2E_SHELL_DATABASE_PATH:-${TMPDIR_E2E}/learnease.sqlite}"
+ARTIFACTS_DIR="${E2E_SHELL_ARTIFACTS_DIR:-${TMPDIR_E2E}/artifacts}"
+mkdir -p "$(dirname "$DATABASE_PATH")" "$ARTIFACTS_DIR"
+export DATABASE_PATH ARTIFACTS_DIR
+
+yellow "Using isolated E2E storage:"
+yellow "  DATABASE_PATH=${DATABASE_PATH}"
+yellow "  ARTIFACTS_DIR=${ARTIFACTS_DIR}"
+echo ""
 
 yellow "Generating test DOCX files..."
 node scripts/generate-test-docx.mjs "$TMPDIR_E2E"
 echo ""
 
-if [[ -z "${SESSION_SECRET:-}" ]]; then
-  red "SESSION_SECRET is required for E2E auth cookie generation."
-  exit 1
+require_env_value SESSION_SECRET 'export SESSION_SECRET="$(openssl rand -hex 32)"'
+require_env_value FILE_ENCRYPTION_KEY 'export FILE_ENCRYPTION_KEY="$(openssl rand -hex 32)"'
+
+if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+  yellow "OPENAI_API_KEY is not set; study-guide and quiz generation tests will fail."
 fi
 
 COOKIE="$(build_auth_cookie "$PRIMARY_USER_ID" "$PRIMARY_USER_EMAIL" "$PRIMARY_USER_NAME")"
@@ -208,7 +272,7 @@ echo ""
 
 yellow "Starting backend server..."
 ensure_port_free
-PORT="$PORT" RATE_LIMIT_MAX=200 ALLOW_LEGACY_AUTH_COOKIES="${ALLOW_LEGACY_AUTH_COOKIES:-false}" npx tsx src/index.ts &
+PORT="$PORT" DATABASE_PATH="$DATABASE_PATH" ARTIFACTS_DIR="$ARTIFACTS_DIR" RATE_LIMIT_MAX=200 ALLOW_LEGACY_AUTH_COOKIES="${ALLOW_LEGACY_AUTH_COOKIES:-false}" npx tsx src/index.ts &
 SERVER_PID=$!
 wait_for_server
 green "Server is up (PID $SERVER_PID)"
