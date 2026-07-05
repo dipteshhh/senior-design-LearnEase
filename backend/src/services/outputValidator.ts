@@ -84,7 +84,7 @@ function normalizeUnicodeVariants(text: string): string {
   return text
     .normalize("NFKC")
     .replace(/[‐‑‒–—−]/g, "-")
-    .replace(/[•●◦▪▸►]/g, " ");
+    .replace(/[•●◦▪▸►\uF097\uF09E]/g, " ");
 }
 
 function removeHiddenCharacters(text: string): string {
@@ -94,7 +94,14 @@ function removeHiddenCharacters(text: string): string {
 }
 
 function normalizePdfHyphenation(text: string): string {
-  return text.replace(/([A-Za-z])-\n([A-Za-z])/g, "$1$2");
+  return text.replace(/([A-Za-z]+)-\n\s*([A-Za-z]+)/g, (match, before, after, offset, fullText) => {
+    const charBeforeWord = fullText[offset - 1] ?? "";
+    const charAfterWord = fullText[offset + match.length] ?? "";
+    if (charBeforeWord === "-" || charAfterWord === "-") {
+      return `${before}-${after}`;
+    }
+    return `${before}${after}`;
+  });
 }
 
 export function normalizeDocumentText(text: string, fileType: FileType): string {
@@ -364,6 +371,66 @@ function isDirectGroundingMatch(normalizedFragment: string, context: ValidationC
   return context.normalizedText.includes(normalizedFragment);
 }
 
+const ORDERED_ELLIPSIS_REGEX = /\s*(?:\.{3}|…)\s*/u;
+const MIN_ORDERED_ELLIPSIS_FRAGMENT_CHARS = 8;
+
+function countMeaningfulChars(value: string): number {
+  return Array.from(value).filter((char) => /[\p{L}\p{N}]/u.test(char)).length;
+}
+
+function isOrderedEllipsisGroundingMatch(
+  normalizedFragment: string,
+  context: ValidationContext
+): boolean {
+  if (!ORDERED_ELLIPSIS_REGEX.test(normalizedFragment)) {
+    return false;
+  }
+
+  const fragments = normalizedFragment
+    .split(ORDERED_ELLIPSIS_REGEX)
+    .map((fragment) => fragment.trim())
+    .filter((fragment) => fragment.length > 0);
+
+  if (fragments.length < 2) {
+    return false;
+  }
+
+  if (
+    fragments.some(
+      (fragment) => countMeaningfulChars(fragment) < MIN_ORDERED_ELLIPSIS_FRAGMENT_CHARS
+    )
+  ) {
+    return false;
+  }
+
+  let searchStart = 0;
+  for (const fragment of fragments) {
+    const foundAt = context.normalizedText.indexOf(fragment, searchStart);
+    if (foundAt < 0) {
+      return false;
+    }
+    searchStart = foundAt + fragment.length;
+  }
+
+  return true;
+}
+
+function isGroundedEvidenceText(
+  normalizedText: string,
+  context: ValidationContext
+): boolean {
+  return (
+    isDirectGroundingMatch(normalizedText, context) ||
+    isOrderedEllipsisGroundingMatch(normalizedText, context)
+  );
+}
+
+export function isEvidenceTextGrounded(value: string, input: ValidationInput): boolean {
+  const context = createValidationContext(input);
+  const normalized = normalizeDocumentText(value, input.fileType);
+  return normalized.length > 0 && isGroundedEvidenceText(normalized, context);
+}
+
 function validateQuoteExists(
   quote: string,
   context: ValidationContext,
@@ -377,7 +444,7 @@ function validateQuoteExists(
     });
   }
 
-  if (isDirectGroundingMatch(normalizedQuote, context)) {
+  if (isGroundedEvidenceText(normalizedQuote, context)) {
     return;
   }
 
@@ -404,7 +471,7 @@ function validateCitation(
     });
   }
 
-  if (!isDirectGroundingMatch(normalizedExcerpt, context)) {
+  if (!isGroundedEvidenceText(normalizedExcerpt, context)) {
     throw new ContractValidationError(
       "CITATION_EXCERPT_NOT_FOUND",
       "Citation excerpt was not found in extracted text.",

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ChevronDown, ChevronUp, Clock3 } from "lucide-react";
 import { StudyBriefNarrationControls } from "@/components/StudyBriefNarrationControls";
 import type {
   Citation,
@@ -36,6 +37,8 @@ type StudyGuideTab = {
   badge?: string;
   badgeTone?: "default" | "success";
 };
+
+const DEFAULT_DUE_TIME = "23:59";
 
 function StatusPill({ status }: { status: DocumentListItem["status"] }) {
   const base =
@@ -342,13 +345,178 @@ function formatDate(value: string): string {
 }
 
 function formatTime(hhmm: string): string {
-  const [hStr, mStr] = hhmm.split(":");
-  const h = Number(hStr);
-  const m = Number(mStr);
-  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
-  const period = h >= 12 ? "PM" : "AM";
-  const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-  return `${hour12}:${m.toString().padStart(2, "0")} ${period}`;
+  const parts = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+  if (!parts) return hhmm;
+  const hour = Number(parts[1]);
+  const minute = Number(parts[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return hhmm;
+  const period = hour >= 12 ? "PM" : "AM";
+  return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")} ${period}`;
+}
+
+function splitDueTime(value: string): { hour: string; minute: string } {
+  const parts = value.match(/^(\d{2}):(\d{2})$/);
+  if (!parts) {
+    return { hour: "", minute: "" };
+  }
+  return { hour: parts[1], minute: parts[2] };
+}
+
+function normalizeTimePart(value: string, max: number, fallback: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 2);
+  if (!digits) return fallback;
+  return Math.min(Number(digits), max).toString().padStart(2, "0");
+}
+
+function buildDueTime(hour: string, minute: string): string {
+  return `${normalizeTimePart(hour, 23, "00")}:${normalizeTimePart(minute, 59, "00")}`;
+}
+
+function shiftDueTime(value: string, part: "hour" | "minute", delta: number): string {
+  const { hour, minute } = splitDueTime(value || DEFAULT_DUE_TIME);
+  const currentHour = Number(hour || DEFAULT_DUE_TIME.slice(0, 2));
+  const currentMinute = Number(minute || DEFAULT_DUE_TIME.slice(3, 5));
+
+  if (part === "hour") {
+    const nextHour = (currentHour + delta + 24) % 24;
+    return buildDueTime(String(nextHour), String(currentMinute));
+  }
+
+  const nextMinute = (currentMinute + delta + 60) % 60;
+  return buildDueTime(String(currentHour), String(nextMinute));
+}
+
+function TimePicker24({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const normalizedValue = value || DEFAULT_DUE_TIME;
+  const { hour, minute } = splitDueTime(normalizedValue);
+  const [draftHour, setDraftHour] = useState(hour);
+  const [draftMinute, setDraftMinute] = useState(minute);
+
+  function commit(nextHour: string = draftHour, nextMinute: string = draftMinute) {
+    const nextValue = buildDueTime(nextHour, nextMinute);
+    const nextParts = splitDueTime(nextValue);
+    setDraftHour(nextParts.hour);
+    setDraftMinute(nextParts.minute);
+    onChange(nextValue);
+  }
+
+  function step(part: "hour" | "minute", delta: number) {
+    const nextValue = shiftDueTime(buildDueTime(draftHour, draftMinute), part, delta);
+    const nextParts = splitDueTime(nextValue);
+    setDraftHour(nextParts.hour);
+    setDraftMinute(nextParts.minute);
+    onChange(nextValue);
+  }
+
+  return (
+    <div className="inline-flex h-10 w-fit max-w-full items-center gap-2 rounded-lg border border-[#cfe2d7] bg-white px-2 py-1 shadow-[0_8px_18px_rgba(16,32,29,0.07)]">
+      <div className="flex h-8 shrink-0 items-center gap-1.5 border-r border-[#e1ebe5] pr-2">
+        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#e2f7ef] text-[#14765f]">
+          <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
+        <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#688078]">
+          24h
+        </span>
+      </div>
+      <TimePartControl
+        label="Hour"
+        value={draftHour}
+        onDraftChange={setDraftHour}
+        onCommit={(next) => commit(next, draftMinute)}
+        onStep={(delta) => step("hour", delta)}
+        disabled={disabled}
+      />
+      <span className="-mx-1 text-sm font-bold text-[#9aa9a3]" aria-hidden="true">
+        :
+      </span>
+      <TimePartControl
+        label="Minute"
+        value={draftMinute}
+        onDraftChange={setDraftMinute}
+        onCommit={(next) => commit(draftHour, next)}
+        onStep={(delta) => step("minute", delta)}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
+function TimePartControl({
+  label,
+  value,
+  onDraftChange,
+  onCommit,
+  onStep,
+  disabled,
+}: {
+  label: "Hour" | "Minute";
+  value: string;
+  onDraftChange: (value: string) => void;
+  onCommit: (value: string) => void;
+  onStep: (delta: number) => void;
+  disabled: boolean;
+}) {
+  const inputId = `deadline-${label.toLowerCase()}`;
+
+  return (
+    <div className="flex h-8 w-[6.6rem] items-center justify-between rounded-md border border-[#d8e6df] bg-[#f8fbf7] px-1.5">
+      <div className="flex h-7 flex-col justify-center">
+        <button
+          type="button"
+          onClick={() => onStep(1)}
+          disabled={disabled}
+          className="flex h-3 w-5 items-center justify-center rounded text-[#14765f] transition hover:bg-[#e2f7ef] disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label={`Increase ${label.toLowerCase()}`}
+        >
+          <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onStep(-1)}
+          disabled={disabled}
+          className="flex h-3 w-5 items-center justify-center rounded text-[#14765f] transition hover:bg-[#e2f7ef] disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label={`Decrease ${label.toLowerCase()}`}
+        >
+          <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="flex min-w-[4.25rem] flex-col items-center gap-0.5">
+        <label
+          htmlFor={inputId}
+          className="text-[7px] font-semibold uppercase leading-none tracking-[0.08em] text-[#7f8f88]"
+        >
+          {label}
+        </label>
+        <input
+          id={inputId}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={value}
+          maxLength={2}
+          onChange={(event) => {
+            const next = event.target.value.replace(/\D/g, "").slice(0, 2);
+            onDraftChange(next);
+            if (next.length === 2) {
+              onCommit(next);
+            }
+          }}
+          onBlur={() => onCommit(value)}
+          onFocus={(event) => event.currentTarget.select()}
+          disabled={disabled}
+          className="h-4 w-11 rounded border border-transparent bg-white/90 p-0 text-center text-[11px] font-semibold leading-none tabular-nums text-[#10201d] outline-none transition focus:border-[#55c6a3] focus:ring-1 focus:ring-[#55c6a3]/25 disabled:cursor-not-allowed disabled:opacity-60"
+        />
+      </div>
+    </div>
+  );
 }
 
 function buildTabHref(
@@ -533,7 +701,7 @@ export default function DocumentPage() {
       setDueTimeInput(detail.document.assignment_due_time);
     } else {
       setSavedDueTime(null);
-      setDueTimeInput("");
+      setDueTimeInput(DEFAULT_DUE_TIME);
     }
     setManualReminderOpen(false);
     setDueDateInput("");
@@ -764,7 +932,7 @@ export default function DocumentPage() {
   function enterDeadlineEdit() {
     if (!document) return;
     setDueDateInput(document.assignment_due_date ?? "");
-    setDueTimeInput(savedDueTime ?? "");
+    setDueTimeInput(savedDueTime ?? DEFAULT_DUE_TIME);
     setIsEditingDeadline(true);
   }
 
@@ -1167,11 +1335,10 @@ export default function DocumentPage() {
                           Due time was not detected. Enter the time to enable a reminder.
                         </p>
                         <div className="flex flex-wrap items-center gap-3">
-                          <input
-                            type="time"
+                          <TimePicker24
                             value={dueTimeInput}
-                            onChange={(e) => setDueTimeInput(e.target.value)}
-                            className="rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
+                            onChange={setDueTimeInput}
+                            disabled={dueTimeSaving}
                           />
                           <button
                             type="button"
@@ -1250,13 +1417,12 @@ export default function DocumentPage() {
                         type="date"
                         value={dueDateInput}
                         onChange={(e) => setDueDateInput(e.target.value)}
-                        className="rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
+                        className="h-10 w-[10.5rem] rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
                       />
-                      <input
-                        type="time"
+                      <TimePicker24
                         value={dueTimeInput}
-                        onChange={(e) => setDueTimeInput(e.target.value)}
-                        className="rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
+                        onChange={setDueTimeInput}
+                        disabled={dueTimeSaving}
                       />
                     </div>
                     <div className="flex items-center gap-3">
@@ -1318,13 +1484,12 @@ export default function DocumentPage() {
                             type="date"
                             value={dueDateInput}
                             onChange={(e) => setDueDateInput(e.target.value)}
-                            className="rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
+                            className="h-10 w-[10.5rem] rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
                           />
-                          <input
-                            type="time"
+                          <TimePicker24
                             value={dueTimeInput}
-                            onChange={(e) => setDueTimeInput(e.target.value)}
-                            className="rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
+                            onChange={setDueTimeInput}
+                            disabled={dueTimeSaving}
                           />
                         </div>
                         <div className="flex items-center gap-3">

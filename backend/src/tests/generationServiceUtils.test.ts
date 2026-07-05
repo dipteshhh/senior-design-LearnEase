@@ -64,6 +64,8 @@ test("buildRepairHint includes byte-for-byte guidance for grounding failures", (
   assert.match(hint, /QK\^T \/ sqrt\(d_k\)/);
   assert.match(hint, /byte-for-byte/);
   assert.match(hint, /Do NOT rewrite/);
+  assert.match(hint, /ordered "\.\.\." fragment form/);
+  assert.match(hint, /supporting_quote and citation excerpt/);
 });
 
 test("buildRepairHint includes a verbatim window from extracted text when provided", () => {

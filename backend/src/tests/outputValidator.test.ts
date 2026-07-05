@@ -48,9 +48,18 @@ test("normalizeDocumentText applies quote/whitespace/pdf hyphenation normalizati
 });
 
 test("normalizeDocumentText normalizes bullets and dash variants", () => {
-  const raw = "Note: • Work must be original — no copied AI output.";
+  const raw = "Note: • Work must be original — no copied AI output.  Review DDL  Review DML.";
   const normalized = normalizeDocumentText(raw, "PDF");
-  assert.equal(normalized, "Note: Work must be original - no copied AI output.");
+  assert.equal(
+    normalized,
+    "Note: Work must be original - no copied AI output. Review DDL Review DML."
+  );
+});
+
+test("normalizeDocumentText preserves PDF line breaks inside hyphenated compounds", () => {
+  const raw = "The book is laid out in a two-pages-at-\na-time format.";
+  const normalized = normalizeDocumentText(raw, "PDF");
+  assert.equal(normalized, "The book is laid out in a two-pages-at-a-time format.");
 });
 
 test("validateStudyGuideAgainstDocument passes for grounded quotes and citations", () => {
@@ -121,6 +130,75 @@ test("validateStudyGuideAgainstDocument accepts grounded quotes after documented
       pageCount: 1,
       paragraphCount: null,
     })
+  );
+});
+
+test("validateStudyGuideAgainstDocument accepts supporting quotes with ordered ellipsis fragments", () => {
+  const text =
+    "The VendorID in the Vendor table is the Vendor's PK. " +
+    "The InvoiceID in the Invoice table is the Invoice's PK. " +
+    "When a VendorID in the invoice table is used to associate a Vendor with the Invoice, that's called using a Foreign Key (FK).";
+  const quote =
+    "The VendorID in the Vendor table is the Vendor's PK...When a VendorID in the invoice table is used to associate a Vendor with the Invoice, that's called using a Foreign Key (FK).";
+
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        supporting_quote: quote,
+        citations: [{ source_type: "pdf", page: 1, excerpt: quote }],
+      },
+    ],
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        citations: [{ source_type: "pdf", page: 1, excerpt: quote }],
+      },
+    ],
+  };
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 1,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument rejects supporting quotes with unordered ellipsis fragments", () => {
+  const text =
+    "The VendorID in the Vendor table is the Vendor's PK. " +
+    "When a VendorID in the invoice table is used to associate a Vendor with the Invoice, that's called using a Foreign Key (FK).";
+  const quote =
+    "When a VendorID in the invoice table is used to associate a Vendor with the Invoice, that's called using a Foreign Key (FK)...The VendorID in the Vendor table is the Vendor's PK";
+
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        supporting_quote: quote,
+        citations: [{ source_type: "pdf", page: 1, excerpt: "The VendorID in the Vendor table is the Vendor's PK." }],
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(guide, {
+        text,
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "QUOTE_NOT_FOUND");
+      return true;
+    }
   );
 });
 
@@ -206,7 +284,7 @@ test("validateStudyGuideAgainstDocument rejects extraction-item citation fallbac
     key_actions: [
       {
         ...BASE_STUDY_GUIDE.key_actions[0],
-        supporting_quote: "Review the weekly schedule before class.",
+        supporting_quote: "Review the weekly schedule before class",
         citations: [
           {
             source_type: "pdf",
@@ -234,14 +312,14 @@ test("validateStudyGuideAgainstDocument rejects extraction-item citation fallbac
   );
 });
 
-test("validateStudyGuideAgainstDocument rejects citation excerpts with ordered ellipsis fragments", () => {
+test("validateStudyGuideAgainstDocument accepts citation excerpts with ordered ellipsis fragments", () => {
   const text = "Review the weekly schedule before class and discuss assignments with your group.";
   const guide: StudyGuide = {
     ...BASE_STUDY_GUIDE,
     key_actions: [
       {
         ...BASE_STUDY_GUIDE.key_actions[0],
-        supporting_quote: "Review the weekly schedule before class.",
+        supporting_quote: "Review the weekly schedule before class",
         citations: [
           {
             source_type: "pdf",
@@ -261,6 +339,82 @@ test("validateStudyGuideAgainstDocument rejects citation excerpts with ordered e
             excerpt: "Review the weekly schedule...discuss assignments with your group.",
           },
         ],
+      },
+    ],
+  };
+
+  assert.doesNotThrow(() =>
+    validateStudyGuideAgainstDocument(guide, {
+      text,
+      fileType: "PDF",
+      pageCount: 1,
+      paragraphCount: null,
+    })
+  );
+});
+
+test("validateStudyGuideAgainstDocument rejects citation excerpts with unordered ellipsis fragments", () => {
+  const text = "Review the weekly schedule before class and discuss assignments with your group.";
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        supporting_quote: "Review the weekly schedule before class",
+        citations: [
+          {
+            source_type: "pdf",
+            page: 1,
+            excerpt: "discuss assignments with your group...Review the weekly schedule",
+          },
+        ],
+      },
+    ],
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        citations: [
+          {
+            source_type: "pdf",
+            page: 1,
+            excerpt: "discuss assignments with your group...Review the weekly schedule",
+          },
+        ],
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      validateStudyGuideAgainstDocument(guide, {
+        text,
+        fileType: "PDF",
+        pageCount: 1,
+        paragraphCount: null,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.code, "CITATION_EXCERPT_NOT_FOUND");
+      return true;
+    }
+  );
+});
+
+test("validateStudyGuideAgainstDocument rejects citation excerpts with tiny ellipsis fragments", () => {
+  const text = "Review the weekly schedule before class and discuss assignments with your group.";
+  const guide: StudyGuide = {
+    ...BASE_STUDY_GUIDE,
+    key_actions: [
+      {
+        ...BASE_STUDY_GUIDE.key_actions[0],
+        supporting_quote: "Review the weekly schedule before class",
+        citations: [{ source_type: "pdf", page: 1, excerpt: "Review...group." }],
+      },
+    ],
+    sections: [
+      {
+        ...BASE_STUDY_GUIDE.sections[0],
+        citations: [{ source_type: "pdf", page: 1, excerpt: "Review...group." }],
       },
     ],
   };

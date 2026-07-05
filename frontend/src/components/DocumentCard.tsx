@@ -84,6 +84,42 @@ function getDocumentTypeMeta(type: DocumentListItem["document_type"]) {
   };
 }
 
+function getDocumentStateMeta(doc: DocumentListItem) {
+  if (doc.study_guide_status === "ready" && doc.has_study_guide) {
+    return {
+      accent: "bg-[#55c6a3]",
+      card: "border-[#c7e9dc] bg-[#fbfffc]",
+      icon: "bg-[#e2f7ef] text-[#14765f]",
+      badge: "bg-[#e2f7ef] text-[#14765f]",
+    };
+  }
+
+  if (doc.study_guide_status === "failed" || doc.quiz_status === "failed") {
+    return {
+      accent: "bg-rose-400",
+      card: "border-rose-200 bg-white",
+      icon: "bg-rose-50 text-rose-700",
+      badge: "bg-rose-50 text-rose-700",
+    };
+  }
+
+  if (doc.study_guide_status === "processing" || doc.quiz_status === "processing") {
+    return {
+      accent: "bg-[#f0b35d]",
+      card: "border-[#ead6b6] bg-[#fffdfa]",
+      icon: "bg-[#fff2dc] text-[#9a5b0f]",
+      badge: "bg-[#fff2dc] text-[#9a5b0f]",
+    };
+  }
+
+  return {
+    accent: "bg-[#d4ded8]",
+    card: "border-[#d5dfe9] bg-[#fbfcff]",
+    icon: "bg-[#e9f0fb] text-[#335d9a]",
+    badge: "bg-[#e9f0fb] text-[#335d9a]",
+  };
+}
+
 export function formatUploadedLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown upload time";
@@ -182,6 +218,7 @@ export function DocumentCard({
   const hasFlowFailure =
     doc.study_guide_status === "failed" || doc.quiz_status === "failed";
   const typeMeta = getDocumentTypeMeta(doc.document_type);
+  const stateMeta = getDocumentStateMeta(doc);
   const TypeIcon = typeMeta.Icon;
 
   const handleDelete = useCallback(async () => {
@@ -200,9 +237,9 @@ export function DocumentCard({
   return (
     <>
       <div
-        className={`group relative overflow-hidden rounded-lg border p-5 shadow-[0_12px_32px_rgba(16,32,29,0.06)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(16,32,29,0.1)] focus-within:ring-2 focus-within:ring-[#55c6a3]/35 ${typeMeta.card}`}
+        className={`group relative overflow-hidden rounded-lg border p-5 shadow-[0_12px_32px_rgba(16,32,29,0.06)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(16,32,29,0.1)] focus-within:ring-2 focus-within:ring-[#55c6a3]/35 ${stateMeta.card}`}
       >
-        <div className={`absolute inset-x-0 top-0 h-1 ${typeMeta.accent}`} />
+        <div className={`absolute inset-x-0 top-0 h-1 ${stateMeta.accent}`} />
         <Link
           href={documentHref(doc)}
           className="absolute inset-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#55c6a3]/45"
@@ -211,12 +248,12 @@ export function DocumentCard({
 
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${typeMeta.icon}`}>
+            <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${stateMeta.icon}`}>
               <TypeIcon className="h-5 w-5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] ${typeMeta.badge}`}>
+                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] ${stateMeta.badge}`}>
                   {typeMeta.label}
                 </span>
                 <span className="text-xs font-medium text-[#7a8a82]">

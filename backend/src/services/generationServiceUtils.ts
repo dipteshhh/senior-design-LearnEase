@@ -50,9 +50,9 @@ interface BuildRepairHintOptions {
 
 const GROUNDING_FAILURE_CODES = new Set(["CITATION_EXCERPT_NOT_FOUND", "QUOTE_NOT_FOUND"]);
 const GROUNDING_GUIDANCE = `Grounding rules for the next attempt:
-- Every citation excerpt and supporting_quote MUST be a verbatim, byte-for-byte substring of the supplied document text.
+- Every supporting_quote and citation excerpt MUST be a verbatim, byte-for-byte substring of the supplied document text, unless you use the ordered "..." fragment form below.
 - Do NOT rewrite, normalize, prettify, or "fix" math, LaTeX, equations, code, or punctuation. If the extracted text shows "QKT" or "dk" or "np . matmul ( Q , K . T )", copy it exactly that way - do not turn it into "QK^T", "d_k", or "np.matmul(Q, K.T)".
-- If the verbatim span you want to cite spans across noisy formatting, you may use "..." between two short verbatim fragments. Each fragment on either side of "..." must still be an exact substring of the document text.
+- If the verbatim span you want to cite or quote spans across noisy formatting, you may use "..." between two short verbatim fragments. Each fragment on either side of "..." must still be an exact substring of the document text.
 - Prefer short (5-20 word) excerpts that you can copy exactly over longer ones you have to clean up.`;
 
 const PREVIEW_TOKEN_MIN_LENGTH = 2;

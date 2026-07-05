@@ -1,7 +1,9 @@
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import type {
+  Citation,
   DocumentType,
+  ExtractionItem,
   StudyGuide,
 } from "../schemas/analyze.js";
 import { StudyGuide as StudyGuideSchema } from "../schemas/analyze.js";
@@ -9,6 +11,8 @@ import { detectDocumentType } from "./documentDetector.js";
 import { shouldEnableGuidanceMode, getRestrictions } from "./guardrails.js";
 import {
   ContractValidationError,
+  isEvidenceTextGrounded,
+  type ValidationInput,
   validateStudyGuideAgainstDocument,
 } from "./outputValidator.js";
 import type { FileType } from "../store/memoryStore.js";
@@ -30,6 +34,7 @@ import {
   assertGenerationInputWithinLimit,
   buildCitationRequirements,
   buildRepairHint,
+  findBestMatchingDocumentWindow,
   normalizeUpstreamError,
 } from "./generationServiceUtils.js";
 
@@ -117,8 +122,8 @@ IMPORTANT RULES:
 - Do NOT write essay content or code
 - Do NOT complete any part of the assignment
 - Every extracted item MUST include supporting_quote and citations
-- supporting_quote MUST be copied exactly from the document text — do NOT paraphrase, reword, or summarize
-- citation excerpt MUST also be an exact substring from the document text
+- supporting_quote and citation excerpt MUST be copied from the document text — do NOT paraphrase, reword, summarize, or clean up symbols
+- If noisy PDF/DOCX extraction makes one contiguous span impractical, supporting_quote and citation.excerpt may use "..." between two or more copied fragments, but every fragment must appear in the document text in the same order
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
@@ -251,6 +256,81 @@ export function normalizeModelOutput(obj: unknown): unknown {
   }
 
   return result;
+}
+
+const EVIDENCE_REPAIR_MIN_TOKEN_COUNT = 2;
+const EVIDENCE_REPAIR_MIN_MATCH_RATIO = 0.35;
+const EVIDENCE_REPAIR_WINDOW_CHARS = 260;
+const EVIDENCE_REPAIR_TOKEN_REGEX = /[\p{L}\p{N}]{3,}/gu;
+
+function uniqueEvidenceTokens(value: string): string[] {
+  const tokens = value.toLowerCase().match(EVIDENCE_REPAIR_TOKEN_REGEX) ?? [];
+  return Array.from(new Set(tokens));
+}
+
+function hasUsefulEvidenceOverlap(preview: string, replacement: string): boolean {
+  const previewTokens = uniqueEvidenceTokens(preview);
+  if (previewTokens.length < EVIDENCE_REPAIR_MIN_TOKEN_COUNT) {
+    return false;
+  }
+
+  const replacementTokens = new Set(uniqueEvidenceTokens(replacement));
+  const matchCount = previewTokens.filter((token) => replacementTokens.has(token)).length;
+  return (
+    matchCount >= EVIDENCE_REPAIR_MIN_TOKEN_COUNT &&
+    matchCount / previewTokens.length >= EVIDENCE_REPAIR_MIN_MATCH_RATIO
+  );
+}
+
+function repairEvidenceText(value: string, input: ValidationInput): string {
+  if (isEvidenceTextGrounded(value, input)) {
+    return value;
+  }
+
+  const replacement = findBestMatchingDocumentWindow(input.text, value, {
+    windowChars: EVIDENCE_REPAIR_WINDOW_CHARS,
+  });
+  if (!replacement || !hasUsefulEvidenceOverlap(value, replacement)) {
+    return value;
+  }
+
+  return isEvidenceTextGrounded(replacement, input) ? replacement : value;
+}
+
+function repairCitationGrounding(citation: Citation, input: ValidationInput): Citation {
+  return {
+    ...citation,
+    excerpt: repairEvidenceText(citation.excerpt, input),
+  };
+}
+
+function repairExtractionItemsGrounding(
+  items: ExtractionItem[],
+  input: ValidationInput
+): ExtractionItem[] {
+  return items.map((item) => ({
+    ...item,
+    supporting_quote: repairEvidenceText(item.supporting_quote, input),
+    citations: item.citations.map((citation) => repairCitationGrounding(citation, input)),
+  }));
+}
+
+export function repairStudyGuideGrounding(guide: StudyGuide, input: ValidationInput): StudyGuide {
+  return {
+    ...guide,
+    key_actions: repairExtractionItemsGrounding(guide.key_actions, input),
+    checklist: repairExtractionItemsGrounding(guide.checklist, input),
+    important_details: {
+      dates: repairExtractionItemsGrounding(guide.important_details.dates, input),
+      policies: repairExtractionItemsGrounding(guide.important_details.policies, input),
+      contacts: repairExtractionItemsGrounding(guide.important_details.contacts, input),
+      logistics: repairExtractionItemsGrounding(guide.important_details.logistics, input),
+    },
+    sections: guide.sections.map((section) => ({
+      ...section,
+      citations: section.citations.map((citation) => repairCitationGrounding(citation, input)),
+    })),
+  };
 }
 
 function getRepairFailureSignature(error: unknown): string {
@@ -415,13 +495,16 @@ export async function analyzeDocument(
         );
       }
 
-      const validationStartedAt = Date.now();
-      validateStudyGuideAgainstDocument(validated.data, {
+      const validationInput = {
         text,
         fileType: metadata.fileType,
         pageCount: metadata.pageCount,
         paragraphCount: metadata.paragraphCount,
-      });
+      };
+      const repaired = repairStudyGuideGrounding(validated.data, validationInput);
+
+      const validationStartedAt = Date.now();
+      validateStudyGuideAgainstDocument(repaired, validationInput);
       validationDurationMs = Date.now() - validationStartedAt;
       recordGenerationOutcome("success");
       const durationMs = Date.now() - startedAt;
@@ -437,7 +520,7 @@ export async function analyzeDocument(
         validationDurationMs,
       });
 
-      return validated.data satisfies StudyGuide;
+      return repaired satisfies StudyGuide;
     } catch (error) {
       const normalizedError = normalizeUpstreamError(error);
       const failureBucket = classifyGenerationError(error, normalizedError);

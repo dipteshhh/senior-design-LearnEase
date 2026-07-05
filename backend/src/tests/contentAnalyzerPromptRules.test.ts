@@ -16,6 +16,8 @@ test("buildAnalysisPrompt keeps study-guide contract shape in prompt", () => {
   assert.match(prompt, /Do NOT add fields such as takeaways, rationale, why_it_matters, or source/);
   assert.match(prompt, /When the source document has enough structure\/content, produce at least 3 sections/);
   assert.match(prompt, /not generic placeholders like "Section 1" or "Part 2"/);
+  assert.match(prompt, /supporting_quote and citation excerpt MUST be copied from the document text/);
+  assert.match(prompt, /supporting_quote and citation\.excerpt may use "\.\.\." between two or more copied fragments/);
 });
 
 test("buildAnalysisPrompt adds homework-specific important detail priorities", () => {
