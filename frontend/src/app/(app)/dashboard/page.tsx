@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { ArrowRight, CheckCircle2, Clock3, LibraryBig } from "lucide-react";
 import type { DocumentListItem } from "@/lib/contracts";
 import { listDocuments } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
@@ -64,44 +65,93 @@ function DashboardPageContent() {
     () => docs.slice(0, DASHBOARD_RECENT_LIMIT),
     [docs]
   );
+  const totalCount = docs.length;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Welcome back</h1>
-        <p className="mt-2 text-sm text-gray-500">
-          {readyCount} ready, {processingCount} processing
-          {q ? <span className="ml-2 text-gray-400">• filtered by “{q}”</span> : null}
-        </p>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#688078]">
+            Dashboard
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[#10201d] sm:text-3xl">
+            Welcome back
+          </h1>
+          <p className="mt-2 text-sm text-[#61716d]">
+            {readyCount} ready, {processingCount} processing
+            {q ? <span className="ml-2 text-[#7d8b85]">filtered by &ldquo;{q}&rdquo;</span> : null}
+          </p>
+        </div>
       </div>
 
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-950 to-gray-800 p-6 text-white shadow-sm sm:p-8">
-        <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">Transform your next assignment</h2>
-        <p className="mt-3 max-w-xl text-sm text-white/80">
-          Upload a PDF or DOCX and generate structured study guides with key actions, checklist,
-          sections, and lecture quizzes.
-        </p>
-        <div className="mt-6">
-          <Link
-            href="/upload"
-            className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-gray-900 shadow-sm transition hover:bg-white/90"
-          >
-            Upload Document
-          </Link>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-[#cfe2d7] bg-[#fbfffc] p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#688078]">Library</p>
+            <LibraryBig className="h-4 w-4 text-[#14765f]" aria-hidden="true" />
+          </div>
+          <p className="mt-3 text-2xl font-semibold text-[#10201d]">{totalCount}</p>
+          <p className="mt-1 text-sm text-[#61716d]">documents</p>
+        </div>
+        <div className="rounded-lg border border-[#cfe2d7] bg-[#f5fff9] p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#688078]">Ready</p>
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+          </div>
+          <p className="mt-3 text-2xl font-semibold text-[#10201d]">{readyCount}</p>
+          <p className="mt-1 text-sm text-[#61716d]">study guides</p>
+        </div>
+        <div className="rounded-lg border border-[#ead6b6] bg-[#fffaf0] p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8a6b39]">Processing</p>
+            <Clock3 className="h-4 w-4 text-amber-600" aria-hidden="true" />
+          </div>
+          <p className="mt-3 text-2xl font-semibold text-[#10201d]">{processingCount}</p>
+          <p className="mt-1 text-sm text-[#61716d]">in progress</p>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-[#cfe2d7] bg-[#fbfcf8] shadow-[0_16px_42px_rgba(16,32,29,0.07)]">
+        <div className="grid gap-6 p-6 sm:p-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center">
+          <div>
+            <div className="inline-flex rounded-full bg-[#d5f36b] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#123c38]">
+              Study flow
+            </div>
+            <h2 className="mt-4 text-2xl font-semibold tracking-tight text-[#10201d]">
+              Turn documents into a focused study plan.
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-[#61716d]">
+              Upload a PDF or DOCX and generate structured study briefs, key actions,
+              checklists, and lecture quizzes.
+            </p>
+          </div>
+          <div className="rounded-lg border border-[#dbe5de] bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#688078]">
+              Next action
+            </p>
+            <Link
+              href="/upload"
+              className="mt-4 inline-flex w-full items-center justify-between rounded-lg bg-[#123c38] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#0d2d2a]"
+            >
+              Upload a file
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </div>
         </div>
       </div>
 
       <div>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-base font-semibold text-gray-900">Recent uploads</h3>
+          <h3 className="text-base font-semibold text-[#10201d]">Recent uploads</h3>
           <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-            <p className="text-sm text-gray-500">{docs.length} documents</p>
+            <p className="text-sm text-[#61716d]">{docs.length} documents</p>
             {docs.length > DASHBOARD_RECENT_LIMIT ? (
               <Link
                 href="/documents"
-                className="text-sm font-medium text-gray-700 hover:text-gray-900 transition"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-[#14765f] transition hover:text-[#123c38]"
               >
-                View all →
+                View all
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             ) : null}
           </div>
@@ -110,13 +160,13 @@ function DashboardPageContent() {
         {isLoading ? (
           <div className="grid grid-cols-1 gap-4 animate-pulse sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="rounded-2xl border bg-white p-5 shadow-sm space-y-3">
+              <div key={i} className="rounded-lg border border-[#dbe5de] bg-white/80 p-5 shadow-sm space-y-3">
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-2 flex-1">
-                    <div className="h-4 w-3/4 rounded bg-gray-200" />
-                    <div className="h-3 w-1/2 rounded bg-gray-100" />
+                    <div className="h-4 w-3/4 rounded bg-[#dbe5de]" />
+                    <div className="h-3 w-1/2 rounded bg-[#edf3ee]" />
                   </div>
-                  <div className="h-6 w-24 rounded-full bg-gray-100" />
+                  <div className="h-6 w-24 rounded-full bg-[#edf3ee]" />
                 </div>
               </div>
             ))}
@@ -129,11 +179,11 @@ function DashboardPageContent() {
         ) : null}
 
         {!isLoading && !error && docs.length === 0 ? (
-          <div className="rounded-2xl border bg-white p-10 text-center shadow-sm">
-            <p className="text-sm font-medium text-gray-900">
+          <div className="rounded-lg border border-dashed border-[#cfe2d7] bg-white/75 p-10 text-center shadow-sm">
+            <p className="text-sm font-semibold text-[#10201d]">
               {q ? "No matching documents" : "No documents yet"}
             </p>
-            <p className="mt-2 text-sm text-gray-500">
+            <p className="mt-2 text-sm text-[#61716d]">
               {q ? "Try a different search term." : "Upload your first document to get started."}
             </p>
           </div>
@@ -153,7 +203,7 @@ function DashboardPageContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<p className="py-4 text-sm text-gray-600">Loading dashboard...</p>}>
+    <Suspense fallback={<p className="py-4 text-sm text-[#61716d]">Loading dashboard...</p>}>
       <DashboardPageContent />
     </Suspense>
   );

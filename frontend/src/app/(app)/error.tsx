@@ -13,16 +13,16 @@ export default function AppError({ error, reset }: AppErrorProps) {
   }, [error]);
 
   return (
-    <div className="mx-auto w-full max-w-3xl rounded-2xl border border-rose-200 bg-white p-5 shadow-sm sm:p-8">
-      <h1 className="text-2xl font-semibold text-gray-900">Something went wrong</h1>
-      <p className="mt-2 text-sm text-gray-600">
+    <div className="mx-auto w-full max-w-3xl rounded-lg border border-rose-200 bg-white p-5 shadow-sm sm:p-8">
+      <h1 className="text-2xl font-semibold text-[#10201d]">Something went wrong</h1>
+      <p className="mt-2 text-sm text-[#61716d]">
         An unexpected error occurred while loading this page.
       </p>
       <div className="mt-5">
         <button
           type="button"
           onClick={reset}
-          className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
+          className="rounded-lg bg-[#123c38] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d2d2a]"
         >
           Try again
         </button>

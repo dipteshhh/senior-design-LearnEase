@@ -168,15 +168,12 @@ function SignInPageContent() {
   }, []);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_top,rgba(15,23,42,0.08),transparent_45%)]" />
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,rgba(15,23,42,0.05),transparent_60%)]" />
-
+    <div className="relative min-h-screen overflow-hidden bg-[#eef4ec] px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-5xl flex-col justify-center">
         <div className="mb-6">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-sm text-slate-500 transition hover:text-slate-800"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-[#61716d] transition hover:text-[#123c38]"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to home
@@ -184,27 +181,27 @@ function SignInPageContent() {
         </div>
 
         <div className="mx-auto w-full max-w-lg">
-          <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_25px_70px_rgba(15,23,42,0.10)] sm:p-8">
+          <div className="rounded-lg border border-[#cfe2d7] bg-[#fbfcf8] p-6 shadow-[0_25px_70px_rgba(16,32,29,0.12)] sm:p-8">
             <div className="text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-950 text-white shadow-sm">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-[#123c38] text-[#d5f36b] shadow-sm">
                 <BookOpen className="h-7 w-7" />
               </div>
 
-              <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+              <h1 className="mt-6 text-3xl font-semibold tracking-tight text-[#10201d] sm:text-4xl">
                 Sign in to LearnEase
               </h1>
 
-              <p className="mx-auto mt-5 max-w-md text-sm leading-7 text-slate-600 sm:text-base">
+              <p className="mx-auto mt-5 max-w-md text-sm leading-7 text-[#61716d] sm:text-base">
                 Continue with your Google account to upload documents and generate
                 structured study guides.
               </p>
             </div>
 
-            <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mt-8 rounded-lg border border-[#d9e3dc] bg-white p-4 shadow-sm">
               {isSubmitting ? (
                 <div className="py-6 text-center">
-                  <p className="text-lg font-semibold text-slate-950">Signing you in...</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                  <p className="text-lg font-semibold text-[#10201d]">Signing you in...</p>
+                  <p className="mt-2 text-sm leading-6 text-[#61716d]">
                     Finishing Google authentication and restoring your session.
                   </p>
                 </div>
@@ -215,19 +212,19 @@ function SignInPageContent() {
 
             {!isSubmitting ? (
               <>
-                <div className="mt-8 border-t border-slate-200 pt-6">
+                <div className="mt-8 border-t border-[#d9e3dc] pt-6">
                   <div className="space-y-4">
                     <div className="flex items-start gap-3">
-                      <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-slate-500" />
-                      <p className="text-sm leading-6 text-slate-700">
+                      <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#14765f]" />
+                      <p className="text-sm leading-6 text-[#394843]">
                         We only request your basic Google profile details needed to
                         create your session.
                       </p>
                     </div>
 
                     <div className="flex items-start gap-3">
-                      <Lock className="mt-0.5 h-5 w-5 shrink-0 text-slate-500" />
-                      <p className="text-sm leading-6 text-slate-700">
+                      <Lock className="mt-0.5 h-5 w-5 shrink-0 text-[#14765f]" />
+                      <p className="text-sm leading-6 text-[#394843]">
                         Documents are encrypted and automatically removed after the
                         retention period.
                       </p>
@@ -236,11 +233,11 @@ function SignInPageContent() {
                 </div>
 
                 {IS_DEV ? (
-                  <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50">
+                  <div className="mt-6 rounded-lg border border-[#d9e3dc] bg-[#f7faf6]">
                     <button
                       type="button"
                       onClick={() => setShowDevOptions((prev) => !prev)}
-                      className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-slate-700"
+                      className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-[#394843]"
                     >
                       <span>Developer testing options</span>
                       <ChevronDown
@@ -251,8 +248,8 @@ function SignInPageContent() {
                     </button>
 
                     {showDevOptions ? (
-                      <div className="border-t border-slate-200 px-4 py-4">
-                        <p className="text-xs leading-5 text-slate-500">
+                      <div className="border-t border-[#d9e3dc] px-4 py-4">
+                        <p className="text-xs leading-5 text-[#61716d]">
                           Paste a Google ID token for backend token-exchange testing.
                         </p>
 
@@ -260,7 +257,7 @@ function SignInPageContent() {
                           value={manualCredential}
                           onChange={(event) => setManualCredential(event.target.value)}
                           rows={4}
-                          className="mt-3 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                          className="mt-3 w-full rounded-lg border border-[#d5ded8] bg-white px-4 py-3 text-sm text-[#10201d] outline-none transition focus:border-[#55c6a3]"
                           placeholder="Google ID token"
                           disabled={isSubmitting}
                         />
@@ -269,7 +266,7 @@ function SignInPageContent() {
                           type="button"
                           disabled={isSubmitting || manualCredential.trim().length === 0}
                           onClick={() => void completeSignIn(manualCredential.trim())}
-                          className="mt-3 w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="mt-3 w-full rounded-lg bg-[#123c38] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#0d2d2a] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           Sign in with token
                         </button>
@@ -279,7 +276,7 @@ function SignInPageContent() {
                 ) : null}
 
                 {error ? (
-                  <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
                   </div>
                 ) : null}
@@ -287,13 +284,13 @@ function SignInPageContent() {
             ) : null}
           </div>
 
-          <p className="mt-6 text-center text-xs leading-6 text-slate-500 sm:text-sm">
+          <p className="mt-6 text-center text-xs leading-6 text-[#61716d] sm:text-sm">
             By continuing, you agree to our{" "}
-            <Link href="/terms" className="font-semibold text-slate-900 hover:underline">
+            <Link href="/terms" className="font-semibold text-[#123c38] hover:underline">
               Terms of Service
             </Link>{" "}
             and{" "}
-            <Link href="/privacy" className="font-semibold text-slate-900 hover:underline">
+            <Link href="/privacy" className="font-semibold text-[#123c38] hover:underline">
               Privacy Policy
             </Link>
             .
@@ -308,8 +305,8 @@ export default function SignInPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
-          <p className="text-sm text-slate-600">Loading sign-in...</p>
+        <div className="flex min-h-screen items-center justify-center bg-[#eef4ec] px-6">
+          <p className="text-sm text-[#61716d]">Loading sign-in...</p>
         </div>
       }
     >

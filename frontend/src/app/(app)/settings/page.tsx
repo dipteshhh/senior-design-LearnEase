@@ -21,7 +21,7 @@ function ShieldIcon() {
 
 function DatabaseIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6 text-gray-700" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="h-6 w-6 text-[#14765f]" fill="none" aria-hidden="true">
       <ellipse cx="12" cy="6" rx="7" ry="3" stroke="currentColor" strokeWidth="1.8" />
       <path
         d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"
@@ -104,15 +104,18 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 pb-4 sm:space-y-8 sm:pb-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-gray-950 sm:text-3xl">Settings</h1>
-        <p className="mt-2 text-sm text-gray-500">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#688078]">
+          Account
+        </p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[#10201d] sm:text-3xl">Settings</h1>
+        <p className="mt-2 text-sm text-[#61716d]">
           Manage your LearnEase data settings and account safety controls.
         </p>
       </div>
 
-      <section className="overflow-hidden rounded-[28px] border border-gray-200 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.16),_rgba(255,255,255,0.04)),linear-gradient(135deg,#0f172a_0%,#111827_55%,#1f2937_100%)] p-5 text-white shadow-[0_12px_32px_rgba(15,23,42,0.14)] sm:p-7">
+      <section className="overflow-hidden rounded-lg border border-[#cfe2d7] bg-[#123c38] p-5 text-white shadow-[0_14px_36px_rgba(16,32,29,0.12)] sm:p-7">
         <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-inset ring-white/10">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/10 ring-1 ring-inset ring-white/10">
             <ShieldIcon />
           </div>
 
@@ -125,31 +128,31 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-gray-200 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] sm:p-7">
+      <section className="rounded-lg border border-[#d9e3dc] bg-[#fbfcf8] p-5 shadow-[0_10px_30px_rgba(16,32,29,0.05)] sm:p-7">
         <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-gray-200 bg-gray-50">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#cfe2d7] bg-[#e2f7ef]">
             <DatabaseIcon />
           </div>
 
           <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-semibold text-gray-950">Data retention</h2>
-            <p className="mt-2 text-sm leading-7 text-gray-600">
+            <h2 className="text-xl font-semibold text-[#10201d]">Data retention</h2>
+            <p className="mt-2 text-sm leading-7 text-[#61716d]">
               Uploaded files are encrypted at rest and retained based on backend retention policies. Generated study materials are stored with your account until they are removed by retention rules or deleted manually through account actions.
             </p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400">
+              <div className="rounded-lg border border-[#cfe2d7] bg-white px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#688078]">
                   Encryption
                 </p>
-                <p className="mt-2 text-sm font-medium text-gray-900">Encrypted at rest</p>
+                <p className="mt-2 text-sm font-medium text-[#10201d]">Encrypted at rest</p>
               </div>
 
-              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400">
+              <div className="rounded-lg border border-[#cfe2d7] bg-white px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#688078]">
                   Retention
                 </p>
-                <p className="mt-2 text-sm font-medium text-gray-900">
+                <p className="mt-2 text-sm font-medium text-[#10201d]">
                   Managed by backend policy
                 </p>
               </div>
@@ -158,9 +161,9 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-rose-200 bg-rose-50/80 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-7">
+      <section className="rounded-lg border border-rose-200 bg-rose-50/80 p-5 shadow-[0_10px_30px_rgba(16,32,29,0.04)] sm:p-7">
         <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-100 ring-1 ring-inset ring-rose-200">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-rose-100 ring-1 ring-inset ring-rose-200">
             <TrashIcon />
           </div>
 
@@ -191,13 +194,13 @@ export default function SettingsPage() {
       </section>
 
       {message ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {message}
         </div>
       ) : null}
 
       {error ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           {error}
         </div>
       ) : null}

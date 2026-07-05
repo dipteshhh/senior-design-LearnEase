@@ -39,11 +39,11 @@ type StudyGuideTab = {
 
 function StatusPill({ status }: { status: DocumentListItem["status"] }) {
   const base =
-    "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium";
+    "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold";
 
   if (status === "ready") {
     return (
-      <span className={`${base} bg-emerald-50 text-emerald-700`}>
+      <span className={`${base} bg-emerald-100 text-emerald-800`}>
         <span className="h-2 w-2 rounded-full bg-emerald-500" />
         Ready
       </span>
@@ -52,7 +52,7 @@ function StatusPill({ status }: { status: DocumentListItem["status"] }) {
 
   if (status === "processing" || status === "uploaded") {
     return (
-      <span className={`${base} bg-amber-50 text-amber-700`}>
+      <span className={`${base} bg-amber-100 text-amber-800`}>
         <span className="h-2 w-2 rounded-full bg-amber-500" />
         Processing
       </span>
@@ -60,7 +60,7 @@ function StatusPill({ status }: { status: DocumentListItem["status"] }) {
   }
 
   return (
-    <span className={`${base} bg-rose-50 text-rose-700`}>
+    <span className={`${base} bg-rose-100 text-rose-800`}>
       <span className="h-2 w-2 rounded-full bg-rose-500" />
       Failed
     </span>
@@ -76,7 +76,7 @@ function Card({
 }) {
   return (
     <section
-      className={`rounded-[28px] border border-gray-200 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)] sm:p-6 ${className}`}
+      className={`rounded-lg border border-[#d9e3dc] bg-[#fbfcf8] p-4 shadow-[0_14px_36px_rgba(16,32,29,0.06)] sm:p-6 ${className}`}
     >
       {children}
     </section>
@@ -85,7 +85,7 @@ function Card({
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+    <div className="rounded-lg border border-dashed border-[#cfe2d7] bg-white/70 px-4 py-8 text-center text-sm text-[#61716d]">
       {text}
     </div>
   );
@@ -105,15 +105,15 @@ function SectionHeading({
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex items-start gap-4">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gray-100 text-gray-600">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-[#e2f7ef] text-[#14765f] ring-1 ring-[#c7e9dc]">
           {icon}
         </div>
         <div>
-          <h2 className="text-[22px] font-semibold tracking-tight text-gray-950 sm:text-[24px]">
+          <h2 className="text-[22px] font-semibold tracking-tight text-[#10201d] sm:text-[24px]">
             {title}
           </h2>
           {description ? (
-            <p className="mt-1 text-sm text-gray-500">{description}</p>
+            <p className="mt-1 text-sm leading-6 text-[#61716d]">{description}</p>
           ) : null}
         </div>
       </div>
@@ -130,9 +130,9 @@ function MetricCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white px-5 py-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">{label}</p>
-      <p className="mt-2 text-base font-semibold leading-snug tracking-tight text-gray-950">
+    <div className="rounded-lg border border-[#d9e3dc] bg-white px-5 py-4 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#688078]">{label}</p>
+      <p className="mt-2 text-base font-semibold leading-snug tracking-tight text-[#10201d]">
         {value}
       </p>
     </div>
@@ -426,10 +426,10 @@ function isDeadlineLike(item: ExtractionItem): boolean {
 
 function getTabBadgeStyles(active: boolean, emphasis: "default" | "success" = "default") {
   if (emphasis === "success") {
-    return "bg-emerald-100 text-emerald-700";
+    return active ? "bg-[#d5f36b] text-[#123c38]" : "bg-emerald-100 text-emerald-800";
   }
 
-  return active ? "bg-gray-950 text-white" : "bg-gray-100 text-gray-600";
+  return active ? "bg-[#123c38] text-white" : "bg-[#edf3ee] text-[#61716d]";
 }
 
 function EvidenceButton({
@@ -451,7 +451,7 @@ function EvidenceButton({
       type="button"
       onClick={onClick}
       aria-label={itemLabel ? `${label} for ${itemLabel}` : label}
-      className={`inline-flex items-center gap-2 text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800 ${className}`}
+      className={`inline-flex items-center gap-2 text-sm font-semibold text-[#14765f] underline underline-offset-4 hover:text-[#123c38] ${className}`}
     >
       <QuoteIcon />
       {label}
@@ -582,30 +582,30 @@ export default function DocumentPage() {
     return (
       <div className="mx-auto max-w-7xl animate-pulse space-y-8">
         <div className="space-y-3">
-          <div className="h-10 w-2/3 rounded-xl bg-gray-200" />
-          <div className="h-4 w-1/3 rounded-lg bg-gray-100" />
+          <div className="h-10 w-2/3 rounded-lg bg-[#dbe5de]" />
+          <div className="h-4 w-1/3 rounded-lg bg-[#edf3ee]" />
         </div>
 
-        <div className="flex gap-6 border-b border-gray-200 pb-3">
+        <div className="flex gap-6 border-b border-[#dbe5de] pb-3">
           {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="h-10 w-28 rounded-2xl bg-gray-100" />
+            <div key={index} className="h-10 w-28 rounded-lg bg-[#edf3ee]" />
           ))}
         </div>
 
-        <div className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)] space-y-5">
+        <div className="rounded-lg border border-[#d9e3dc] bg-white/80 p-6 shadow-sm space-y-5">
           <div className="flex items-center gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-gray-100" />
+            <div className="h-14 w-14 rounded-lg bg-[#edf3ee]" />
             <div className="space-y-2">
-              <div className="h-5 w-40 rounded bg-gray-200" />
-              <div className="h-4 w-80 rounded bg-gray-100" />
+              <div className="h-5 w-40 rounded bg-[#dbe5de]" />
+              <div className="h-4 w-80 rounded bg-[#edf3ee]" />
             </div>
           </div>
-          <div className="h-4 w-full rounded bg-gray-100" />
-          <div className="h-4 w-11/12 rounded bg-gray-100" />
+          <div className="h-4 w-full rounded bg-[#edf3ee]" />
+          <div className="h-4 w-11/12 rounded bg-[#edf3ee]" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="h-24 rounded-2xl bg-gray-100" />
-            <div className="h-24 rounded-2xl bg-gray-100" />
-            <div className="h-24 rounded-2xl bg-gray-100" />
+            <div className="h-24 rounded-lg bg-[#edf3ee]" />
+            <div className="h-24 rounded-lg bg-[#edf3ee]" />
+            <div className="h-24 rounded-lg bg-[#edf3ee]" />
           </div>
         </div>
       </div>
@@ -628,8 +628,8 @@ export default function DocumentPage() {
   if (!document) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-semibold text-gray-900">Document not found</h1>
-        <Link href="/dashboard" className="text-sm font-medium underline">
+        <h1 className="text-2xl font-semibold text-[#10201d]">Document not found</h1>
+        <Link href="/dashboard" className="text-sm font-semibold text-[#14765f] underline underline-offset-4">
           Back to Dashboard
         </Link>
       </div>
@@ -641,32 +641,32 @@ export default function DocumentPage() {
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <div className="space-y-3">
           {document.status !== "failed" ? <StatusPill status={document.status} /> : null}
-          <h1 className="text-3xl font-semibold tracking-tight text-gray-950 sm:text-4xl">
+          <h1 className="text-3xl font-semibold tracking-tight text-[#10201d] sm:text-4xl">
             {document.filename}
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-[#61716d]">
             Processed on {formatDate(document.uploaded_at)} • {document.page_count} pages
           </p>
         </div>
 
         <Card>
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold text-gray-950">
+            <h2 className="text-lg font-semibold text-[#10201d]">
               Study guide not available yet
             </h2>
-            <p className="text-sm leading-6 text-gray-600">
+            <p className="text-sm leading-6 text-[#61716d]">
               This document does not have a ready study guide yet. Continue processing or return to
               your dashboard.
             </p>
 
             {document.document_type === "UNSUPPORTED" ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 This document type is not currently supported for full LearnEase results.
               </div>
             ) : null}
 
             {document.error_message ? (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 {document.error_message}
               </div>
             ) : null}
@@ -674,13 +674,13 @@ export default function DocumentPage() {
             <div className="flex flex-wrap gap-3 pt-2">
               <Link
                 href={`/documents/${document.id}/processing`}
-                className="inline-flex items-center justify-center rounded-2xl bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-black/90"
+                className="inline-flex items-center justify-center rounded-lg bg-[#123c38] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0d2d2a]"
               >
                 Open Processing
               </Link>
               <Link
                 href="/dashboard"
-                className="inline-flex items-center justify-center rounded-2xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                className="inline-flex items-center justify-center rounded-lg border border-[#d5ded8] bg-white px-4 py-2.5 text-sm font-semibold text-[#10201d] hover:bg-[#f7faf6]"
               >
                 Back to Dashboard
               </Link>
@@ -908,7 +908,7 @@ export default function DocumentPage() {
     return (
       <div
         key={section.id}
-        className="overflow-hidden rounded-3xl border border-gray-200 bg-white"
+        className="overflow-hidden rounded-lg border border-[#d9e3dc] bg-white shadow-sm"
       >
         <button
           type="button"
@@ -917,23 +917,23 @@ export default function DocumentPage() {
           onClick={() =>
             setOpenSectionId((current) => (current === section.id ? null : section.id))
           }
-          className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left hover:bg-gray-50"
+          className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left hover:bg-[#f7faf6]"
         >
           <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-500">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#e2f7ef] text-sm font-semibold text-[#14765f]">
               {index + 1}
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#688078]">
                 Section {index + 1}
               </p>
-              <p className="mt-1 truncate text-base font-semibold text-gray-950">
+              <p className="mt-1 truncate text-base font-semibold text-[#10201d]">
                 {section.title}
               </p>
             </div>
           </div>
 
-          <span className="shrink-0 text-gray-500">
+          <span className="shrink-0 text-[#61716d]">
             {isOpen ? (
               <svg
                 aria-hidden="true"
@@ -965,13 +965,13 @@ export default function DocumentPage() {
         </button>
 
         {isOpen ? (
-          <div id={`section-panel-${section.id}`} className="border-t border-gray-200 px-6 py-5">
-            <p className="whitespace-pre-line text-[15px] leading-8 text-gray-700">{section.content}</p>
+          <div id={`section-panel-${section.id}`} className="border-t border-[#d9e3dc] px-6 py-5">
+            <p className="whitespace-pre-line text-[15px] leading-8 text-[#394843]">{section.content}</p>
 
             <button
               type="button"
               onClick={() => openCitationDrawer(section.title, section.citations)}
-              className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800"
+              className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#14765f] underline underline-offset-4 hover:text-[#123c38]"
             >
               <QuoteIcon />
               View source citations ({section.citations.length})
@@ -993,13 +993,13 @@ export default function DocumentPage() {
 
         <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#688078]">
               Study Brief
             </p>
-            <h1 className="mt-2 truncate text-3xl font-semibold tracking-tight text-gray-950 sm:text-4xl">
+            <h1 className="mt-2 truncate text-3xl font-semibold tracking-tight text-[#10201d] sm:text-4xl">
               {document.filename}
             </h1>
-            <p className="mt-3 text-[15px] text-gray-500">
+            <p className="mt-3 text-[15px] text-[#61716d]">
               Processed on {formatDate(document.uploaded_at)} • {document.page_count} pages
             </p>
           </div>
@@ -1007,7 +1007,7 @@ export default function DocumentPage() {
           <div className="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:justify-end">
             <Link
               href={`/documents/${document.id}/focus`}
-              className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-950 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-gray-50 sm:w-auto"
+              className="inline-flex w-full items-center justify-center rounded-lg border border-[#d5ded8] bg-white px-5 py-3 text-sm font-semibold text-[#10201d] shadow-sm hover:bg-[#f7faf6] sm:w-auto"
             >
               <span className="mr-2">
                 <svg
@@ -1032,7 +1032,7 @@ export default function DocumentPage() {
             {canOpenQuiz ? (
               <Link
                 href={`/documents/${document.id}/quiz`}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-black/90 sm:w-auto"
+                className="inline-flex w-full items-center justify-center rounded-lg bg-[#123c38] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#0d2d2a] sm:w-auto"
               >
                 <span className="mr-2">
                   <svg
@@ -1054,7 +1054,7 @@ export default function DocumentPage() {
                 Test Your Knowledge
               </Link>
             ) : (
-              <span className="inline-flex w-full items-center justify-center rounded-2xl bg-gray-100 px-6 py-3 text-sm font-semibold text-gray-600 sm:w-auto">
+              <span className="inline-flex w-full items-center justify-center rounded-lg bg-[#edf3ee] px-6 py-3 text-sm font-semibold text-[#61716d] sm:w-auto">
                 Quiz for lecture docs only
               </span>
             )}
@@ -1065,14 +1065,14 @@ export default function DocumentPage() {
                 void handleDeleteDocument();
               }}
               disabled={isDeleting}
-              className="inline-flex w-full items-center justify-center rounded-2xl border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              className="inline-flex w-full items-center justify-center rounded-lg border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {isDeleting ? "Deleting..." : "Delete"}
             </button>
           </div>
         </header>
 
-        <nav className="border-b border-gray-200">
+        <nav className="border-b border-[#d9e3dc]">
           <div className="-mx-1 overflow-x-auto pb-1">
             <div className="flex min-w-max items-end gap-2 px-1 sm:gap-3">
             {tabs.map((tabItem) => {
@@ -1086,10 +1086,10 @@ export default function DocumentPage() {
                     tabItem.id,
                     tabItem.id === "sections" && isFocusMode
                   )}
-                  className={`inline-flex items-center gap-2 rounded-t-2xl border-b-[3px] px-4 py-3 text-[15px] transition ${
+                  className={`inline-flex items-center gap-2 rounded-t-lg border-b-[3px] px-4 py-3 text-[15px] transition ${
                     active
-                      ? "border-gray-950 bg-white font-semibold text-gray-950 shadow-[inset_0_0_0_1px_rgb(229,231,235)]"
-                      : "border-transparent text-gray-500 hover:text-gray-900"
+                      ? "border-[#55c6a3] bg-white font-semibold text-[#10201d] shadow-[inset_0_0_0_1px_#d9e3dc]"
+                      : "border-transparent text-[#61716d] hover:text-[#123c38]"
                   }`}
                 >
                   <span>{tabItem.label}</span>
@@ -1126,18 +1126,18 @@ export default function DocumentPage() {
                 />
 
                 <div className="mt-8 space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#688078]">
                     What this document is about
                   </p>
-                  <p className="max-w-3xl text-[18px] leading-8 text-gray-800">
+                  <p className="max-w-3xl text-[18px] leading-8 text-[#394843]">
                     {studyGuide.overview.summary}
                   </p>
                 </div>
               </div>
 
               {overviewFacts.length > 0 ? (
-                <aside className="rounded-3xl border border-gray-200 bg-gray-50 p-4">
-                  <p className="px-1 pb-3 text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                <aside className="rounded-lg border border-[#cfe2d7] bg-[#f5fff9] p-4">
+                  <p className="px-1 pb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#688078]">
                     At a glance
                   </p>
                   <div className="space-y-3">
@@ -1150,13 +1150,13 @@ export default function DocumentPage() {
             </div>
 
             {document.document_type === "HOMEWORK" ? (
-              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 space-y-4">
-                <h3 className="text-base font-semibold text-gray-950">Assignment Deadline</h3>
+              <div className="rounded-lg border border-[#ead6b6] bg-[#fffaf0] p-5 space-y-4">
+                <h3 className="text-base font-semibold text-[#10201d]">Assignment Deadline</h3>
 
                 {document.assignment_due_date && !isEditingDeadline ? (
                   /* ── Display mode: due date exists (with or without time) ── */
                   <div className="space-y-3">
-                    <p className="text-[17px] font-semibold text-gray-900">
+                    <p className="text-[17px] font-semibold text-[#10201d]">
                       Due: {formatDate(document.assignment_due_date)}
                       {savedDueTime ? ` — ${formatTime(savedDueTime)}` : ""}
                     </p>
@@ -1171,13 +1171,13 @@ export default function DocumentPage() {
                             type="time"
                             value={dueTimeInput}
                             onChange={(e) => setDueTimeInput(e.target.value)}
-                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                            className="rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
                           />
                           <button
                             type="button"
                             onClick={() => { void handleSaveDueTime(); }}
                             disabled={dueTimeSaving || !dueTimeInput.trim()}
-                            className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex items-center justify-center rounded-lg bg-[#123c38] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d2d2a] disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {dueTimeSaving ? "Saving..." : "Set Due Time"}
                           </button>
@@ -1213,7 +1213,7 @@ export default function DocumentPage() {
                       <button
                         type="button"
                         onClick={enterDeadlineEdit}
-                        className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90"
+                        className="inline-flex items-center justify-center rounded-lg bg-[#123c38] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d2d2a]"
                       >
                         Edit
                       </button>
@@ -1222,7 +1222,7 @@ export default function DocumentPage() {
                           type="button"
                           onClick={() => { void handleReminderOptIn(true); }}
                           disabled={reminderOptInSaving}
-                          className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex items-center justify-center rounded-lg bg-[#123c38] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d2d2a] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {reminderOptInSaving ? "Enabling..." : "Email me a reminder"}
                         </button>
@@ -1232,7 +1232,7 @@ export default function DocumentPage() {
                           type="button"
                           onClick={() => { void handleReminderOptIn(false); }}
                           disabled={reminderOptInSaving}
-                          className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex items-center justify-center rounded-lg bg-[#123c38] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d2d2a] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {reminderOptInSaving ? "Updating..." : "Cancel reminder"}
                         </button>
@@ -1241,8 +1241,8 @@ export default function DocumentPage() {
                   </div>
                 ) : (document.assignment_due_date || manualReminderOpen) && isEditingDeadline ? (
                   /* ── Edit mode: modify existing due date and/or time ── */
-                  <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-                    <p className="text-sm font-medium text-gray-700">
+                  <div className="space-y-3 rounded-lg border border-[#ead6b6] bg-white p-4">
+                    <p className="text-sm font-medium text-[#61716d]">
                       Update the due date and time for this assignment.
                     </p>
                     <div className="flex items-center gap-3 flex-wrap">
@@ -1250,13 +1250,13 @@ export default function DocumentPage() {
                         type="date"
                         value={dueDateInput}
                         onChange={(e) => setDueDateInput(e.target.value)}
-                        className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                        className="rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
                       />
                       <input
                         type="time"
                         value={dueTimeInput}
                         onChange={(e) => setDueTimeInput(e.target.value)}
-                        className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                        className="rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
                       />
                     </div>
                     <div className="flex items-center gap-3">
@@ -1266,14 +1266,14 @@ export default function DocumentPage() {
                           void handleSaveDeadlineEdits();
                         }}
                         disabled={dueDateSaving || dueTimeSaving || !dueDateInput.trim()}
-                        className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex items-center justify-center rounded-lg bg-[#123c38] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d2d2a] disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {dueDateSaving || dueTimeSaving ? "Saving..." : "Save"}
                       </button>
                       <button
                         type="button"
                         onClick={() => setIsEditingDeadline(false)}
-                        className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                        className="rounded-lg border border-[#d5ded8] bg-white px-4 py-2 text-sm font-semibold text-[#61716d] hover:bg-[#f7faf6]"
                       >
                         Cancel
                       </button>
@@ -1282,7 +1282,7 @@ export default function DocumentPage() {
                 ) : (
                   /* ── Case 3: no due date detected ── */
                   <div className="space-y-3">
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-[#61716d]">
                       No due date was detected from this document.
                     </p>
                     {!manualReminderOpen ? (
@@ -1293,7 +1293,7 @@ export default function DocumentPage() {
                             setManualReminderOpen(true);
                             setIsEditingDeadline(true);
                           }}
-                          className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90"
+                          className="inline-flex items-center justify-center rounded-lg bg-[#123c38] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d2d2a]"
                         >
                           Set a reminder
                         </button>
@@ -1303,14 +1303,14 @@ export default function DocumentPage() {
                         <button
                           type="button"
                           onClick={enterDeadlineEdit}
-                          className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90"
+                          className="inline-flex items-center justify-center rounded-lg bg-[#123c38] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d2d2a]"
                         >
                           Set a reminder
                         </button>
                       </div>
                     ) : (
-                      <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-                        <p className="text-sm font-medium text-gray-700">
+                      <div className="space-y-3 rounded-lg border border-[#ead6b6] bg-white p-4">
+                        <p className="text-sm font-medium text-[#61716d]">
                           Enter the due date and time to enable a reminder.
                         </p>
                         <div className="flex items-center gap-3 flex-wrap">
@@ -1318,13 +1318,13 @@ export default function DocumentPage() {
                             type="date"
                             value={dueDateInput}
                             onChange={(e) => setDueDateInput(e.target.value)}
-                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                            className="rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
                           />
                           <input
                             type="time"
                             value={dueTimeInput}
                             onChange={(e) => setDueTimeInput(e.target.value)}
-                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                            className="rounded-lg border border-[#d5ded8] bg-white px-3 py-2 text-sm text-[#10201d] focus:border-[#55c6a3] focus:outline-none focus:ring-1 focus:ring-[#55c6a3]"
                           />
                         </div>
                         <div className="flex items-center gap-3">
@@ -1334,7 +1334,7 @@ export default function DocumentPage() {
                               void handleSaveDeadlineEdits();
                             }}
                             disabled={dueDateSaving || dueTimeSaving || !dueDateInput.trim()}
-                            className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex items-center justify-center rounded-lg bg-[#123c38] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d2d2a] disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {dueDateSaving || dueTimeSaving ? "Saving..." : "Set Due Date"}
                           </button>
@@ -1344,7 +1344,7 @@ export default function DocumentPage() {
                               setIsEditingDeadline(false);
                               setManualReminderOpen(false);
                             }}
-                            className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                            className="rounded-lg border border-[#d5ded8] bg-white px-4 py-2 text-sm font-semibold text-[#61716d] hover:bg-[#f7faf6]"
                           >
                             Cancel
                           </button>
@@ -1373,14 +1373,14 @@ export default function DocumentPage() {
                 {studyGuide.key_actions.map((item) => (
                   <div
                     key={item.id}
-                    className="rounded-3xl border border-gray-200 bg-white px-6 py-6"
+                    className="rounded-lg border border-[#d9e3dc] bg-white px-6 py-6 shadow-sm"
                   >
                     <div className="flex items-start gap-4">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e2f7ef] text-[#14765f]">
                         <ActionsIcon />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-lg font-semibold tracking-tight text-gray-950">
+                        <p className="text-lg font-semibold tracking-tight text-[#10201d]">
                           {item.label}
                         </p>
                         <EvidenceButton
@@ -1412,7 +1412,7 @@ export default function DocumentPage() {
                   : "Checklist"
               }
               right={
-                <div className="text-sm font-medium text-gray-500">
+                <div className="text-sm font-semibold text-[#61716d]">
                   {checklistDone} of {checklistTotal} completed
                 </div>
               }
@@ -1426,10 +1426,10 @@ export default function DocumentPage() {
                   aria-valuemin={0}
                   aria-valuemax={checklistTotal}
                   aria-label={`Checklist progress: ${checklistDone} of ${checklistTotal} completed`}
-                  className="h-2 w-full overflow-hidden rounded-full bg-gray-100"
+                  className="h-2 w-full overflow-hidden rounded-full bg-[#edf3ee]"
                 >
                   <div
-                    className="h-full rounded-full bg-emerald-600 transition-all"
+                    className="h-full rounded-full bg-[#55c6a3] transition-all"
                     style={{ width: `${checklistProgress}%` }}
                   />
                 </div>
@@ -1465,7 +1465,7 @@ export default function DocumentPage() {
                         <label
                           htmlFor={`checklist-${item.id}`}
                           className={`block cursor-pointer text-lg font-semibold tracking-tight ${
-                            checked ? "text-gray-500 line-through" : "text-gray-950"
+                            checked ? "text-[#7d8b85] line-through" : "text-[#10201d]"
                           }`}
                         >
                           {item.label}
@@ -1539,10 +1539,10 @@ export default function DocumentPage() {
                   return (
                     <div
                       key={item.stableKey}
-                      className={`rounded-3xl border px-6 py-6 ${
+                      className={`rounded-lg border px-6 py-6 shadow-sm ${
                         highlighted
                           ? "border-amber-200 bg-amber-50"
-                          : "border-gray-200 bg-white"
+                          : "border-[#d9e3dc] bg-white"
                       }`}
                     >
                       <div className="flex items-start gap-4">
@@ -1554,7 +1554,7 @@ export default function DocumentPage() {
                           {highlighted ? <WarningIcon /> : <InfoIcon />}
                         </div>
                         <div className="min-w-0">
-                          <h3 className="text-xl font-semibold tracking-tight text-gray-950">
+                          <h3 className="text-xl font-semibold tracking-tight text-[#10201d]">
                             {item.label}
                           </h3>
                           <EvidenceButton
@@ -1594,7 +1594,7 @@ export default function DocumentPage() {
                   right={
                     <Link
                       href={buildTabHref(document.id, "sections", false)}
-                      className="text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800"
+                      className="text-sm font-semibold text-[#14765f] underline underline-offset-4 hover:text-[#123c38]"
                     >
                       Exit Focus Mode
                     </Link>
@@ -1605,22 +1605,22 @@ export default function DocumentPage() {
                   <EmptyState text="No sections were generated for this document." />
                 ) : focusSection ? (
                   <div className="space-y-6">
-                    <div className="rounded-3xl border border-gray-200 bg-white px-6 py-6">
+                    <div className="rounded-lg border border-[#d9e3dc] bg-white px-6 py-6 shadow-sm">
                       <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-500">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#e2f7ef] text-sm font-semibold text-[#14765f]">
                           {focusIndex + 1}
                         </div>
                         <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#688078]">
                             {document.document_type === "HOMEWORK" ? "Problem" : "Section"} {focusIndex + 1}
                           </p>
-                          <h3 className="mt-1 text-xl font-semibold tracking-tight text-gray-950">
+                          <h3 className="mt-1 text-xl font-semibold tracking-tight text-[#10201d]">
                             {focusSection.title}
                           </h3>
                         </div>
                       </div>
 
-                      <p className="mt-6 whitespace-pre-line text-[16px] leading-8 text-gray-700">
+                      <p className="mt-6 whitespace-pre-line text-[16px] leading-8 text-[#394843]">
                         {focusSection.content}
                       </p>
 
@@ -1629,7 +1629,7 @@ export default function DocumentPage() {
                         onClick={() =>
                           openCitationDrawer(focusSection.title, focusSection.citations)
                         }
-                        className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800"
+                        className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#14765f] underline underline-offset-4 hover:text-[#123c38]"
                       >
                         <QuoteIcon />
                         View source citations ({focusSection.citations.length})
@@ -1641,12 +1641,12 @@ export default function DocumentPage() {
                         type="button"
                         onClick={() => setFocusIndex((prev) => Math.max(0, prev - 1))}
                         disabled={focusIndex <= 0}
-                        className="rounded-2xl border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg border border-[#d5ded8] bg-white px-5 py-3 text-sm font-semibold text-[#10201d] disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {document.document_type === "HOMEWORK" ? "Previous Problem" : "Previous Section"}
                       </button>
 
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-[#61716d]">
                         {document.document_type === "HOMEWORK" ? "Problem" : "Section"} {focusIndex + 1} of {studyGuide.sections.length}
                       </p>
 
@@ -1658,7 +1658,7 @@ export default function DocumentPage() {
                           )
                         }
                         disabled={focusIndex >= studyGuide.sections.length - 1}
-                        className="rounded-2xl border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg border border-[#d5ded8] bg-white px-5 py-3 text-sm font-semibold text-[#10201d] disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {document.document_type === "HOMEWORK" ? "Next Problem" : "Next Section"}
                       </button>
@@ -1680,7 +1680,7 @@ export default function DocumentPage() {
                     document.document_type !== "HOMEWORK" ? (
                       <Link
                         href={buildTabHref(document.id, "sections", true)}
-                        className="text-sm font-medium text-gray-500 underline underline-offset-4 hover:text-gray-800"
+                        className="text-sm font-semibold text-[#14765f] underline underline-offset-4 hover:text-[#123c38]"
                       >
                         Enter Focus Mode
                       </Link>
@@ -1710,7 +1710,7 @@ export default function DocumentPage() {
               description="AI-generated interpretation of images/diagrams. Verify against the original document."
             />
 
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
               Visual notes describe what the AI could interpret from embedded visuals. They are not
               exact source quotes and are not part of the text citation evidence.
             </div>
@@ -1719,18 +1719,18 @@ export default function DocumentPage() {
               {visualObservationItems.map((observation) => (
                 <article
                   key={observation.id}
-                  className="rounded-3xl border border-gray-200 bg-white px-6 py-6"
+                  className="rounded-lg border border-[#d9e3dc] bg-white px-6 py-6 shadow-sm"
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
                         {formatVisualSource(observation)}
                       </p>
-                      <h3 className="mt-2 text-xl font-semibold tracking-tight text-gray-950">
+                      <h3 className="mt-2 text-xl font-semibold tracking-tight text-[#10201d]">
                         {formatVisualObservationType(observation.type)}
                       </h3>
                     </div>
-                    <span className="inline-flex w-fit rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+                    <span className="inline-flex w-fit rounded-full bg-[#edf3ee] px-3 py-1 text-xs font-semibold text-[#61716d]">
                       {formatVisualConfidence(observation.confidence)} confidence
                     </span>
                   </div>
@@ -1772,7 +1772,7 @@ export default function DocumentPage() {
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
                         Limitations
                       </p>
-                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-7 text-gray-500">
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-7 text-[#61716d]">
                         {observation.limitations.map((limitation, index) => (
                           <li key={`${observation.id}-limitation-${index}`}>
                             {limitation}
@@ -1790,7 +1790,7 @@ export default function DocumentPage() {
         <div className="pt-1">
           <Link
             href="/dashboard"
-            className="text-base font-medium text-gray-600 hover:text-gray-900"
+            className="text-base font-semibold text-[#14765f] hover:text-[#123c38]"
           >
             Back to Dashboard
           </Link>
@@ -1803,26 +1803,26 @@ export default function DocumentPage() {
             type="button"
             aria-label="Close citations panel"
             onClick={() => setCitationDrawerOpen(false)}
-            className="absolute inset-0 bg-black/10"
+            className="absolute inset-0 bg-[#10201d]/20"
           />
           <aside
             role="dialog"
             aria-modal="true"
             aria-labelledby="citation-drawer-title"
-            className="relative z-10 h-full w-full max-w-md border-l border-gray-200 bg-white shadow-2xl"
+            className="relative z-10 h-full w-full max-w-md border-l border-[#d9e3dc] bg-[#fbfcf8] shadow-2xl"
           >
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
+            <div className="flex items-center justify-between border-b border-[#d9e3dc] px-6 py-5">
               <div>
-                <p id="citation-drawer-title" className="text-lg font-semibold text-gray-950">
+                <p id="citation-drawer-title" className="text-lg font-semibold text-[#10201d]">
                   Source Evidence
                 </p>
-                <p className="mt-1 text-sm text-gray-500">{citationDrawerTitle}</p>
+                <p className="mt-1 text-sm text-[#61716d]">{citationDrawerTitle}</p>
               </div>
               <button
                 type="button"
                 aria-label="Close source evidence panel"
                 onClick={() => setCitationDrawerOpen(false)}
-                className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                className="rounded-full p-2 text-[#61716d] hover:bg-[#edf3ee] hover:text-[#123c38]"
               >
                 <svg
                   aria-hidden="true"
@@ -1846,7 +1846,7 @@ export default function DocumentPage() {
               ) : (
                 <div className="space-y-5">
                   {activeEvidenceQuote ? (
-                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="rounded-lg border border-[#d9e3dc] bg-white p-4">
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5 text-gray-400">
                           <QuoteIcon />
@@ -1871,14 +1871,14 @@ export default function DocumentPage() {
                       {activeCitations.map((citation, index) => (
                         <div
                           key={`${citation.source_type}-${index}-${formatCitationLabel(citation)}`}
-                          className="rounded-2xl border border-gray-200 bg-white p-4"
+                          className="rounded-lg border border-[#d9e3dc] bg-white p-4"
                         >
                           <div className="flex items-start gap-3">
                             <div className="mt-0.5 text-gray-400">
                               <QuoteIcon />
                             </div>
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-950">
+                              <p className="text-sm font-semibold text-[#10201d]">
                                 {formatCitationLabel(citation)}
                               </p>
                               {formatCitationSubLabel(citation) ? (

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { BookOpen, ClipboardList, FileText, Trash2 } from "lucide-react";
 import type { DocumentListItem } from "@/lib/contracts";
 import { deleteDocument } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
@@ -27,7 +27,7 @@ function FlowStatusBadge({
 
   if (label === "Ready") {
     return (
-      <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+      <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
         <span className="h-2 w-2 rounded-full bg-emerald-500" />
         {flow}: {label}
       </span>
@@ -36,7 +36,7 @@ function FlowStatusBadge({
 
   if (label === "Processing" || label === "Idle") {
     return (
-      <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+      <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
         <span className="h-2 w-2 rounded-full bg-amber-500" />
         {flow}: {label}
       </span>
@@ -44,11 +44,44 @@ function FlowStatusBadge({
   }
 
   return (
-    <span className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700">
+    <span className="inline-flex items-center gap-2 rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-800">
       <span className="h-2 w-2 rounded-full bg-rose-500" />
       {flow}: {label}
     </span>
   );
+}
+
+function getDocumentTypeMeta(type: DocumentListItem["document_type"]) {
+  if (type === "LECTURE") {
+    return {
+      label: "Lecture",
+      Icon: BookOpen,
+      accent: "bg-[#55c6a3]",
+      icon: "bg-[#e2f7ef] text-[#14765f]",
+      badge: "bg-[#e2f7ef] text-[#14765f]",
+      card: "border-[#c7e9dc] bg-[#fbfffc]",
+    };
+  }
+
+  if (type === "HOMEWORK") {
+    return {
+      label: "Homework",
+      Icon: ClipboardList,
+      accent: "bg-[#f0b35d]",
+      icon: "bg-[#fff2dc] text-[#9a5b0f]",
+      badge: "bg-[#fff2dc] text-[#9a5b0f]",
+      card: "border-[#ead6b6] bg-[#fffdfa]",
+    };
+  }
+
+  return {
+    label: "Document",
+    Icon: FileText,
+    accent: "bg-[#82a7dd]",
+    icon: "bg-[#e9f0fb] text-[#335d9a]",
+    badge: "bg-[#e9f0fb] text-[#335d9a]",
+    card: "border-[#d5dfe9] bg-[#fbfcff]",
+  };
 }
 
 export function formatUploadedLabel(value: string): string {
@@ -105,17 +138,17 @@ function ConfirmDeleteDialog({
       aria-modal="true"
       aria-label="Confirm document deletion"
     >
-      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-semibold text-gray-900">Delete document</h2>
-        <p className="mt-2 text-sm text-gray-600">
-          Are you sure you want to delete <span className="font-medium text-gray-900">{filename}</span>? This will also remove any generated study guides, quizzes, and related data. This action cannot be undone.
+      <div className="w-full max-w-md rounded-lg border border-[#d9e3dc] bg-white p-6 shadow-xl">
+        <h2 className="text-lg font-semibold text-[#10201d]">Delete document</h2>
+        <p className="mt-2 text-sm leading-6 text-[#61716d]">
+          Are you sure you want to delete <span className="font-medium text-[#10201d]">{filename}</span>? This will also remove any generated study guides, quizzes, and related data. This action cannot be undone.
         </p>
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onCancel}
             disabled={isDeleting}
-            className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-900 transition hover:bg-gray-50 disabled:opacity-60"
+            className="rounded-lg border border-[#d5ded8] px-4 py-2 text-sm font-semibold text-[#10201d] transition hover:bg-[#f7faf6] disabled:opacity-60"
           >
             Cancel
           </button>
@@ -123,7 +156,7 @@ function ConfirmDeleteDialog({
             type="button"
             onClick={onConfirm}
             disabled={isDeleting}
-            className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+            className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
           >
             {isDeleting ? "Deleting..." : "Delete"}
           </button>
@@ -148,6 +181,8 @@ export function DocumentCard({
   const isQuizProcessing = doc.quiz_status === "processing";
   const hasFlowFailure =
     doc.study_guide_status === "failed" || doc.quiz_status === "failed";
+  const typeMeta = getDocumentTypeMeta(doc.document_type);
+  const TypeIcon = typeMeta.Icon;
 
   const handleDelete = useCallback(async () => {
     setIsDeleting(true);
@@ -164,27 +199,37 @@ export function DocumentCard({
 
   return (
     <>
-      <div className="group relative rounded-2xl border bg-white p-5 shadow-sm transition hover:shadow-md focus-within:ring-2 focus-within:ring-black/20">
+      <div
+        className={`group relative overflow-hidden rounded-lg border p-5 shadow-[0_12px_32px_rgba(16,32,29,0.06)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(16,32,29,0.1)] focus-within:ring-2 focus-within:ring-[#55c6a3]/35 ${typeMeta.card}`}
+      >
+        <div className={`absolute inset-x-0 top-0 h-1 ${typeMeta.accent}`} />
         <Link
           href={documentHref(doc)}
-          className="absolute inset-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-black/20"
+          className="absolute inset-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#55c6a3]/45"
           aria-label={`Open ${doc.filename}`}
         />
 
         <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-gray-900">{doc.filename}</p>
-            <p className="mt-2 text-xs text-gray-500">
-              {doc.page_count} pages <span className="px-1">•</span> {formatUploadedLabel(doc.uploaded_at)}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-start gap-2">
-            <div className="flex flex-col items-end gap-2">
-              <FlowStatusBadge flow="Study guide" status={doc.study_guide_status} />
-              {doc.document_type === "LECTURE" ? (
-                <FlowStatusBadge flow="Quiz" status={doc.quiz_status} />
-              ) : null}
+          <div className="flex min-w-0 items-start gap-3">
+            <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${typeMeta.icon}`}>
+              <TypeIcon className="h-5 w-5" aria-hidden="true" />
             </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] ${typeMeta.badge}`}>
+                  {typeMeta.label}
+                </span>
+                <span className="text-xs font-medium text-[#7a8a82]">
+                  {formatUploadedLabel(doc.uploaded_at)}
+                </span>
+              </div>
+              <p className="mt-3 truncate text-base font-semibold text-[#10201d]">{doc.filename}</p>
+              <p className="mt-1 text-xs font-medium text-[#61716d]">
+                {doc.page_count} pages
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-start">
             <button
               type="button"
               onClick={(e) => {
@@ -192,7 +237,7 @@ export function DocumentCard({
                 e.stopPropagation();
                 setShowConfirm(true);
               }}
-              className="relative z-10 rounded-lg p-1.5 text-gray-400 opacity-100 transition hover:bg-rose-50 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-rose-300"
+              className="relative z-10 rounded-lg p-1.5 text-[#7a8a82] opacity-100 transition hover:bg-rose-50 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-rose-300"
               aria-label={`Delete ${doc.filename}`}
             >
               <Trash2 className="h-4 w-4" />
@@ -200,17 +245,24 @@ export function DocumentCard({
           </div>
         </div>
 
+        <div className="mt-5 flex flex-wrap gap-2">
+          <FlowStatusBadge flow="Study guide" status={doc.study_guide_status} />
+          {doc.document_type === "LECTURE" ? (
+            <FlowStatusBadge flow="Quiz" status={doc.quiz_status} />
+          ) : null}
+        </div>
+
         {isStudyGuideProcessing ? (
-          <p className="mt-4 text-xs text-gray-500">Study guide generation in progress...</p>
+          <p className="mt-4 text-xs font-medium text-[#61716d]">Study guide generation in progress...</p>
         ) : null}
         {doc.document_type === "LECTURE" && isQuizProcessing ? (
-          <p className="mt-4 text-xs text-gray-500">Quiz generation in progress...</p>
+          <p className="mt-4 text-xs font-medium text-[#61716d]">Quiz generation in progress...</p>
         ) : null}
         {hasFlowFailure && doc.error_message ? (
-          <p className="mt-4 text-xs text-rose-700">{doc.error_message}</p>
+          <p className="mt-4 text-xs font-medium text-rose-700">{doc.error_message}</p>
         ) : null}
         {deleteError ? (
-          <p className="mt-2 text-xs text-rose-700">{deleteError}</p>
+          <p className="mt-2 text-xs font-medium text-rose-700">{deleteError}</p>
         ) : null}
       </div>
 

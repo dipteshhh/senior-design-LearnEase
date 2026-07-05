@@ -156,20 +156,23 @@ export default function UploadPage() {
     <div className="mx-auto w-full max-w-6xl py-2 sm:py-4">
       <div className="mx-auto max-w-5xl">
         <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#688078]">
+            Upload
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[#10201d] sm:text-4xl">
             Upload a document
           </h1>
-          <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-[#61716d] sm:text-base">
             Upload a PDF or DOCX file to create a structured study guide.
           </p>
         </div>
 
         <div
           className={[
-            "mt-8 rounded-[28px] border border-dashed bg-white px-6 py-10 transition sm:mt-10 sm:px-8 sm:py-12",
+            "mt-8 rounded-lg border border-dashed px-6 py-10 transition sm:mt-10 sm:px-8 sm:py-12",
             dragActive
-              ? "border-slate-500 bg-slate-50"
-              : "border-slate-300 shadow-[0_16px_40px_rgba(15,23,42,0.05)]",
+              ? "border-[#55c6a3] bg-[#effbf5] shadow-[0_18px_44px_rgba(20,118,95,0.12)]"
+              : "border-[#cfe2d7] bg-[#fbfcf8] shadow-[0_16px_40px_rgba(16,32,29,0.06)]",
           ].join(" ")}
           onDragEnter={(e) => {
             e.preventDefault();
@@ -195,14 +198,14 @@ export default function UploadPage() {
           tabIndex={0}
         >
           <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+            <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-[#d5f36b] text-[#123c38] ring-1 ring-[#bedc59]">
               <Upload className="h-8 w-8" />
             </div>
 
-            <h2 className="mt-6 text-2xl font-semibold tracking-tight text-slate-950">
+            <h2 className="mt-6 text-2xl font-semibold tracking-tight text-[#10201d]">
               Drag and drop your file
             </h2>
-            <p className="mt-2 text-sm text-slate-600 sm:text-base">
+            <p className="mt-2 text-sm text-[#61716d] sm:text-base">
               or browse from your computer
             </p>
 
@@ -210,8 +213,9 @@ export default function UploadPage() {
               <button
                 type="button"
                 onClick={onBrowseClick}
-                className="rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#123c38] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#0d2d2a]"
               >
+                <Upload className="h-4 w-4" aria-hidden="true" />
                 Browse files
               </button>
 
@@ -224,7 +228,7 @@ export default function UploadPage() {
               />
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-xs text-slate-500 sm:text-sm">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-xs text-[#61716d] sm:text-sm">
               <span className="inline-flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
                 PDF files
@@ -239,20 +243,20 @@ export default function UploadPage() {
               </span>
             </div>
 
-            <p className="mt-4 text-xs leading-6 text-slate-500 sm:text-sm">
+            <p className="mt-4 text-xs leading-6 text-[#61716d] sm:text-sm">
               Files are encrypted and auto-deleted after 30 days.
             </p>
 
             {fileLabel ? (
-              <div className="mt-6 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left">
+              <div className="mt-6 w-full rounded-lg border border-[#cfe2d7] bg-white px-4 py-4 text-left shadow-sm">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-700 ring-1 ring-slate-200">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e2f7ef] text-[#14765f] ring-1 ring-[#c7e9dc]">
                     <FileText className="h-5 w-5" />
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-slate-950">Selected file</p>
-                    <p className="mt-1 break-words text-sm text-slate-600">{fileLabel}</p>
+                    <p className="text-sm font-semibold text-[#10201d]">Selected file</p>
+                    <p className="mt-1 break-words text-sm text-[#61716d]">{fileLabel}</p>
                     <p className="mt-2 text-sm font-medium text-emerald-700">
                       Ready to create study guide
                     </p>
@@ -262,13 +266,13 @@ export default function UploadPage() {
             ) : null}
 
             {error ? (
-              <div className="mt-4 w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-left text-sm text-red-700">
+              <div className="mt-4 w-full rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-left text-sm text-red-700">
                 {error}
               </div>
             ) : null}
 
             {info ? (
-              <div className="mt-4 w-full rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm text-emerald-800">
+              <div className="mt-4 w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm text-emerald-800">
                 {info}
               </div>
             ) : null}
@@ -281,10 +285,10 @@ export default function UploadPage() {
             disabled={!canContinue}
             onClick={onCreateSession}
             className={[
-              "rounded-full px-6 py-3 text-sm font-semibold transition",
+              "rounded-lg px-6 py-3 text-sm font-semibold transition",
               canContinue
-                ? "bg-slate-950 text-white hover:bg-slate-800"
-                : "cursor-not-allowed bg-slate-200 text-slate-400",
+                ? "bg-[#123c38] text-white hover:bg-[#0d2d2a]"
+                : "cursor-not-allowed bg-[#dce5df] text-[#88968f]",
             ].join(" ")}
           >
             {isSubmitting ? "Creating..." : "Create Study Guide"}
@@ -292,32 +296,32 @@ export default function UploadPage() {
         </div>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:mt-9 xl:grid-cols-3">
-          <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+          <article className="rounded-lg border border-[#cfe2d7] bg-[#fbfffc] p-6 shadow-[0_12px_30px_rgba(16,32,29,0.05)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#e2f7ef] text-[#14765f] ring-1 ring-[#c7e9dc]">
               <Lightbulb className="h-6 w-6" />
             </div>
-            <h3 className="mt-5 text-xl font-semibold text-slate-950">Key concepts</h3>
-            <p className="mt-3 text-sm leading-7 text-slate-600">
+            <h3 className="mt-5 text-xl font-semibold text-[#10201d]">Key concepts</h3>
+            <p className="mt-3 text-sm leading-7 text-[#61716d]">
               Understand the main ideas in your document faster.
             </p>
           </article>
 
-          <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+          <article className="rounded-lg border border-[#ead6b6] bg-[#fffaf0] p-6 shadow-[0_12px_30px_rgba(16,32,29,0.05)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#fff2dc] text-[#9a5b0f] ring-1 ring-[#ead6b6]">
               <CheckCircle2 className="h-6 w-6" />
             </div>
-            <h3 className="mt-5 text-xl font-semibold text-slate-950">Action items</h3>
-            <p className="mt-3 text-sm leading-7 text-slate-600">
+            <h3 className="mt-5 text-xl font-semibold text-[#10201d]">Action items</h3>
+            <p className="mt-3 text-sm leading-7 text-[#61716d]">
               Find tasks, deadlines, and important requirements.
             </p>
           </article>
 
-          <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:col-span-2 xl:col-span-1">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+          <article className="rounded-lg border border-[#d5dfe9] bg-[#fbfcff] p-6 shadow-[0_12px_30px_rgba(16,32,29,0.05)] sm:col-span-2 xl:col-span-1">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#e9f0fb] text-[#335d9a] ring-1 ring-[#d5dfe9]">
               <Focus className="h-6 w-6" />
             </div>
-            <h3 className="mt-5 text-xl font-semibold text-slate-950">Focus mode</h3>
-            <p className="mt-3 text-sm leading-7 text-slate-600">
+            <h3 className="mt-5 text-xl font-semibold text-[#10201d]">Focus mode</h3>
+            <p className="mt-3 text-sm leading-7 text-[#61716d]">
               Study one section at a time with less distraction.
             </p>
           </article>

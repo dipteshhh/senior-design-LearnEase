@@ -4,22 +4,53 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import {
+  BookOpenCheck,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  Search,
+  Settings,
+  ShieldCheck,
+  Upload,
+  UserCircle,
+} from "lucide-react";
 import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
-function NavItem({ href, label }: { href: string; label: string }) {
+const navItems = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/upload", label: "Upload", icon: Upload },
+  { href: "/documents", label: "Documents", icon: FileText },
+  { href: "/settings", label: "Settings", icon: Settings },
+] as const;
+
+function NavItem({ href, label, compact = false }: {
+  href: string;
+  label: string;
+  compact?: boolean;
+}) {
   const pathname = usePathname();
   const isActive = pathname === href || pathname.startsWith(`${href}/`);
+  const item = navItems.find((navItem) => navItem.href === href);
+  const Icon = item?.icon;
 
   return (
     <Link
       href={href}
       className={[
-        "flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition",
-        isActive ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50",
+        "flex items-center gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition",
+        compact
+          ? isActive
+            ? "bg-[#123c38] text-white shadow-sm"
+            : "bg-white/70 text-[#52615d] ring-1 ring-[#d9e3dc] hover:bg-white hover:text-[#123c38]"
+          : isActive
+            ? "bg-white/12 text-white ring-1 ring-white/16"
+            : "text-emerald-50/78 hover:bg-white/8 hover:text-white",
       ].join(" ")}
     >
+      {Icon ? <Icon className="h-4 w-4" aria-hidden="true" /> : null}
       {label}
     </Link>
   );
@@ -69,8 +100,10 @@ function ProtectedShell({ children }: { children: ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <p className="text-sm text-gray-600">Restoring session...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#eef4ec]">
+        <div className="rounded-lg border border-[#d9e3dc] bg-white/85 px-5 py-4 shadow-sm">
+          <p className="text-sm font-medium text-[#52615d]">Restoring session...</p>
+        </div>
       </div>
     );
   }
@@ -78,10 +111,10 @@ function ProtectedShell({ children }: { children: ReactNode }) {
   if (!user) {
     if (hasSessionCheckError) {
       return (
-        <div className="flex min-h-screen items-center justify-center bg-white px-6">
-          <div className="w-full max-w-lg rounded-2xl border border-amber-200 bg-white p-8 shadow-sm">
-            <h1 className="text-xl font-semibold text-gray-900">Can&apos;t verify session</h1>
-            <p className="mt-2 text-sm text-gray-600">
+        <div className="flex min-h-screen items-center justify-center bg-[#eef4ec] px-6">
+          <div className="w-full max-w-lg rounded-lg border border-amber-200 bg-[#fffaf0] p-8 shadow-sm">
+            <h1 className="text-xl font-semibold text-[#10201d]">Can&apos;t verify session</h1>
+            <p className="mt-2 text-sm leading-6 text-[#61716d]">
               LearnEase couldn&apos;t reach the backend to verify your session. Retry when the
               connection is stable.
             </p>
@@ -91,13 +124,13 @@ function ProtectedShell({ children }: { children: ReactNode }) {
                 onClick={() => {
                   void refreshSession();
                 }}
-                className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-lg bg-[#123c38] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0d2d2a]"
               >
                 Retry
               </button>
               <Link
                 href="/signin"
-                className="rounded-xl border px-4 py-2 text-sm font-semibold text-gray-900"
+                className="rounded-lg border border-[#d5ded8] bg-white px-4 py-2 text-sm font-semibold text-[#10201d] transition hover:bg-[#f7faf6]"
               >
                 Go to Sign in
               </Link>
@@ -108,32 +141,43 @@ function ProtectedShell({ children }: { children: ReactNode }) {
     }
 
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <p className="text-sm text-gray-600">Redirecting to sign in...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#eef4ec]">
+        <p className="text-sm font-medium text-[#52615d]">Redirecting to sign in...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#eef4ec]">
       <div className="md:flex md:min-h-screen">
-        <aside className="hidden w-64 shrink-0 flex-col border-r bg-white px-4 py-6 md:flex lg:w-72">
+        <aside className="hidden w-64 shrink-0 flex-col bg-[#123c38] px-4 py-6 text-white md:flex lg:w-72">
           <div className="px-2">
-            <div className="text-lg font-semibold text-gray-900">LearnEase</div>
-            <div className="mt-1 text-xs text-gray-500">Study smarter, not harder</div>
+            <Link href="/dashboard" className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#d5f36b] text-[#123c38] shadow-sm">
+                <BookOpenCheck className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <span>
+                <span className="block text-lg font-semibold leading-tight">LearnEase</span>
+                <span className="mt-1 block text-xs font-medium text-emerald-50/68">
+                  Study workspace
+                </span>
+              </span>
+            </Link>
           </div>
 
           <nav className="mt-6 space-y-1 px-1">
-            <NavItem href="/dashboard" label="Dashboard" />
-            <NavItem href="/upload" label="Upload" />
-            <NavItem href="/documents" label="Documents" />
-            <NavItem href="/settings" label="Settings" />
+            {navItems.map((item) => (
+              <NavItem key={item.href} href={item.href} label={item.label} />
+            ))}
           </nav>
 
           <div className="mt-auto px-2 pt-6">
-            <div className="rounded-2xl border bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold text-gray-900">Your privacy matters</p>
-              <p className="mt-1 text-xs text-gray-500">
+            <div className="rounded-lg border border-white/12 bg-white/8 p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-[#d5f36b]">
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                <p className="text-xs font-semibold text-white">Private by default</p>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-emerald-50/70">
                 Documents are encrypted and auto-deleted after 30 days
               </p>
             </div>
@@ -141,42 +185,46 @@ function ProtectedShell({ children }: { children: ReactNode }) {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 border-b bg-white/95 backdrop-blur">
+          <header className="sticky top-0 z-20 border-b border-[#dbe5de] bg-[#f7faf5]/92 backdrop-blur">
             <div className="mx-auto w-full max-w-screen-2xl px-4 py-3 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between gap-3 md:hidden">
-                <Link href="/dashboard" className="min-w-0">
-                  <p className="truncate text-base font-semibold text-gray-900">LearnEase</p>
+                <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#123c38] text-[#d5f36b]">
+                    <BookOpenCheck className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <p className="truncate text-base font-semibold text-[#10201d]">LearnEase</p>
                 </Link>
                 <button
                   type="button"
                   onClick={() => {
                     void logout();
                   }}
-                  className="rounded-lg border px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  className="inline-flex items-center gap-2 rounded-lg border border-[#d5ded8] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[#52615d] hover:bg-white hover:text-[#123c38]"
                 >
+                  <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
                   Sign out
                 </button>
               </div>
 
               <div className="mt-3 flex flex-col gap-3 md:mt-0 md:flex-row md:items-center md:justify-between md:gap-4">
-                <div className="flex w-full items-center gap-2 rounded-2xl border bg-white px-4 py-3 md:max-w-xl lg:max-w-2xl">
-                  <span className="text-gray-400">🔍</span>
+                <div className="flex w-full items-center gap-3 rounded-lg border border-[#ccd9d0] bg-white/90 px-4 py-3 shadow-sm md:max-w-xl lg:max-w-2xl">
+                  <Search className="h-4 w-4 shrink-0 text-[#77867f]" aria-hidden="true" />
                   <input
                     value={q}
                     onChange={(event) => {
                       setQ(event.target.value);
                     }}
                     placeholder="Search documents..."
-                    className="w-full min-w-0 bg-transparent text-sm outline-none"
+                    className="w-full min-w-0 bg-transparent text-sm text-[#10201d] outline-none placeholder:text-[#8a9891]"
                   />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:justify-end">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full border bg-white text-sm sm:h-10 sm:w-10">
-                    👤
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[#ccd9d0] bg-white text-[#123c38] shadow-sm sm:h-10 sm:w-10">
+                    <UserCircle className="h-5 w-5" aria-hidden="true" />
                   </div>
                   <div className="hidden min-w-0 sm:block">
-                    <p className="truncate text-sm font-semibold text-gray-900">
+                    <p className="truncate text-sm font-semibold text-[#10201d]">
                       {user.name ?? user.email ?? "Profile"}
                     </p>
                     <button
@@ -184,8 +232,9 @@ function ProtectedShell({ children }: { children: ReactNode }) {
                       onClick={() => {
                         void logout();
                       }}
-                      className="text-xs text-gray-500 hover:text-gray-900"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-[#6b7a73] hover:text-[#123c38]"
                     >
+                      <LogOut className="h-3 w-3" aria-hidden="true" />
                       Sign out
                     </button>
                   </div>
@@ -195,10 +244,9 @@ function ProtectedShell({ children }: { children: ReactNode }) {
 
             <div className="mx-auto w-full max-w-screen-2xl px-4 pb-2 sm:px-6 lg:px-8">
               <nav className="mt-3 flex gap-2 overflow-x-auto pb-1 md:hidden">
-                <NavItem href="/dashboard" label="Dashboard" />
-                <NavItem href="/upload" label="Upload" />
-                <NavItem href="/documents" label="Documents" />
-                <NavItem href="/settings" label="Settings" />
+                {navItems.map((item) => (
+                  <NavItem key={item.href} href={item.href} label={item.label} compact />
+                ))}
               </nav>
             </div>
           </header>

@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --learnease-ink: #10201d;
+  --learnease-muted: #61716d;
+  --learnease-surface: #fbfcf8;
+  --learnease-app: #eef4ec;
+}
+
+html {
+  background: var(--learnease-app);
+}
+
+body {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(238, 244, 236, 0.9)),
+    var(--learnease-app);
+  color: var(--learnease-ink);
+}
+
+::selection {
+  background: #b8e6d4;
+  color: #10201d;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
