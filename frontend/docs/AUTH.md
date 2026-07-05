@@ -1,31 +1,53 @@
 # LearnEase — Authentication Contract
 
-All API routes require an authenticated user.
+All API routes require an authenticated user **except** the public routes (`GET /health`, `POST /api/auth/google`, `POST /api/auth/logout`).
 
-This project assumes **Google OAuth** handled by the web app layer.
-Backend behavior is defined here to prevent drift.
+Authentication uses **Google OAuth**. The backend provides a token exchange endpoint.
 
 ---
 
-## 1) Identity
+## 1) Auth Flow
 
-Backend derives the user identity from server-side session (recommended: NextAuth).
+1. Frontend initiates Google Sign-In (One Tap or redirect via Google Identity Services).
+2. Google returns an **ID token** (`credential`) to the frontend.
+3. Frontend sends `POST /api/auth/google` with `{ "credential": "<token>" }`.
+4. The frontend API proxy forwards the request to the backend, which verifies the token with Google, upserts the user, and returns a signed `learnease_session` HttpOnly cookie via `Set-Cookie`.
+5. The frontend proxy passes that cookie back to the browser, so all subsequent browser requests send it to the frontend origin automatically.
+6. To log out, frontend calls `POST /api/auth/logout` which clears the cookie.
+
+---
+
+## 2) Identity
+
+Backend derives the user identity from the signed `learnease_session` cookie.
+
+Session payload shape:
+```json
+{
+  "user": { "id": "google_sub", "email": "user@example.com", "name": "Display Name" },
+  "iat": 1700000000,
+  "exp": 1700604800
+}
+```
+
+The cookie is HMAC-SHA256 signed with `SESSION_SECRET`. It is HttpOnly, SameSite=Lax, and expires after `SESSION_MAX_AGE_SECONDS` (default 7 days). The frontend proxies backend requests through its own origin, so the session cookie is always first-party.
 
 Required user fields:
-- `user.id` (stable unique id, e.g., provider subject)
+- `user.id` (Google `sub` — stable unique id)
 - `user.email`
 
 Backend stores:
-- `users.id` = stable unique id
+- `users.id` = Google `sub`
 - `users.email`
 - `users.name` (optional)
 
 ---
 
-## 2) Request Requirements
+## 3) Request Requirements
 
 Requests are authenticated via:
-- Cookie-based session (default)
+- `learnease_session` HttpOnly cookie (primary; set by `POST /api/auth/google`)
+- Legacy plain-text cookies are disabled outside `NODE_ENV=test` even if `ALLOW_LEGACY_AUTH_COOKIES=true`
 
 If the request is unauthenticated:
 - return `401` with error payload (see `docs/API_ERRORS.md`)
@@ -35,7 +57,78 @@ If user is authenticated but attempts to access a document not owned by them:
 
 ---
 
-## 3) Multi-tenant Rule
+## 4) Multi-tenant Rule
 
 All document access MUST be scoped by `user_id`.
 No cross-user access is allowed.
+
+---
+
+## 5) Frontend Integration Checklist
+
+The frontend team needs to:
+
+1. **Add Google Identity Services** (the `<script src="https://accounts.google.com/gsi/client">` tag or `@react-oauth/google` package).
+2. **Configure Google Client ID** — must match the `GOOGLE_CLIENT_ID` env var on the backend.
+3. **On sign-in callback**, send the Google `credential` to `POST /api/auth/google`.
+4. **On logout**, call `POST /api/auth/logout`.
+5. **Use `GET /api/auth/me`** to check session validity on page load / app init.
+   Response shape: `{ "user": { "id": string, "email": string, "name": string | null } }`
+6. **Ensure `credentials: "include"`** on all `fetch()` calls to the frontend `/api/*` routes so the first-party session cookie is sent on every request.
+7. **Replace all mock data** in `src/lib/mock/store.ts` and `src/lib/data/documents.ts` with real API calls to the backend.
+8. **Match backend response shapes** — see `docs/SCHEMAS.md` for `StudyGuide` and `Quiz` JSON structures.
+
+---
+
+## 6) Environment Requirements
+
+Backend env vars for auth:
+- `GOOGLE_CLIENT_ID` (required; from Google Cloud Console)
+- `SESSION_SECRET` (required; strong random secret for HMAC signing)
+- `SESSION_MAX_AGE_SECONDS` (optional; default `604800` = 7 days)
+- `CORS_ORIGINS` (required in production; also the trusted-origin allowlist for CSRF checks)
+
+---
+
+## 7) Threat Model Notes
+
+Attack surface and defenses, in the order a request hits them:
+
+**Cross-site request forgery (CSRF).**
+State-changing methods (`POST`/`PUT`/`PATCH`/`DELETE`) are origin-checked by
+`enforceTrustedOrigin` before any handler runs, including the public auth
+routes. Rules:
+- If the request carries an `Origin` (or, as fallback, `Referer`) header, its
+  origin must be in the `CORS_ORIGINS` allowlist. This works with Railway
+  custom domains: add each deployed frontend origin to `CORS_ORIGINS`.
+- In development only, loopback origins (`localhost`, `127.0.0.1`, `::1`) on
+  any port are also accepted.
+- `Origin: null` (sandboxed iframes, some redirect chains) is rejected.
+- Requests with neither header (curl, server-to-server, E2E scripts) pass:
+  CSRF is a browser-cookie attack, and non-browser clients holding a valid
+  session cookie are outside this threat model.
+- Safe methods (`GET`/`HEAD`/`OPTIONS`) are exempt, which also keeps CORS
+  preflights working. No GET route mutates state.
+This is defense in depth on top of `SameSite=Lax`, which already blocks
+cross-site cookie delivery for the forgeable cases in modern browsers.
+
+**Cookie theft / tampering.**
+The session cookie is HMAC-SHA256 signed with `SESSION_SECRET` and verified
+with a constant-time comparison. Tampered payloads, swapped signatures,
+wrong-secret forgeries, and expired sessions are all rejected with 401 (see
+`backend/src/tests/authHardening.test.ts`). The cookie is `HttpOnly` (no JS
+access) and `Secure` in production (Railway terminates TLS; `TRUST_PROXY`
+must be set so Express trusts the proxy's protocol headers).
+
+**Cross-user access.**
+Every document-scoped route re-checks ownership server-side and returns 403
+for non-owners. The full route matrix (documents, study guide, quiz,
+checklist, due date/time, reminders, visual observations, delete) is covered
+by an automated test so a new route missing the check fails review.
+
+**Known limitations (accepted for now):**
+- No server-side session store: a stolen cookie is valid until its `exp`
+  (max 7 days). Rotating `SESSION_SECRET` invalidates all sessions at once.
+- No per-session revocation or "log out everywhere".
+- Logout clears the cookie client-side only; the signed value remains
+  technically valid until expiry if it was captured beforehand.

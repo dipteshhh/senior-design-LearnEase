@@ -1,7 +1,7 @@
 # Phase 3A — Lecture-only Visual Observations Beta: QA & Review Checklist
 
-**Status:** QA/spec guard document — **no implementation in this branch**
-**Branch:** `diptesh/phase3a-visual-observations-qa`
+**Status:** QA/spec guard document for the Phase 3A implementation on `main`
+**Branch:** `main`
 **Builds on:**
 
 - Phase 2A — DOCX embedded raster `VISUAL_INVENTORY` (encrypted manifest + encrypted image blobs)
@@ -10,7 +10,7 @@
 
 **Phase 3A scope (one-line):** Generate **text-only visual observations** for **lecture/class documents only**, on demand after the Study Guide trigger, using the already-extracted encrypted visual inventory — never at upload time, never for homework, never returning image bytes.
 
-> This file is a review gate. Use it to verify any Phase 3A implementation PR before merge. It must not change implementation, backend, or frontend source.
+> This file is a review gate. Use it to verify Phase 3A implementation and future changes before merge. It must not change implementation, backend, or frontend source.
 
 ---
 

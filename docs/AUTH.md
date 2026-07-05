@@ -86,3 +86,49 @@ Backend env vars for auth:
 - `GOOGLE_CLIENT_ID` (required; from Google Cloud Console)
 - `SESSION_SECRET` (required; strong random secret for HMAC signing)
 - `SESSION_MAX_AGE_SECONDS` (optional; default `604800` = 7 days)
+- `CORS_ORIGINS` (required in production; also the trusted-origin allowlist for CSRF checks)
+
+---
+
+## 7) Threat Model Notes
+
+Attack surface and defenses, in the order a request hits them:
+
+**Cross-site request forgery (CSRF).**
+State-changing methods (`POST`/`PUT`/`PATCH`/`DELETE`) are origin-checked by
+`enforceTrustedOrigin` before any handler runs, including the public auth
+routes. Rules:
+- If the request carries an `Origin` (or, as fallback, `Referer`) header, its
+  origin must be in the `CORS_ORIGINS` allowlist. This works with Railway
+  custom domains: add each deployed frontend origin to `CORS_ORIGINS`.
+- In development only, loopback origins (`localhost`, `127.0.0.1`, `::1`) on
+  any port are also accepted.
+- `Origin: null` (sandboxed iframes, some redirect chains) is rejected.
+- Requests with neither header (curl, server-to-server, E2E scripts) pass:
+  CSRF is a browser-cookie attack, and non-browser clients holding a valid
+  session cookie are outside this threat model.
+- Safe methods (`GET`/`HEAD`/`OPTIONS`) are exempt, which also keeps CORS
+  preflights working. No GET route mutates state.
+This is defense in depth on top of `SameSite=Lax`, which already blocks
+cross-site cookie delivery for the forgeable cases in modern browsers.
+
+**Cookie theft / tampering.**
+The session cookie is HMAC-SHA256 signed with `SESSION_SECRET` and verified
+with a constant-time comparison. Tampered payloads, swapped signatures,
+wrong-secret forgeries, and expired sessions are all rejected with 401 (see
+`backend/src/tests/authHardening.test.ts`). The cookie is `HttpOnly` (no JS
+access) and `Secure` in production (Railway terminates TLS; `TRUST_PROXY`
+must be set so Express trusts the proxy's protocol headers).
+
+**Cross-user access.**
+Every document-scoped route re-checks ownership server-side and returns 403
+for non-owners. The full route matrix (documents, study guide, quiz,
+checklist, due date/time, reminders, visual observations, delete) is covered
+by an automated test so a new route missing the check fails review.
+
+**Known limitations (accepted for now):**
+- No server-side session store: a stolen cookie is valid until its `exp`
+  (max 7 days). Rotating `SESSION_SECRET` invalidates all sessions at once.
+- No per-session revocation or "log out everywhere".
+- Logout clears the cookie client-side only; the signed value remains
+  technically valid until expiry if it was captured beforehand.

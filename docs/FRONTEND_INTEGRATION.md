@@ -92,6 +92,13 @@ Important:
 - `POST /api/study-guide/retry` with `{ document_id }`
 - Success: `202 { status: "processing", retry: true }`
 
+### G. Visual Notes Beta (lecture visuals)
+- `GET /api/documents/:documentId/visual-observations`
+- Render only when the response contains one or more `observations`.
+- Treat `404` as "no visual observations available".
+- Visual observations are text-only and separate from exact quote citations.
+- Do not render image previews, thumbnails, data URIs, base64, encrypted paths, or signed URLs.
+
 ## 4) Quiz ("Test Your Knowledge")
 
 ### Create quiz

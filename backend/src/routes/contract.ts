@@ -257,6 +257,23 @@ interface QuizGenerationTaskInput {
   paragraphCount: number | null;
 }
 
+interface GenerationTaskLauncherOverrides {
+  studyGuide?: (documentId: string) => void;
+  quiz?: (documentId: string) => void;
+}
+
+let generationTaskLauncherOverrides: GenerationTaskLauncherOverrides | null = null;
+
+export function setGenerationTaskLauncherOverridesForTests(
+  overrides: GenerationTaskLauncherOverrides | null
+): () => void {
+  const previous = generationTaskLauncherOverrides;
+  generationTaskLauncherOverrides = overrides;
+  return () => {
+    generationTaskLauncherOverrides = previous;
+  };
+}
+
 function launchQuizGenerationTask(
   documentId: string,
   input: QuizGenerationTaskInput,
@@ -265,6 +282,11 @@ function launchQuizGenerationTask(
     persistFailure: string;
   }
 ): void {
+  if (generationTaskLauncherOverrides?.quiz) {
+    generationTaskLauncherOverrides.quiz(documentId);
+    return;
+  }
+
   void (async () => {
     try {
       const generatedQuiz = await generateQuiz(documentId, input.extractedText, "LECTURE", {
@@ -629,90 +651,94 @@ export async function createStudyGuideHandler(req: Request, res: Response): Prom
     studyGuideErrorMessage: null,
   });
 
-  void (async () => {
-    try {
-      // LLM pre-classification: gate generation on semantic document type check
-      const classificationStartedAt = Date.now();
-      const classification = await classifyWithLlm(doc.extractedText);
-      logger.info("Study guide classifier completed", {
-        documentId,
-        llmDocumentType: classification.llmDocumentType,
-        disagreement: classification.disagreement,
-        usedLocalFallback: classification.usedLocalFallback,
-        classifierDurationMs: Date.now() - classificationStartedAt,
-      });
+  if (generationTaskLauncherOverrides?.studyGuide) {
+    generationTaskLauncherOverrides.studyGuide(documentId);
+  } else {
+    void (async () => {
+      try {
+        // LLM pre-classification: gate generation on semantic document type check
+        const classificationStartedAt = Date.now();
+        const classification = await classifyWithLlm(doc.extractedText);
+        logger.info("Study guide classifier completed", {
+          documentId,
+          llmDocumentType: classification.llmDocumentType,
+          disagreement: classification.disagreement,
+          usedLocalFallback: classification.usedLocalFallback,
+          classifierDurationMs: Date.now() - classificationStartedAt,
+        });
 
-      // Persist the LLM-determined type so all downstream flows
-      // (list, detail, quiz, checklist) use the authoritative type.
-      updateDocumentStatus(documentId, {
-        documentType: classification.llmDocumentType,
-      });
+        // Persist the LLM-determined type so all downstream flows
+        // (list, detail, quiz, checklist) use the authoritative type.
+        updateDocumentStatus(documentId, {
+          documentType: classification.llmDocumentType,
+        });
 
-      if (classification.llmDocumentType === "UNSUPPORTED") {
+        if (classification.llmDocumentType === "UNSUPPORTED") {
+          updateDocumentStatus(documentId, {
+            studyGuideStatus: "failed",
+            studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", "DOCUMENT_UNSUPPORTED"),
+            studyGuideErrorMessage: "This document type is not supported for study guide generation.",
+          });
+          return;
+        }
+
+        // Extract due date + time for HOMEWORK documents (best-effort, never blocks generation)
+        if (classification.llmDocumentType === "HOMEWORK") {
+          try {
+            const deadline = extractDueDeadline(doc.extractedText);
+            if (deadline) {
+              updateAssignmentDueDate(documentId, deadline.date);
+              if (deadline.time) {
+                updateAssignmentDueTime(documentId, deadline.time);
+              }
+            }
+          } catch (dueDateError) {
+            logger.warn("Due date extraction failed (non-blocking)", { documentId, error: dueDateError });
+          }
+        }
+
+        const generated = await analyzeDocument(doc.extractedText, classification.llmDocumentType, {
+          fileType: doc.fileType,
+          pageCount: doc.pageCount,
+          paragraphCount: doc.paragraphCount,
+        });
+        // Full updateDocument needed here: writes study guide content + syncs checklist
+        updateDocument(documentId, (current) => ({
+          ...current,
+          studyGuide: generated,
+          studyGuideStatus: "ready",
+          studyGuideErrorCode: null,
+          studyGuideErrorMessage: null,
+        }));
+
+        if (classification.llmDocumentType === "LECTURE") {
+          await generateVisualObservationsBestEffort(documentId, doc.userId);
+        }
+      } catch (error) {
+        const failure = toFailureCode(error);
         updateDocumentStatus(documentId, {
           studyGuideStatus: "failed",
-          studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", "DOCUMENT_UNSUPPORTED"),
-          studyGuideErrorMessage: "This document type is not supported for study guide generation.",
+          studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
+          studyGuideErrorMessage: failure.message,
         });
-        return;
       }
-
-      // Extract due date + time for HOMEWORK documents (best-effort, never blocks generation)
-      if (classification.llmDocumentType === "HOMEWORK") {
-        try {
-          const deadline = extractDueDeadline(doc.extractedText);
-          if (deadline) {
-            updateAssignmentDueDate(documentId, deadline.date);
-            if (deadline.time) {
-              updateAssignmentDueTime(documentId, deadline.time);
-            }
-          }
-        } catch (dueDateError) {
-          logger.warn("Due date extraction failed (non-blocking)", { documentId, error: dueDateError });
-        }
-      }
-
-      const generated = await analyzeDocument(doc.extractedText, classification.llmDocumentType, {
-        fileType: doc.fileType,
-        pageCount: doc.pageCount,
-        paragraphCount: doc.paragraphCount,
-      });
-      // Full updateDocument needed here: writes study guide content + syncs checklist
-      updateDocument(documentId, (current) => ({
-        ...current,
-        studyGuide: generated,
-        studyGuideStatus: "ready",
-        studyGuideErrorCode: null,
-        studyGuideErrorMessage: null,
-      }));
-
-      if (classification.llmDocumentType === "LECTURE") {
-        await generateVisualObservationsBestEffort(documentId, doc.userId);
-      }
-    } catch (error) {
+    })().catch((error) => {
+      logger.error("Unhandled study guide generation task failure", { documentId, error });
       const failure = toFailureCode(error);
-      updateDocumentStatus(documentId, {
-        studyGuideStatus: "failed",
-        studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
-        studyGuideErrorMessage: failure.message,
-      });
-    }
-  })().catch((error) => {
-    logger.error("Unhandled study guide generation task failure", { documentId, error });
-    const failure = toFailureCode(error);
-    try {
-      updateDocumentStatus(documentId, {
-        studyGuideStatus: "failed",
-        studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
-        studyGuideErrorMessage: failure.message,
-      });
-    } catch (updateError) {
-      logger.error("Failed to persist study guide task failure", {
-        documentId,
-        error: updateError,
-      });
-    }
-  });
+      try {
+        updateDocumentStatus(documentId, {
+          studyGuideStatus: "failed",
+          studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
+          studyGuideErrorMessage: failure.message,
+        });
+      } catch (updateError) {
+        logger.error("Failed to persist study guide task failure", {
+          documentId,
+          error: updateError,
+        });
+      }
+    });
+  }
 
   res.status(202).json({ status: "processing" });
 }
@@ -742,82 +768,86 @@ export async function retryStudyGuideHandler(req: Request, res: Response): Promi
   const cachedType = doc.documentType;
   const hasLlmType = cachedType === "HOMEWORK" || cachedType === "LECTURE";
 
-  void (async () => {
-    try {
-      let llmDocumentType = cachedType;
+  if (generationTaskLauncherOverrides?.studyGuide) {
+    generationTaskLauncherOverrides.studyGuide(documentId);
+  } else {
+    void (async () => {
+      try {
+        let llmDocumentType = cachedType;
 
-      if (hasLlmType) {
-        logger.info("Retry reusing cached LLM document type", {
-          documentId,
-          documentType: llmDocumentType,
-        });
-      } else {
-        const classificationStartedAt = Date.now();
-        const classification = await classifyWithLlm(doc.extractedText);
-        llmDocumentType = classification.llmDocumentType;
-        logger.info("Study guide retry classifier completed", {
-          documentId,
-          llmDocumentType,
-          disagreement: classification.disagreement,
-          usedLocalFallback: classification.usedLocalFallback,
-          classifierDurationMs: Date.now() - classificationStartedAt,
-        });
+        if (hasLlmType) {
+          logger.info("Retry reusing cached LLM document type", {
+            documentId,
+            documentType: llmDocumentType,
+          });
+        } else {
+          const classificationStartedAt = Date.now();
+          const classification = await classifyWithLlm(doc.extractedText);
+          llmDocumentType = classification.llmDocumentType;
+          logger.info("Study guide retry classifier completed", {
+            documentId,
+            llmDocumentType,
+            disagreement: classification.disagreement,
+            usedLocalFallback: classification.usedLocalFallback,
+            classifierDurationMs: Date.now() - classificationStartedAt,
+          });
 
-        updateDocumentStatus(documentId, {
-          documentType: llmDocumentType,
-        });
-      }
+          updateDocumentStatus(documentId, {
+            documentType: llmDocumentType,
+          });
+        }
 
-      if (llmDocumentType === "UNSUPPORTED") {
+        if (llmDocumentType === "UNSUPPORTED") {
+          updateDocumentStatus(documentId, {
+            studyGuideStatus: "failed",
+            studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", "DOCUMENT_UNSUPPORTED"),
+            studyGuideErrorMessage: "This document type is not supported for study guide generation.",
+          });
+          return;
+        }
+
+        const generated = await analyzeDocument(doc.extractedText, llmDocumentType, {
+          fileType: doc.fileType,
+          pageCount: doc.pageCount,
+          paragraphCount: doc.paragraphCount,
+        });
+        // Full updateDocument needed here: writes study guide content + syncs checklist
+        updateDocument(documentId, (current) => ({
+          ...current,
+          studyGuide: generated,
+          studyGuideStatus: "ready",
+          studyGuideErrorCode: null,
+          studyGuideErrorMessage: null,
+        }));
+
+        if (llmDocumentType === "LECTURE") {
+          await generateVisualObservationsBestEffort(documentId, doc.userId);
+        }
+      } catch (error) {
+        const failure = toFailureCode(error);
         updateDocumentStatus(documentId, {
           studyGuideStatus: "failed",
-          studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", "DOCUMENT_UNSUPPORTED"),
-          studyGuideErrorMessage: "This document type is not supported for study guide generation.",
+          studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
+          studyGuideErrorMessage: failure.message,
         });
-        return;
       }
-
-      const generated = await analyzeDocument(doc.extractedText, llmDocumentType, {
-        fileType: doc.fileType,
-        pageCount: doc.pageCount,
-        paragraphCount: doc.paragraphCount,
-      });
-      // Full updateDocument needed here: writes study guide content + syncs checklist
-      updateDocument(documentId, (current) => ({
-        ...current,
-        studyGuide: generated,
-        studyGuideStatus: "ready",
-        studyGuideErrorCode: null,
-        studyGuideErrorMessage: null,
-      }));
-
-      if (llmDocumentType === "LECTURE") {
-        await generateVisualObservationsBestEffort(documentId, doc.userId);
-      }
-    } catch (error) {
+    })().catch((error) => {
+      logger.error("Unhandled study guide retry task failure", { documentId, error });
       const failure = toFailureCode(error);
-      updateDocumentStatus(documentId, {
-        studyGuideStatus: "failed",
-        studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
-        studyGuideErrorMessage: failure.message,
-      });
-    }
-  })().catch((error) => {
-    logger.error("Unhandled study guide retry task failure", { documentId, error });
-    const failure = toFailureCode(error);
-    try {
-      updateDocumentStatus(documentId, {
-        studyGuideStatus: "failed",
-        studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
-        studyGuideErrorMessage: failure.message,
-      });
-    } catch (updateError) {
-      logger.error("Failed to persist study guide retry task failure", {
-        documentId,
-        error: updateError,
-      });
-    }
-  });
+      try {
+        updateDocumentStatus(documentId, {
+          studyGuideStatus: "failed",
+          studyGuideErrorCode: makeFlowFailureCode("STUDY_GUIDE", failure.code),
+          studyGuideErrorMessage: failure.message,
+        });
+      } catch (updateError) {
+        logger.error("Failed to persist study guide retry task failure", {
+          documentId,
+          error: updateError,
+        });
+      }
+    });
+  }
 
   res.status(202).json({ status: "processing", retry: true });
 }
@@ -850,6 +880,14 @@ export async function getVisualObservationsHandler(req: Request, res: Response):
   if (!documentId) return;
 
   if (!ensureOwnershipOnly(req, res, documentId)) return;
+
+  // Lecture-only defense in depth: even if a stale artifact exists (e.g. bad
+  // migration or future reclassification), never serve it for non-lectures.
+  const metadata = getDocumentMetadata(documentId);
+  if (!metadata || metadata.documentType !== "LECTURE") {
+    sendApiError(res, 404, "NOT_FOUND", "Visual observations not found.");
+    return;
+  }
 
   const read = getVisualObservationsArtifact(documentId);
   if (!read.ok) {

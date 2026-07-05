@@ -242,6 +242,20 @@ async function loadHandlers() {
   return import("../routes/contract.js");
 }
 
+let restoreGenerationTaskLaunchers: (() => void) | null = null;
+
+test.before(async () => {
+  const contract = await loadHandlers();
+  restoreGenerationTaskLaunchers = contract.setGenerationTaskLauncherOverridesForTests({
+    studyGuide: () => undefined,
+    quiz: () => undefined,
+  });
+});
+
+test.after(() => {
+  restoreGenerationTaskLaunchers?.();
+});
+
 async function assertUnsupportedUploadRejected(options: {
   filename: string;
   text: string;

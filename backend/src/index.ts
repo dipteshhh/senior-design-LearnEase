@@ -27,6 +27,7 @@ import {
   upload,
   handleMulterError,
   apiLimiter,
+  enforceTrustedOrigin,
   requireAuth,
   requestLogger,
   securityHeaders,
@@ -133,6 +134,9 @@ app.use(
   })
 );
 app.use(securityHeaders);
+// CSRF defense: block browser-context state-changing requests from untrusted
+// origins (applies to public auth routes too).
+app.use(enforceTrustedOrigin);
 app.use(requestLogger);
 app.use(apiLimiter);
 app.use(express.json({ limit: "10mb" }));

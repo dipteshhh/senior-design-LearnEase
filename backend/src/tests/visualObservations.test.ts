@@ -217,6 +217,10 @@ test("homework document skips visual observations without calling OpenAI", async
   assert.equal(artifact.status, "skipped");
   assert.equal(artifact.observations.length, 0);
   assert.match(artifact.warnings.join(" "), /only available for lecture/i);
+
+  // Lecture-only invariant: nothing is persisted for non-lecture documents.
+  assert.equal(countVisualObservationRows(doc.id), 0);
+  assert.equal(getVisualObservationsArtifact(doc.id).ok, false);
 });
 
 test("lecture document without visual inventory returns skipped without calling OpenAI", async () => {
@@ -274,6 +278,322 @@ test("OpenAI vision failure is isolated by best-effort wrapper", async () => {
 
   await generateVisualObservationsBestEffort(doc.id, doc.userId, failingClient as any);
   assert.ok(true);
+});
+
+function makeObservationResponse(imageIndexes: number[]) {
+  return {
+    observations: imageIndexes.map((imageIndex) => ({
+      image_index: imageIndex,
+      type: "diagram",
+      summary: `Observation for image ${imageIndex}.`,
+      visible_text: [],
+      academic_relevance: "Supports reviewing the lecture material.",
+      confidence: "medium",
+      limitations: [],
+    })),
+  };
+}
+
+function countVisualObservationRows(documentId: string): number {
+  const row = sqlite
+    .getDb()
+    .prepare(
+      `
+        SELECT COUNT(*) AS count
+        FROM document_artifacts
+        WHERE document_id = ? AND artifact_type = 'VISUAL_OBSERVATIONS'
+      `
+    )
+    .get(documentId) as { count: number };
+  return row.count;
+}
+
+function getVisualObservationsArtifactPath(documentId: string): string {
+  const row = sqlite
+    .getDb()
+    .prepare(
+      `
+        SELECT encrypted_path
+        FROM document_artifacts
+        WHERE document_id = ? AND artifact_type = 'VISUAL_OBSERVATIONS'
+      `
+    )
+    .get(documentId) as { encrypted_path: string } | undefined;
+  assert.ok(row?.encrypted_path);
+  return row.encrypted_path;
+}
+
+function saveTwoImageInventory(documentId: string): void {
+  const imageHash = createHash("sha256").update(tinyPng).digest("hex");
+  const makeItem = (index: number) => ({
+    id: `docx-image-${index}`,
+    source_file_type: "DOCX" as const,
+    origin: "docx_embedded_image" as const,
+    image_index: index,
+    media_path: `word/media/image${index}.png`,
+    page: null,
+    content_type: "image/png",
+    byte_size: tinyPng.byteLength,
+    image_hash: imageHash,
+    encrypted_artifact_path: `visuals/docx-image-${index}.png`,
+    width: 1,
+    height: 1,
+  });
+  saveVisualInventoryArtifact(documentId, {
+    manifest: {
+      document_id: documentId,
+      status: "complete",
+      created_at: new Date().toISOString(),
+      source_file_type: "DOCX",
+      extraction_version: "test",
+      limits: {
+        max_images: 50,
+        max_total_bytes: 25 * 1024 * 1024,
+        max_image_bytes: 5 * 1024 * 1024,
+        max_image_pixels: 4096 * 4096,
+        timeout_ms: 15_000,
+      },
+      items: [makeItem(1), makeItem(2)],
+      warnings: [],
+    },
+    assets: [
+      { encryptedArtifactPath: "visuals/docx-image-1.png", content: tinyPng },
+      { encryptedArtifactPath: "visuals/docx-image-2.png", content: tinyPng },
+    ],
+  });
+}
+
+test("re-running visual observations is idempotent and does not duplicate artifacts", async () => {
+  const doc = seedDocument();
+  saveOneImageInventory(doc.id);
+  const fakeClient = makeOpenAiClient(makeObservationResponse([1]));
+
+  await generateVisualObservationsForDocument(doc.id, doc.userId, fakeClient as any);
+  const firstPath = getVisualObservationsArtifactPath(doc.id);
+
+  await generateVisualObservationsForDocument(doc.id, doc.userId, fakeClient as any);
+  const secondPath = getVisualObservationsArtifactPath(doc.id);
+
+  assert.equal(countVisualObservationRows(doc.id), 1);
+  assert.equal(firstPath, secondPath);
+
+  const persisted = getVisualObservationsArtifact(doc.id);
+  assert.equal(persisted.ok, true);
+  if (persisted.ok) {
+    assert.equal(persisted.artifact.observations.length, 1);
+  }
+});
+
+test("deleting one document removes visual observation artifacts and directory", async () => {
+  const doc = seedDocument();
+  saveOneImageInventory(doc.id);
+  const fakeClient = makeOpenAiClient(makeObservationResponse([1]));
+  await generateVisualObservationsForDocument(doc.id, doc.userId, fakeClient as any);
+
+  const artifactDir = path.resolve(process.env.ARTIFACTS_DIR!, doc.id);
+  assert.equal(fs.existsSync(artifactDir), true);
+  assert.equal(countVisualObservationRows(doc.id), 1);
+
+  assert.equal(store.deleteDocumentById(doc.id), true);
+
+  assert.equal(countVisualObservationRows(doc.id), 0);
+  assert.equal(fs.existsSync(artifactDir), false);
+  assert.equal(getVisualObservationsArtifact(doc.id).ok, false);
+});
+
+test("deleting all user data removes visual observation artifacts and directories", async () => {
+  const userId = `delete-all-user-${randomUUID()}`;
+  const docA = seedDocument({ userId });
+  const docB = seedDocument({ userId });
+  saveOneImageInventory(docA.id);
+  saveOneImageInventory(docB.id);
+  const fakeClient = makeOpenAiClient(makeObservationResponse([1]));
+  await generateVisualObservationsForDocument(docA.id, userId, fakeClient as any);
+  await generateVisualObservationsForDocument(docB.id, userId, fakeClient as any);
+
+  const dirA = path.resolve(process.env.ARTIFACTS_DIR!, docA.id);
+  const dirB = path.resolve(process.env.ARTIFACTS_DIR!, docB.id);
+  assert.equal(fs.existsSync(dirA), true);
+  assert.equal(fs.existsSync(dirB), true);
+
+  store.deleteDocumentsByUser(userId);
+
+  assert.equal(countVisualObservationRows(docA.id), 0);
+  assert.equal(countVisualObservationRows(docB.id), 0);
+  assert.equal(fs.existsSync(dirA), false);
+  assert.equal(fs.existsSync(dirB), false);
+});
+
+test("retention purge removes visual observation artifacts without orphans", async () => {
+  const oldUploadedAt = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const doc = seedDocument({ uploadedAt: oldUploadedAt });
+  saveOneImageInventory(doc.id);
+  const fakeClient = makeOpenAiClient(makeObservationResponse([1]));
+  await generateVisualObservationsForDocument(doc.id, doc.userId, fakeClient as any);
+
+  const artifactDir = path.resolve(process.env.ARTIFACTS_DIR!, doc.id);
+  assert.equal(fs.existsSync(artifactDir), true);
+
+  const purged = store.purgeExpiredDocuments(30);
+  assert.ok(purged >= 1);
+
+  assert.equal(countVisualObservationRows(doc.id), 0);
+  assert.equal(fs.existsSync(artifactDir), false);
+});
+
+test("corrupt visual observations artifact fails safely and route returns sanitized 404", async () => {
+  const doc = seedDocument();
+  saveOneImageInventory(doc.id);
+  const fakeClient = makeOpenAiClient(makeObservationResponse([1]));
+  await generateVisualObservationsForDocument(doc.id, doc.userId, fakeClient as any);
+
+  const artifactPath = getVisualObservationsArtifactPath(doc.id);
+
+  // Corrupt the encrypted file with raw garbage: decrypt must fail.
+  fs.writeFileSync(artifactPath, Buffer.from("not-encrypted-garbage"));
+  const corruptRead = getVisualObservationsArtifact(doc.id);
+  assert.equal(corruptRead.ok, false);
+  if (!corruptRead.ok) {
+    assert.equal(corruptRead.reason, "decrypt_failed");
+  }
+
+  const req: MockReq = {
+    params: { documentId: doc.id },
+    auth: { userId: doc.userId, email: "visual@example.com" },
+  };
+  const res = makeRes();
+  await getVisualObservationsHandler(req as any, res as any);
+  assert.equal(res.statusCode, 404);
+  const responseText = JSON.stringify(res.body);
+  assert.equal(responseText.includes(artifactPath), false);
+  assert.equal(responseText.includes("garbage"), false);
+
+  // Valid encryption of invalid JSON: parse must fail, same sanitized 404.
+  const { writeEncryptedText } = await import("../lib/encryption.js");
+  writeEncryptedText(artifactPath, "{ this is not valid json");
+  const parseRead = getVisualObservationsArtifact(doc.id);
+  assert.equal(parseRead.ok, false);
+  if (!parseRead.ok) {
+    assert.equal(parseRead.reason, "parse_failed");
+  }
+
+  const res2 = makeRes();
+  await getVisualObservationsHandler(req as any, res2 as any);
+  assert.equal(res2.statusCode, 404);
+});
+
+test("caps enforcement limits images and warnings never leak image bytes", async () => {
+  const doc = seedDocument();
+  saveTwoImageInventory(doc.id);
+  const capture = { calls: 0, request: undefined as unknown };
+  const fakeClient = makeOpenAiClient(makeObservationResponse([1]), capture);
+
+  const artifact = await generateVisualObservationsForDocument(
+    doc.id,
+    doc.userId,
+    fakeClient as any,
+    { maxImages: 1, maxImageBytes: 5 * 1024 * 1024, maxTotalBytes: 10 * 1024 * 1024 }
+  );
+
+  assert.equal(capture.calls, 1);
+  assert.equal(artifact.status, "partial");
+  assert.equal(artifact.observations.length, 1);
+  assert.match(artifact.warnings.join(" "), /max images/i);
+
+  const rawImageBase64 = tinyPng.toString("base64");
+  const artifactText = JSON.stringify(artifact);
+  assert.equal(artifactText.includes(rawImageBase64), false);
+  assert.equal(artifactText.includes("data:image"), false);
+  assert.equal(artifactText.includes("encrypted_artifact_path"), false);
+
+  // Only one image may be sent to the vision model.
+  const request = capture.request as {
+    messages: Array<{ role: string; content: unknown }>;
+  };
+  const userContent = request.messages.find((m) => m.role === "user")?.content as Array<{
+    type: string;
+  }>;
+  const imageParts = userContent.filter((part) => part.type === "image_url");
+  assert.equal(imageParts.length, 1);
+});
+
+test("byte-size caps skip oversized images without leaking bytes", async () => {
+  const doc = seedDocument();
+  saveOneImageInventory(doc.id);
+  const capture = { calls: 0, request: undefined as unknown };
+  const fakeClient = makeOpenAiClient(makeObservationResponse([]), capture);
+
+  const artifact = await generateVisualObservationsForDocument(
+    doc.id,
+    doc.userId,
+    fakeClient as any,
+    { maxImages: 3, maxImageBytes: 1, maxTotalBytes: 10 }
+  );
+
+  // Every image exceeds the byte cap: no vision call at all.
+  assert.equal(capture.calls, 0);
+  assert.equal(artifact.status, "skipped");
+  assert.equal(artifact.observations.length, 0);
+  assert.match(artifact.warnings.join(" "), /byte size exceeds/i);
+
+  const rawImageBase64 = tinyPng.toString("base64");
+  assert.equal(JSON.stringify(artifact).includes(rawImageBase64), false);
+});
+
+test("visual observation failure never disturbs study guide state or persists partial artifacts", async () => {
+  const doc = seedDocument({
+    studyGuideStatus: "ready",
+    status: "ready",
+  });
+  saveOneImageInventory(doc.id);
+  const failingClient = {
+    chat: {
+      completions: {
+        async create() {
+          throw new Error("vision unavailable");
+        },
+      },
+    },
+  };
+
+  await generateVisualObservationsBestEffort(doc.id, doc.userId, failingClient as any);
+
+  const after = store.getDocumentMetadata(doc.id);
+  assert.ok(after);
+  assert.equal(after.studyGuideStatus, "ready");
+  assert.equal(after.status, "ready");
+  assert.equal(after.errorCode, null);
+
+  // A failed vision call must not leave a half-written observations artifact.
+  assert.equal(getVisualObservationsArtifact(doc.id).ok, false);
+  assert.equal(countVisualObservationRows(doc.id), 0);
+});
+
+test("route never serves a stale observations artifact for a non-lecture document", async () => {
+  // Generate a valid artifact while the document is a lecture...
+  const doc = seedDocument();
+  saveOneImageInventory(doc.id);
+  const fakeClient = makeOpenAiClient(makeObservationResponse([1]));
+  await generateVisualObservationsForDocument(doc.id, doc.userId, fakeClient as any);
+  assert.equal(countVisualObservationRows(doc.id), 1);
+
+  // ...then simulate reclassification / bad data migration to HOMEWORK.
+  sqlite
+    .getDb()
+    .prepare("UPDATE documents SET document_type = 'HOMEWORK' WHERE id = ?")
+    .run(doc.id);
+
+  const req: MockReq = {
+    params: { documentId: doc.id },
+    auth: { userId: doc.userId, email: "visual@example.com" },
+  };
+  const res = makeRes();
+  await getVisualObservationsHandler(req as any, res as any);
+
+  assert.equal(res.statusCode, 404);
+  const responseText = JSON.stringify(res.body);
+  assert.equal(responseText.includes("summary"), false);
+  assert.equal(responseText.includes("Observation for image"), false);
 });
 
 test("visual observations route enforces ownership and returns no raw image bytes", async () => {

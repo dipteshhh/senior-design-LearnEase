@@ -38,15 +38,16 @@ Stores references to encrypted-on-disk artifacts derived from the uploaded file.
 
 - id (uuid)
 - document_id (fk -> Documents.id)
-- artifact_type (ORIGINAL_FILE | EXTRACTED_TEXT | VISUAL_INVENTORY)
+- artifact_type (ORIGINAL_FILE | EXTRACTED_TEXT | VISUAL_INVENTORY | VISUAL_OBSERVATIONS)
 - encrypted_path (string)
-- content_hash (string; sha256 of normalized content for EXTRACTED_TEXT, sha256 of manifest JSON for VISUAL_INVENTORY; nullable for ORIGINAL_FILE)
+- content_hash (string; sha256 of normalized content for EXTRACTED_TEXT, sha256 of manifest JSON for VISUAL_INVENTORY or VISUAL_OBSERVATIONS; nullable for ORIGINAL_FILE)
 - created_at
 
 Notes:
 - ORIGINAL_FILE is the encrypted upload.
 - EXTRACTED_TEXT is the extracted + normalized text (used for quote validation).
 - VISUAL_INVENTORY is an encrypted internal manifest for extracted visual artifacts; image blobs remain encrypted on disk and are not stored in SQLite.
+- VISUAL_OBSERVATIONS is an encrypted text-only artifact for lecture visual notes; it stores metadata and model-produced descriptions, never image bytes.
 
 ---
 

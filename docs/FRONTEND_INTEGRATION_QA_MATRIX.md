@@ -44,6 +44,7 @@ Canonical contract docs:
 | QA-018 | Rate limit | `429 RATE_LIMITED` during polling | Backoff/retry message shown |
 | QA-019 | Focus mode | Open Focus Mode on sections | Single-section navigation works regardless of document type |
 | QA-020 | Health | Backend unavailable | Topbar health indicator flips to offline |
+| QA-021 | Visual Notes Beta | Lecture with generated visual observations | Visual Notes Beta appears with confidence/limitations; no image bytes, thumbnails, data URIs, or citations mixing |
 
 ## Signoff Record
 

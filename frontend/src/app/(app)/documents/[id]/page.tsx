@@ -10,7 +10,6 @@ import type {
   DocumentListItem,
   ExtractionItem,
   StudyGuideSection,
-  VisualObservation,
 } from "@/lib/contracts";
 import {
   deleteDocument,
@@ -22,6 +21,13 @@ import {
 } from "@/lib/data/documents";
 import { getErrorMessage } from "@/lib/errorUx";
 import { buildStudyBriefNarrationText } from "@/lib/studyBriefNarration";
+import {
+  formatVisualConfidence,
+  formatVisualObservationType,
+  formatVisualSource,
+  getVisualObservationItems,
+  shouldShowVisualNotesTab,
+} from "@/lib/visualNotes";
 
 type TabId = "overview" | "actions" | "checklist" | "details" | "sections" | "visuals";
 type StudyGuideTab = {
@@ -418,28 +424,6 @@ function isDeadlineLike(item: ExtractionItem): boolean {
   );
 }
 
-function formatVisualObservationType(type: VisualObservation["type"]): string {
-  return type
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatVisualConfidence(confidence: VisualObservation["confidence"]): string {
-  return confidence.charAt(0).toUpperCase() + confidence.slice(1);
-}
-
-function formatVisualSource(observation: VisualObservation): string {
-  const parts = [`Image ${observation.image_index}`];
-  if (observation.media_path) {
-    parts.push(observation.media_path);
-  }
-  if (observation.page != null) {
-    parts.push(`Page ${observation.page}`);
-  }
-  return parts.join(" · ");
-}
-
 function getTabBadgeStyles(active: boolean, emphasis: "default" | "success" = "default") {
   if (emphasis === "success") {
     return "bg-emerald-100 text-emerald-700";
@@ -712,8 +696,8 @@ export default function DocumentPage() {
     (item) => checklistCompleted[item.id] ?? false
   ).length;
   const checklistProgress = checklistTotal > 0 ? (checklistDone / checklistTotal) * 100 : 0;
-  const visualObservationItems = visualObservations?.observations ?? [];
-  const hasVisualObservations = visualObservationItems.length > 0;
+  const visualObservationItems = getVisualObservationItems(visualObservations);
+  const hasVisualObservations = shouldShowVisualNotesTab(visualObservations);
 
   const tabs: StudyGuideTab[] = [
     { id: "overview", label: "Overview" },

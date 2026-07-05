@@ -2,6 +2,30 @@
 
 Internal debug routes are for local development and test verification only. They are not linked from the frontend and should not be treated as public API contracts.
 
+## Artifact Integrity Checker (CLI)
+
+Read-only dev/admin CLI that verifies SQLite metadata and the encrypted artifact store agree.
+
+```sh
+cd backend
+npm run check:artifacts          # human-readable report
+npm run check:artifacts -- --json
+```
+
+It reports:
+
+- document and artifact row counts (per artifact type)
+- registered artifact files that are missing on disk (`file_missing`)
+- artifacts that fail AES-256-GCM decryption (`decrypt_failed`)
+- JSON artifacts (`VISUAL_INVENTORY`, `VISUAL_OBSERVATIONS`) that decrypt but do not parse (`parse_failed`)
+- orphan artifact directories under `ARTIFACTS_DIR` with no matching document row
+- orphan `document_artifacts` rows with no matching document
+- safe summaries of visual inventory/observations artifacts (status, item count, warning count)
+
+Exit code is `0` when everything is consistent and `1` when any issue is found.
+
+Safety boundaries: the checker decrypts artifacts only as an in-memory probe and immediately discards the plaintext. It never prints decrypted document text, image bytes, base64, encryption keys, or secrets. It uses the same `DATABASE_PATH` / `ARTIFACTS_DIR` / `FILE_ENCRYPTION_KEY` environment as the server (loaded from `backend/.env`).
+
 ## Visual Inventory Metadata
 
 `GET /api/internal/documents/:documentId/visual-inventory`

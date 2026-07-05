@@ -149,7 +149,50 @@ Rules:
 
 ---
 
-## 5) Error Payload (Shared)
+## 5) Visual Observations (Lecture Visual Notes Beta)
+
+Visual observations are a separate text-only artifact. They are not source citations and do not weaken Study Guide citation validation.
+
+```json
+{
+  "document_id": "uuid",
+  "status": "complete | partial | skipped",
+  "created_at": "timestamp",
+  "model": "model-name",
+  "source_inventory_artifact_hash": "sha256 | optional",
+  "observations": [
+    {
+      "id": "uuid",
+      "visual_inventory_item_id": "docx-image-1",
+      "image_hash": "sha256",
+      "source_file_type": "DOCX | PDF",
+      "origin": "docx_embedded_image | pdf_embedded_image",
+      "media_path": "word/media/image1.png",
+      "page": null,
+      "image_index": 1,
+      "content_type": "image/png",
+      "type": "diagram | chart | screenshot | table_image | photo | other",
+      "summary": "Text-only description of visible content.",
+      "visible_text": ["only clearly readable text"],
+      "academic_relevance": "How the visual may support lecture review.",
+      "confidence": "low | medium | high",
+      "limitations": ["Uncertainty or visibility limits."]
+    }
+  ],
+  "warnings": []
+}
+```
+
+Rules:
+- Lecture/class documents only.
+- Generated only as a best-effort sidecar after an explicit Study Guide trigger.
+- No homework visual interpretation.
+- No image bytes, base64, data URIs, decrypted paths, thumbnails, or signed URLs in API responses.
+- Observations are not exact-text evidence and MUST NOT be treated as citations.
+
+---
+
+## 6) Error Payload (Shared)
 
 All errors returned by backend MUST follow:
 

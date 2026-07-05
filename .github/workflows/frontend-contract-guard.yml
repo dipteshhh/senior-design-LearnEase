@@ -15,6 +15,7 @@ on:
 
 jobs:
   frontend-quality:
+    name: Frontend guards, lint, tests, type-check, build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -39,6 +40,9 @@ jobs:
 
       - name: Contract guard
         run: npm run check:contracts
+
+      - name: Docs mirror drift check
+        run: npm run check:docs-mirror
 
       - name: Lint
         run: npm run lint

@@ -274,24 +274,24 @@ export async function generateVisualObservationsForDocument(
   options: VisualObservationAnalyzerOptions = {}
 ): Promise<VisualObservationsArtifact> {
   const document = getDocumentMetadata(documentId);
-  const policy = getGenerationPolicy();
-  const model = policy.primaryModel;
-  const sourceInventoryArtifactHash = getVisualInventoryArtifactHash(documentId);
-
   if (!document || document.userId !== userId) {
     throw new Error("Document not found for visual observations.");
   }
 
+  const policy = getGenerationPolicy();
+  const model = policy.primaryModel;
+  const sourceInventoryArtifactHash = getVisualInventoryArtifactHash(documentId);
+
   if (document.documentType !== "LECTURE") {
-    const artifact = makeArtifact({
+    // Lecture-only invariant: never persist a VISUAL_OBSERVATIONS artifact
+    // for non-lecture documents, even a skipped placeholder.
+    return makeArtifact({
       documentId,
       status: "skipped",
       model,
       sourceInventoryArtifactHash,
       warnings: ["Visual observations are only available for lecture documents."],
     });
-    saveVisualObservationsArtifact(documentId, artifact);
-    return artifact;
   }
 
   const inventoryRead = getVisualInventoryManifest(documentId);

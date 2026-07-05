@@ -198,6 +198,56 @@ Errors:
 
 ---
 
+## GET /api/documents/:documentId/visual-observations
+
+Fetch lecture-only Visual Notes Beta observations for a document, if generated.
+
+Response:
+- `200`
+```json
+{
+  "document_id": "uuid",
+  "status": "complete | partial | skipped",
+  "created_at": "timestamp",
+  "model": "model-name",
+  "source_inventory_artifact_hash": "sha256 | optional",
+  "observations": [
+    {
+      "id": "uuid",
+      "visual_inventory_item_id": "docx-image-1",
+      "image_hash": "sha256",
+      "source_file_type": "DOCX | PDF",
+      "origin": "docx_embedded_image | pdf_embedded_image",
+      "media_path": "word/media/image1.png",
+      "page": null,
+      "image_index": 1,
+      "content_type": "image/png",
+      "type": "diagram | chart | screenshot | table_image | photo | other",
+      "summary": "Text-only visual description.",
+      "visible_text": ["clearly readable text only"],
+      "academic_relevance": "How this visual may help review the lecture.",
+      "confidence": "low | medium | high",
+      "limitations": ["Uncertainty or visibility limits."]
+    }
+  ],
+  "warnings": []
+}
+```
+
+Notes:
+- Authenticated and owner-only.
+- Generated as a best-effort sidecar during Study Guide creation for lecture documents only.
+- Response is metadata/text only. It MUST NOT include image bytes, base64, data URIs, decrypted paths, thumbnails, or signed URLs.
+- `status: "skipped"` can be returned when visual observations are not applicable or no eligible visual inventory exists.
+
+Errors:
+- `401` unauthorized
+- `403` not owner
+- `404` visual observations not found
+- `422` malformed `documentId` (must be UUID)
+
+---
+
 ## DELETE /api/documents/:documentId
 
 Delete one document owned by the authenticated user.

@@ -39,6 +39,13 @@ load_backend_env() {
   local exports
   local load_status=0
 
+  # CI has no .env file; required values must already be exported (checked below
+  # by require_env_value with actionable errors).
+  if [[ ! -f "$env_file" ]]; then
+    yellow "No ${env_file} found; using exported shell environment only."
+    return 0
+  fi
+
   exports="$(node "${SCRIPT_DIR}/load-dotenv-for-shell.mjs" "$env_file" 2>&1)" || load_status=$?
   if [[ $load_status -ne 0 ]]; then
     red "$exports"

@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "check:contracts": "node scripts/check-canonical-contracts.mjs",
-    "lint": "npm run check:contracts && eslint",
+    "check:docs-mirror": "node scripts/check-docs-mirror.mjs",
+    "lint": "npm run check:contracts && npm run check:docs-mirror && eslint",
     "test": "node --test scripts/__tests__/*.test.mjs && node --import tsx --test src/__tests__/*.test.ts"
   },
   "dependencies": {
