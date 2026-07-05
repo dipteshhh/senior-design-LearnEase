@@ -27,7 +27,7 @@
     "multer": "^2.2.0",
     "openai": "^6.44.0",
     "pdf-parse": "^2.4.5",
-    "resend": "^6.14.0",
+    "resend": "^6.16.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -36,7 +36,7 @@
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
     "@types/node": "^26",
-    "eslint": "^10.5.0",
+    "eslint": "^10.6.0",
     "globals": "^17.6.0",
     "tsx": "^4.22.4",
     "typescript": "^6",
